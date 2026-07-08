@@ -53,7 +53,11 @@ applyBtn.addEventListener("click", async () => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    appendLine(formatEvent({ type: "applied", summary: data.events?.at(-1)?.summary ?? "Applied" }));
+    appendLine(formatEvent({
+      type: "applied",
+      ts: Date.now(),
+      summary: data.events?.at(-1)?.summary ?? "Applied",
+    }));
     setPill("applied", "applied");
     previewPanel.classList.add("hidden");
     resetSession();
@@ -262,10 +266,11 @@ function formatError(message) {
 }
 
 function formatEvent(event) {
-  const ts = timeStr(event.ts);
   switch (event.type) {
-    case "session_started":
+    case "session_started": {
+      const ts = timeStr(event.ts);
       return `<p class="event section"><span class="ts">${ts}</span> <span class="tag tag-run">▶ Session</span> started</p>`;
+    }
     case "message_sent":
       return `<p class="event"><span class="tag tag-user">You</span> ${escapeHtml(event.details?.content ?? event.summary)}</p>`;
     case "assistant_replied":
@@ -276,13 +281,18 @@ function formatEvent(event) {
       return `<p class="event"><span class="tag tag-done">✓ Applied</span> ${escapeHtml(event.summary)}</p>`;
     case "error":
       return `<p class="event"><span class="tag tag-error">✗ Error</span> ${escapeHtml(event.summary)}</p>`;
-    default:
+    default: {
+      const ts = timeStr(event.ts);
       return `<p class="event"><span class="ts">${ts}</span> ${escapeHtml(event.summary)}</p>`;
+    }
   }
 }
 
 function timeStr(ts) {
-  return new Date(ts).toISOString().slice(11, 19);
+  if (ts == null || !Number.isFinite(ts)) return "";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(11, 19);
 }
 
 function escapeHtml(s) {
