@@ -25,7 +25,7 @@ import { inlineIssue } from "./triggers/inline.js";
 import { FileRunStore } from "./state/runStore.js";
 import { DEFAULT_GATE_CONFIG } from "./orchestrator/gates.js";
 import { init } from "./init.js";
-import type { Issue } from "./engine/types.js";
+import type { Issue, Run } from "./engine/types.js";
 
 function usage(): never {
   console.error(`Usage:
@@ -220,24 +220,67 @@ async function main(): Promise<void> {
   const store = new FileRunStore(resolve(helixDir, "runs"));
   run.runFile = store.save(run);
 
+  printSummary(run);
+}
+
+function printSummary(run: Run): void {
+  const isTTY = process.stdout.isTTY ?? false;
+  const p = (code: string, s: string) => (isTTY ? `\x1b[${code}m${s}\x1b[0m` : s);
+  const dim = (s: string) => p("2", s);
+  const green = (s: string) => p("32", s);
+  const yellow = (s: string) => p("33", s);
+  const red = (s: string) => p("31", s);
+  const cyan = (s: string) => p("36", s);
+
   console.log("");
-  switch (run.status) {
-    case "done":
-      console.log(`✓ Run done — ${run.finalDecision?.reason ?? ""}`);
-      if (run.finalDecision?.kind === "done" && run.finalDecision.deliverable) {
-        console.log(`  Deliverable: ${run.finalDecision.deliverable}`);
-      }
-      break;
-    case "escalated":
-      console.log(`▲ Escalated — ${run.finalDecision?.reason ?? ""}`);
-      break;
-    case "error":
-      console.log(`✗ Run errored.`);
-      break;
-    default:
-      console.log(`? Run ended in status ${run.status}.`);
+  console.log(dim("─".repeat(60)));
+
+  const status = run.status;
+  const results = run.results;
+  const ok = results.filter((r) => r.ok).length;
+  const fail = results.length - ok;
+
+  const statsLine = dim(`${results.length} specialist${results.length === 1 ? "" : "s"} ran` + (fail > 0 ? ` (${ok} ok, ${fail} failed)` : ""));
+
+  if (status === "done") {
+    console.log(`${green("✓ done")}  ${statsLine}`);
+    const reason = run.finalDecision?.kind === "done" ? run.finalDecision.reason : "";
+    if (reason) console.log(`  ${dim(reason)}`);
+    if (run.finalDecision?.kind === "done" && run.finalDecision.deliverable) {
+      console.log(`  ${cyan("deliverable")}: ${run.finalDecision.deliverable}`);
+    }
+  } else if (status === "escalated") {
+    const reason = run.finalDecision?.kind === "escalate" ? run.finalDecision.reason : "";
+    console.log(`${yellow("▲ escalated")}  ${statsLine}`);
+    // wrap the reason for readability
+    const width = (process.stdout.columns && process.stdout.columns > 40) ? process.stdout.columns : 80;
+    for (const line of wrapText(reason, width - 2, 2)) console.log(line);
+  } else if (status === "error") {
+    console.log(`${red("✗ error")}  ${statsLine}`);
+  } else {
+    console.log(`? ended (${status})  ${statsLine}`);
   }
-  console.log(`  Run file: ${run.runFile}`);
+
+  if (run.runFile) console.log(`\n  ${dim("run file:")} ${run.runFile}`);
+  console.log("");
+}
+
+function wrapText(text: string, width: number, indent: number): string[] {
+  if (!text) return [];
+  const lines: string[] = [];
+  const words = text.split(/\s+/);
+  let line = "".padStart(indent);
+  const pad = " ".repeat(indent);
+  for (const word of words) {
+    if ((line + " " + word).trim().length > width) {
+      lines.push(line.trimEnd());
+      line = pad + word;
+    } else {
+      line += " " + word;
+    }
+  }
+  if (line.trim()) lines.push(line.trimEnd());
+  return lines;
 }
 
 main().catch((err) => {
