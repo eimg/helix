@@ -71,11 +71,11 @@ No web UI (server API only); no cost dashboards; no auto-merge without a passing
 ## M3+ — Scale (sketch)
 
 - **Web UI** — manage runs, agents, skills, triggers, approvals; live event stream consumer. Built on the M2 server API.
-- **Manage (experimental, shipped narrow v1)** — separate `/manage` page + `/manage/*` API; prompt box to create/edit `.helix/agents` and `.helix/skills` with preview + apply. Does not touch the issue orchestration loop.
+- **Manage (experimental, shipped narrow v1)** — separate `/manage` page + `/manage/*` API; prompt box to create/edit/delete `.helix/agents` and `.helix/skills` with preview + apply. **Web + API only — no CLI yet.** [Details →](./manage.md)
 - **Repo context / cold-start** — amortize planner exploration across runs via bootstrap injection and `.helix/` artifacts. [Design note →](./repo-context.md)
 - **Observability** — traces, per-specialist cost/token dashboards, searchable run history. The `RunEvent` stream is the foundation.
 - **More providers** — Anthropic, OpenAI, … (the `Provider` interface is ready).
 - **More triggers** — GitLab, Jira, interval, file.
 - **Subprocess isolation** — option for untrusted specialist agents (the in-process factory is swappable for a subprocess factory).
-- **Meta agent** — author `.helix/agents` and `.helix/skills` from a prompt (CLI chat now, web UI later).
+- **Meta agent** — partially shipped as Manage (web + API). CLI parity (`helix manage`) not implemented. [Details →](./manage.md)
 - **pi settings** — switch specialist sessions from inherited pi `settings.json` to explicit `SettingsManager.inMemory(...)` Helix defaults (compaction/retry), respecting `inheritPi`.

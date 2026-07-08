@@ -21,7 +21,7 @@ helix serve
 
 The server exposes:
 - **Run UI** (`/`) — title + body form, live log, result
-- **Manage UI** (`/manage`) — experimental prompt-driven agent/skill authoring
+- **Manage UI** (`/manage`) — experimental prompt-driven agent/skill authoring (web + API only; no CLI yet — see [`docs/manage.md`](./docs/manage.md))
 - JSON/SSE API (`POST /runs`, `GET /runs/:id/events`, `POST /manage/sessions`, …)
 
 ### Default port: 8319
