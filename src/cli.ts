@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 /**
+ * helix init [--preset <name>] [--force] [--list]
+ *                                # scaffold .helix/ from shipped presets
  * helix run <issue-number>          # fetch from GitHub via `gh`
  * helix run --title "..." [--body "..."]  # inline: no GitHub, no network
  * helix run --stdin [--title "..."]       # read body from stdin
@@ -22,10 +24,12 @@ import { GitHubTrigger } from "./triggers/github.js";
 import { inlineIssue } from "./triggers/inline.js";
 import { FileRunStore } from "./state/runStore.js";
 import { DEFAULT_GATE_CONFIG } from "./orchestrator/gates.js";
+import { init } from "./init.js";
 import type { Issue } from "./engine/types.js";
 
 function usage(): never {
   console.error(`Usage:
+  helix init [--preset <name>] [--force] [--list]
   helix run <issue-number>                    # fetch from GitHub
   helix run --title "..." [--body "..."]      # inline issue
   helix run --stdin [--title "..."]           # body from stdin`);
@@ -111,7 +115,30 @@ async function buildIssue(parsed: ParsedArgs, repo: string): Promise<Issue> {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length === 0 || args[0] === "run" && args.length === 1) usage();
+  if (args.length === 0 || (args[0] === "run" && args.length === 1)) usage();
+
+  // `helix init` — scaffold .helix/ from presets, then exit.
+  if (args[0] === "init") {
+    const opts: { preset?: string; force?: boolean; list?: boolean } = {};
+    for (let i = 1; i < args.length; i++) {
+      const a = args[i];
+      if (a === "--preset") opts.preset = args[++i];
+      else if (a === "--force") opts.force = true;
+      else if (a === "--list") opts.list = true;
+      else {
+        console.error(`Unknown option: ${a}`);
+        process.exit(2);
+      }
+    }
+    try {
+      init(opts);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+    return;
+  }
+
   // accept `helix run ...` or `helix ...`
   const rest = args[0] === "run" ? args.slice(1) : args;
   if (rest.length === 0) usage();

@@ -49,10 +49,21 @@ export class OpenRouterProvider implements PiProvider {
     this.inheritPi = opts.inheritPi ?? false;
 
     const authFile = resolveAuthFile(this.inheritPi, opts.paths);
-    this.authStorage = authFile ? AuthStorage.create(authFile) : AuthStorage.create();
+    // When inheritPi is false and no ~/.helix/secrets.json exists, use an
+    // in-memory store so we NEVER silently fall back to ~/.pi/agent/auth.json.
+    // The env var (setRuntimeApiKey below) is the only source then.
+    this.authStorage = authFile
+      ? AuthStorage.create(authFile)
+      : this.inheritPi
+        ? AuthStorage.create()
+        : AuthStorage.inMemory();
 
     const modelsFile = resolveModelsFile(this.inheritPi, opts.paths);
-    this.modelRegistry = modelsFile ? ModelRegistry.create(this.authStorage, modelsFile) : ModelRegistry.create(this.authStorage);
+    this.modelRegistry = modelsFile
+      ? ModelRegistry.create(this.authStorage, modelsFile)
+      : this.inheritPi
+        ? ModelRegistry.create(this.authStorage)
+        : ModelRegistry.inMemory(this.authStorage);
 
     const key = process.env[this.apiKeyEnv];
     if (key) {
