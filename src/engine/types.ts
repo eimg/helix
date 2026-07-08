@@ -6,18 +6,25 @@
  * network — see test/m1-happy-path.test.ts.
  */
 
-/** A fetched work item that triggers a run. v1 source: a GitHub issue. */
+/** A work item that triggers a run. */
 export interface Issue {
-  source: "github";
-  repo: string;
-  number: number;
+  /** Origin of the issue — "github" (fetched) or "inline" (passed directly). */
+  source: "github" | "inline";
   title: string;
   body: string;
-  url: string;
   labels: string[];
+  /** GitHub-specific. Present iff source === "github". */
+  repo?: string;
+  number?: number;
+  url?: string;
 }
 
-/** Fetches a work item. v1: GitHub only (manual `gh` fetch); M2 adds polling. */
+/**
+ * Fetches a work item by an opaque identifier (a GitHub issue number for v1).
+ * Automated triggers (M2 poll/webhook) implement this; the inline/terminal
+ * path bypasses it and constructs an `Issue` directly — proving trigger and
+ * orchestrator are independent.
+ */
 export interface Trigger {
   readonly source: "github";
   fetchIssue(number: number): Promise<Issue>;

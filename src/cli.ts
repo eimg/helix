@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /**
- * helix run <issue-number>
+ * helix run <issue-number>          # fetch from GitHub via `gh`
+ * helix run --title "..." [--body "..."]  # inline: no GitHub, no network
+ * helix run --stdin [--title "..."]       # read body from stdin
  *
- * M1 entry point: load .helix/config.json + .helix/agents/*.md, build the
- * engine with the OpenRouter provider + real pi specialist sessions + the LLM
- * orchestrator, fetch the issue via `gh`, run, and persist state.
+ * The inline paths prove the orchestrator and trigger adapter are independent:
+ * `runIssue()` takes a plain `Issue`, and an inline issue is constructed
+ * directly without any `Trigger.fetchIssue()` call.
  */
 import { resolve } from "node:path";
 import { loadConfig } from "./config.js";
@@ -17,23 +19,103 @@ import { PiSpecialistSessionFactory } from "./agents/session.js";
 import { loadWorkflow } from "./orchestrator/workflow.js";
 import { LlmOrchestrator } from "./orchestrator/driver.js";
 import { GitHubTrigger } from "./triggers/github.js";
+import { inlineIssue } from "./triggers/inline.js";
 import { FileRunStore } from "./state/runStore.js";
 import { DEFAULT_GATE_CONFIG } from "./orchestrator/gates.js";
+import type { Issue } from "./engine/types.js";
+
+function usage(): never {
+  console.error(`Usage:
+  helix run <issue-number>                    # fetch from GitHub
+  helix run --title "..." [--body "..."]      # inline issue
+  helix run --stdin [--title "..."]           # body from stdin`);
+  process.exit(2);
+}
+
+interface ParsedArgs {
+  mode: "github" | "inline";
+  issueNumber?: number;
+  title?: string;
+  body?: string;
+  readStdin: boolean;
+}
+
+function parseArgs(args: string[]): ParsedArgs {
+  let title: string | undefined;
+  let body: string | undefined;
+  let readStdin = false;
+  const positional: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--title") title = args[++i];
+    else if (a === "--body") body = args[++i];
+    else if (a === "--stdin") readStdin = true;
+    else if (a.startsWith("--")) usage();
+    else positional.push(a);
+  }
+
+  if (title !== undefined || readStdin) {
+    return { mode: "inline", title, body, readStdin };
+  }
+  if (positional.length === 1) {
+    const n = Number(positional[0]);
+    if (!Number.isInteger(n)) {
+      console.error(`Invalid issue number: ${positional[0]}`);
+      process.exit(2);
+    }
+    return { mode: "github", issueNumber: n, readStdin: false };
+  }
+  usage();
+}
+
+async function readStdinBody(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString("utf-8").trim();
+}
+
+async function buildIssue(parsed: ParsedArgs, repo: string): Promise<Issue> {
+  if (parsed.mode === "inline") {
+    let title = parsed.title;
+    let body = parsed.body;
+    if (parsed.readStdin) {
+      const stdin = await readStdinBody();
+      if (title === undefined) {
+        // first line is the title, rest is the body
+        const nl = stdin.indexOf("\n");
+        title = nl === -1 ? stdin : stdin.slice(0, nl).trim();
+        body = nl === -1 ? "" : stdin.slice(nl + 1).trim();
+      } else {
+        body = stdin;
+      }
+    }
+    if (!title) {
+      console.error("Inline issue needs a title (--title or first stdin line).");
+      process.exit(2);
+    }
+    return inlineIssue({ title, body });
+  }
+
+  // GitHub
+  const trigger = new GitHubTrigger(repo);
+  try {
+    return await trigger.fetchIssue(parsed.issueNumber!);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Failed to fetch issue #${parsed.issueNumber} from ${repo}: ${msg}`);
+    console.error("(Is the `gh` CLI installed and authenticated?)");
+    process.exit(1);
+  }
+}
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const command = args[0];
-
-  if (command !== "run" || !args[1]) {
-    console.error("Usage: helix run <issue-number>");
-    process.exit(2);
-  }
-
-  const issueNumber = Number(args[1]);
-  if (!Number.isInteger(issueNumber)) {
-    console.error(`Invalid issue number: ${args[1]}`);
-    process.exit(2);
-  }
+  if (args.length === 0 || args[0] === "run" && args.length === 1) usage();
+  // accept `helix run ...` or `helix ...`
+  const rest = args[0] === "run" ? args.slice(1) : args;
+  if (rest.length === 0) usage();
+  const parsed = parseArgs(rest);
 
   const helixDir = findHelixDir();
   let config;
@@ -82,23 +164,14 @@ async function main(): Promise<void> {
     eventStream,
   };
 
-  // Trigger
+  // Inline mode needs no repo; GitHub mode does.
   const repo = config.triggers?.github?.repo;
-  if (!repo) {
-    console.error("config: triggers.github.repo is required for `helix run`.");
+  if (parsed.mode === "github" && !repo) {
+    console.error("config: triggers.github.repo is required for GitHub issue fetch. Use --title/--stdin for inline.");
     process.exit(1);
   }
-  const trigger = new GitHubTrigger(repo);
 
-  let issue;
-  try {
-    issue = await trigger.fetchIssue(issueNumber);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`Failed to fetch issue #${issueNumber} from ${repo}: ${msg}`);
-    console.error("(Is the `gh` CLI installed and authenticated?)");
-    process.exit(1);
-  }
+  const issue = await buildIssue(parsed, repo ?? "(inline)");
 
   const run = await runIssue(issue, deps);
   orchestrator.dispose();

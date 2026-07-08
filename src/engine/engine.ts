@@ -58,8 +58,8 @@ export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
   };
 
   try {
-    emit({ ts: Date.now(), type: "run_started", summary: `Run for ${issue.source} #${issue.number}: ${issue.title}` });
-    emit({ ts: Date.now(), type: "issue_fetched", summary: issue.url, details: { number: issue.number, repo: issue.repo } });
+    emit({ ts: Date.now(), type: "run_started", summary: `Run for ${issue.source}${issue.number != null ? ` #${issue.number}` : ""}: ${issue.title}` });
+    emit({ ts: Date.now(), type: "issue_fetched", summary: issue.url ?? "(inline)", details: { number: issue.number, repo: issue.repo, source: issue.source } });
 
     const gates = deps.gates ?? DEFAULT_GATE_CONFIG;
     let iteration = 0;

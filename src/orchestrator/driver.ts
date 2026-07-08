@@ -131,10 +131,16 @@ function buildPrompt(input: OrchestratorInput, workflow: Workflow): string {
           )
           .join("\n\n");
 
-  return `## Issue #${issue.number}: ${issue.title}
-${issue.url}
-Repo: ${issue.repo}
-Labels: ${issue.labels.join(", ") || "(none)"}
+  const issueHeader = issue.number != null ? `## Issue #${issue.number}: ${issue.title}` : `## Issue: ${issue.title}`;
+  const sourceLines = [
+    issue.url ? issue.url : null,
+    issue.repo ? `Repo: ${issue.repo}` : null,
+    `Source: ${issue.source}`,
+    `Labels: ${issue.labels.join(", ") || "(none)"}`,
+  ].filter(Boolean).join("\n");
+
+  return `${issueHeader}
+${sourceLines}
 
 ${issue.body}
 
