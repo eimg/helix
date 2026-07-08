@@ -155,7 +155,7 @@ Reference specialists + skills for common stacks, under `presets/` (double as te
 
 - **M1 — Core engine (shipped).** CLI, hybrid orchestrator, OpenRouter provider, in-process pi specialist sessions, GitHub + inline triggers, run state, live event log, presets, 20 tests. [details](./docs/plan.md)
 - **M2 — Auto + deliverable (shipped).** Express server; GitHub poll trigger; PR creation; merge gate execution. `helix serve`.
-- **M3+ — Scale.** Web UI; observability; repo context (see [`docs/repo-context.md`](./docs/repo-context.md)); more providers & triggers; subprocess isolation; meta agent for authoring agents/skills.
+- **M3+ — Scale.** Web UI; **Manage** (experimental agent/skill authoring); observability; repo context (see [`docs/repo-context.md`](./docs/repo-context.md)); more providers & triggers; subprocess isolation.
 
 ## Working conventions
 

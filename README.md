@@ -19,7 +19,10 @@ helix serve
 # → http://127.0.0.1:8319/
 ```
 
-The server exposes a lightweight web UI (title + body form, live log, result) and a JSON/SSE API (`POST /runs`, `GET /runs/:id`, `GET /runs/:id/events`).
+The server exposes:
+- **Run UI** (`/`) — title + body form, live log, result
+- **Manage UI** (`/manage`) — experimental prompt-driven agent/skill authoring
+- JSON/SSE API (`POST /runs`, `GET /runs/:id/events`, `POST /manage/sessions`, …)
 
 ### Default port: 8319
 

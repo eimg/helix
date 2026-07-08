@@ -43,6 +43,26 @@ body {
   font-size: 0.95rem;
 }
 
+.site-nav {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.nav-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+}
+
+.nav-link:hover { color: var(--text); }
+.nav-link.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -141,6 +161,8 @@ button.ghost {
 }
 
 .pill.running { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.pill.active { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.pill.applied { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, var(--border)); }
 .pill.done { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, var(--border)); }
 .pill.escalated { color: var(--yellow); border-color: color-mix(in srgb, var(--yellow) 40%, var(--border)); }
 .pill.error { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
@@ -236,3 +258,65 @@ button.ghost {
   font-size: 0.8rem;
   white-space: pre-wrap;
 }
+
+.inventory-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  font-size: 0.88rem;
+}
+
+.inventory-grid h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.inventory-grid ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.inventory-grid .muted { color: var(--muted); }
+
+.preview details {
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.6rem;
+}
+
+.preview summary {
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+}
+
+.preview pre {
+  margin: 0.5rem 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.force-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tag-user { color: var(--yellow); }
+.tag-assistant { color: var(--accent); }
+.tag-draft { color: var(--yellow); }
+.tag-muted { color: var(--muted); }

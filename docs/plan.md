@@ -71,6 +71,7 @@ No web UI (server API only); no cost dashboards; no auto-merge without a passing
 ## M3+ — Scale (sketch)
 
 - **Web UI** — manage runs, agents, skills, triggers, approvals; live event stream consumer. Built on the M2 server API.
+- **Manage (experimental, shipped narrow v1)** — separate `/manage` page + `/manage/*` API; prompt box to create/edit `.helix/agents` and `.helix/skills` with preview + apply. Does not touch the issue orchestration loop.
 - **Repo context / cold-start** — amortize planner exploration across runs via bootstrap injection and `.helix/` artifacts. [Design note →](./repo-context.md)
 - **Observability** — traces, per-specialist cost/token dashboards, searchable run history. The `RunEvent` stream is the foundation.
 - **More providers** — Anthropic, OpenAI, … (the `Provider` interface is ready).
