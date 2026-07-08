@@ -1,7 +1,7 @@
 ---
 name: dev
 description: Implements the plan — writes code, runs builds/tests, leaves the tree green. The execution specialist.
-model: openrouter/anthropic/claude-sonnet-4
+model: openrouter/xiaomi/mimo-v2.5-pro
 tools: read, bash, edit, write, grep, find, ls
 ---
 

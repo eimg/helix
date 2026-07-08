@@ -12,7 +12,7 @@ const fixtureDir = resolve(import.meta.dirname, "..", "examples", "ts", ".helix"
 test("config: loads and validates the TS fixture config", () => {
   const config = loadConfig(fixtureDir);
   assert.equal(config.provider.name, "openrouter");
-  assert.equal(config.orchestrator.model, "openrouter/anthropic/claude-sonnet-4");
+  assert.equal(config.orchestrator.model, "openrouter/xiaomi/mimo-v2.5-pro");
   assert.deepEqual(config.orchestrator.workflow, ["planner", "dev", "verifier"]);
   assert.equal(config.orchestrator.loops?.["verifier-fail"]?.backTo, "dev");
   assert.equal(config.triggers?.github?.repo, "acme/widget");
@@ -40,7 +40,7 @@ test("loader: discovers the three preset specialists with frontmatter + body", (
   assert.deepEqual(names, ["dev", "planner", "verifier"]);
   const planner = defs.find((d) => d.name === "planner")!;
   assert.ok(planner.description.length > 0);
-  assert.equal(planner.model, "openrouter/anthropic/claude-sonnet-4");
+  assert.equal(planner.model, "openrouter/xiaomi/mimo-v2.5-pro");
   assert.ok(planner.systemPrompt.length > 0);
   assert.ok(planner.tools?.includes("read"));
   assert.equal(planner.source, "project");

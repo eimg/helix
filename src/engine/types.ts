@@ -82,6 +82,23 @@ export interface RunEvent {
 }
 
 /** A full run record, persisted to `.helix/runs/<run-id>.json`. */
+export type ApprovalStatus = "none" | "pending" | "approved" | "rejected";
+
+export interface MergeGateResult {
+  action: "auto-merge" | "pending-approval" | "blocked";
+  reason: string;
+  diffLines: number;
+  diffFiles: number;
+  verifierPassed: boolean;
+}
+
+export interface PullRequestInfo {
+  url: string;
+  number: number;
+  branch: string;
+  draft: boolean;
+}
+
 export interface Run {
   id: string;
   issue: Issue;
@@ -92,6 +109,11 @@ export interface Run {
   results: SpecialistResult[];
   finalDecision?: OrchestratorDecision;
   runFile?: string;
+  /** Human approval gate (M2). */
+  approvalStatus?: ApprovalStatus;
+  mergeGateResult?: MergeGateResult;
+  pullRequest?: PullRequestInfo;
+  deliverableError?: string;
 }
 
 /** LLM provider abstraction. v1: OpenRouter. Tests: FakeProvider. */

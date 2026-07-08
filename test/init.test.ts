@@ -24,7 +24,7 @@ test("init: scaffolds .helix/ with config + 3 agents + typescript skill", () => 
 
   const config = JSON.parse(readFileSync(join(dir, ".helix", "config.json"), "utf-8"));
   assert.equal(config.provider.name, "openrouter");
-  assert.equal(config.orchestrator.model, "openrouter/anthropic/claude-sonnet-4");
+  assert.equal(config.orchestrator.model, "openrouter/xiaomi/mimo-v2.5-pro");
   assert.deepEqual(config.orchestrator.workflow, ["planner", "dev", "verifier"]);
   assert.equal(config.inheritPi, false);
 });

@@ -4,8 +4,8 @@ Living document. Revised as we learn.
 
 ## Milestones
 
-- **M1 — Core engine (shipped).** Manual + inline trigger. Hybrid orchestrator. Live event log. Presets. 20 tests.
-- **M2 — Auto + deliverable.** Express server; GitHub poll trigger; PR creation; merge gate execution.
+- **M1 — Core engine (shipped).** Manual + inline trigger. Hybrid orchestrator. Live event log. Presets. 29 tests.
+- **M2 — Auto + deliverable (shipped).** Express server; GitHub poll trigger; PR creation; merge gate execution. 37 tests.
 - **M3+ — Scale.** Web UI; observability; more providers/triggers; subprocess isolation; meta agent.
 
 ---
@@ -43,38 +43,35 @@ No Express/HTTP; no GitHub polling/webhook (manual `gh` only); no PR creation or
 
 ---
 
-## M2 — Auto + deliverable
+## M2 — Auto + deliverable ✅ SHIPPED
 
 Turn the engine into a self-driving service: issues arrive automatically, runs produce reviewable PRs, the merge gate acts.
 
-### Tasks
+### What shipped
 
-1. **Express host** — `src/server/`. One consumer of the engine API:
-   - `POST /runs` — start a run (issue number or inline body)
-   - `GET /runs/:id` — run state
-   - `GET /runs/:id/events` — SSE event stream (same `EventStream` the console logger consumes)
-   - `POST /runs/:id/approve` | `/reject` — human gate decisions
-   - Engine stays decoupled: the server calls `runIssue()`, never owns loop logic.
+| Area | Files |
+|---|---|
+| Express host | `src/server/app.ts` — `POST /runs`, `GET /runs/:id`, `GET /runs/:id/events` (SSE), `POST /runs/:id/approve\|reject` |
+| Run bootstrap | `src/run/bootstrap.ts` — shared `createRunContext()` + async `startRun()` for CLI and server |
+| GitHub poll | `src/triggers/github-poll.ts` — `GitHubPollTrigger` + injectable `IssueLister` |
+| PR creation | `src/deliverable/pr.ts` — `GhPullRequestCreator` + `FakePullRequestCreator` |
+| Git / diff | `src/deliverable/git.ts` — `ShellGitContext` for merge gate diff stats |
+| Deliverable pipeline | `src/deliverable/pipeline.ts` — merge gate → PR → auto-merge or pending approval |
+| Merge gate | `src/orchestrator/mergeGate.ts` — pure threshold evaluation |
+| CLI | `helix serve [--port]` — starts server; honors `triggers.github.mode: "poll"` |
+| State | `RunStore.load()` + incremental save during runs; extended `Run` type (approval, PR, merge gate) |
+| Tests | `test/{server,merge-gate,github-poll}.test.ts` — HTTP + fakes, no GitHub required |
 
-2. **GitHub poll trigger** — `src/triggers/github-poll.ts`. `GitHubPollTrigger` implements a `Trigger` that polls on an interval + label filter, composing M1's `fetchIssue`. Webhook + GitHub App are a near-term follow-up (same interface).
+### M2 non-goals (still out of scope)
 
-3. **PR creation** — `src/deliverable/pr.ts`. Open a branch + PR via `gh`. The orchestrator's `done` decision carries the deliverable (branch/commit info); this module turns it into a PR.
-
-4. **Merge gate execution** — `src/orchestrator/mergeGate.ts`. Evaluate diff size (lines/files) + verifier pass against config thresholds:
-   - Small + verified → auto-merge
-   - Else → draft PR + pending-approval state (server exposes approve/reject)
-
-5. **Config** — `triggers.github.mode: "poll"` honored; `mergeGate` wired to execution (logic exists, side effects land here).
-
-### M2 non-goals
-
-No web UI (server API only); no cost dashboards; no auto-merge without a passing verifier (hard gate, already enforced in code).
+No web UI (server API only); no cost dashboards; no auto-merge without a passing verifier (hard gate, enforced in merge gate).
 
 ---
 
 ## M3+ — Scale (sketch)
 
 - **Web UI** — manage runs, agents, skills, triggers, approvals; live event stream consumer. Built on the M2 server API.
+- **Repo context / cold-start** — amortize planner exploration across runs via bootstrap injection and `.helix/` artifacts. [Design note →](./repo-context.md)
 - **Observability** — traces, per-specialist cost/token dashboards, searchable run history. The `RunEvent` stream is the foundation.
 - **More providers** — Anthropic, OpenAI, … (the `Provider` interface is ready).
 - **More triggers** — GitLab, Jira, interval, file.

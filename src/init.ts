@@ -31,7 +31,7 @@ const CONFIG_TEMPLATE = `{
   "inheritPi": false,
   "extensions": { "enabled": false },
   "orchestrator": {
-    "model": "openrouter/anthropic/claude-sonnet-4",
+    "model": "openrouter/xiaomi/mimo-v2.5-pro",
     "workflow": ["planner", "dev", "verifier"],
     "maxIterations": 6,
     "loops": { "verifier-fail": { "backTo": "dev", "maxRetries": 2 } }

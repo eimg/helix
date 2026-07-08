@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Helix</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <div class="layout">
+    <header class="header">
+      <h1>Helix</h1>
+      <p class="subtitle">Agent orchestration — lightweight run console</p>
+    </header>
+
+    <section class="panel form-panel">
+      <form id="run-form">
+        <label>
+          <span>Title</span>
+          <input id="title" name="title" type="text" required placeholder="Fix the login bug" />
+        </label>
+        <label>
+          <span>Body</span>
+          <textarea id="body" name="body" rows="5" placeholder="Describe the task…"></textarea>
+        </label>
+        <div class="actions">
+          <button id="submit" type="submit">Run</button>
+          <span id="status-pill" class="pill idle">idle</span>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel log-panel">
+      <div class="panel-head">
+        <h2>Live log</h2>
+        <button id="clear-log" type="button" class="ghost">Clear</button>
+      </div>
+      <div id="log" class="log" aria-live="polite"></div>
+    </section>
+
+    <section class="panel result-panel hidden" id="result-panel">
+      <h2>Result</h2>
+      <div id="result"></div>
+    </section>
+  </div>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

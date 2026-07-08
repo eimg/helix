@@ -1,25 +1,12 @@
 {
-  "provider": {
-    "name": "openrouter",
-    "apiKeyEnv": "OPENROUTER_API_KEY"
-  },
+  "provider": { "name": "openrouter", "apiKeyEnv": "OPENROUTER_API_KEY" },
   "inheritPi": false,
   "extensions": { "enabled": false },
   "orchestrator": {
     "model": "openrouter/xiaomi/mimo-v2.5-pro",
     "workflow": ["planner", "dev", "verifier"],
     "maxIterations": 6,
-    "loops": {
-      "verifier-fail": { "backTo": "dev", "maxRetries": 2 }
-    }
-  },
-  "triggers": {
-    "github": {
-      "repo": "acme/widget",
-      "labelFilter": "helix",
-      "mode": "poll",
-      "intervalSec": 60
-    }
+    "loops": { "verifier-fail": { "backTo": "dev", "maxRetries": 2 } }
   },
   "mergeGate": {
     "autoMerge": true,

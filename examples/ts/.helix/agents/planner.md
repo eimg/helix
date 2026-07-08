@@ -1,7 +1,7 @@
 ---
 name: planner
 description: Breaks a GitHub issue into a concrete, ordered implementation plan. First specialist in the default workflow.
-model: openrouter/anthropic/claude-sonnet-4
+model: openrouter/xiaomi/mimo-v2.5-pro
 tools: read, bash, grep, find, ls
 ---
 

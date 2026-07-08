@@ -26,6 +26,7 @@ export interface PiProvider extends Provider {
   readonly authStorage: AuthStorage;
   readonly modelRegistry: ModelRegistry;
   resolveModel(modelRef: string): Promise<Model<Api>>;
+  hasAuth(): boolean;
 }
 
 export interface OpenRouterProviderOptions {

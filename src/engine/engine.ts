@@ -32,6 +32,8 @@ export interface EngineDeps {
   gates?: GateConfig;
   eventStream?: EventStream;
   onEvent?: (run: Run, event: RunEvent) => void;
+  /** Pre-assign run id (server/API). Default: random UUID. */
+  runId?: string;
 }
 
 export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
@@ -43,7 +45,7 @@ export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
   }
 
   const run: Run = {
-    id: randomUUID(),
+    id: deps.runId ?? randomUUID(),
     issue,
     startedAt: Date.now(),
     status: "running",
@@ -172,14 +174,24 @@ async function runSpecialists(
         };
       }
       sessions.push(session);
-      emit({ ts: Date.now(), type: "specialist_started", summary: `${call.specialist}: ${truncate(call.task, 80)}` });
+      emit({
+        ts: Date.now(),
+        type: "specialist_started",
+        summary: call.specialist,
+        details: { specialist: call.specialist, task: call.task },
+      });
       try {
         const result = await session.run(call.task);
         emit({
           ts: Date.now(),
           type: "specialist_finished",
-          summary: `${call.specialist}: ${result.ok ? "ok" : "fail"} — ${truncate(result.output, 80)}`,
-          details: { ok: result.ok },
+          summary: `${call.specialist}: ${result.ok ? "ok" : "fail"}`,
+          details: {
+            specialist: call.specialist,
+            ok: result.ok,
+            output: result.output,
+            error: result.error,
+          },
         });
         return result;
       } catch (err) {
@@ -187,8 +199,8 @@ async function runSpecialists(
         emit({
           ts: Date.now(),
           type: "specialist_finished",
-          summary: `${call.specialist}: error — ${truncate(message, 80)}`,
-          details: { ok: false },
+          summary: `${call.specialist}: error`,
+          details: { specialist: call.specialist, ok: false, output: "", error: message },
         });
         return {
           specialist: call.specialist,
@@ -230,10 +242,6 @@ function describeDecision(d: OrchestratorDecision): string {
     case "escalate":
       return `escalate — ${d.reason}`;
   }
-}
-
-function truncate(s: string, n: number): string {
-  return s.length > n ? `${s.slice(0, n)}…` : s;
 }
 
 // re-export for callers

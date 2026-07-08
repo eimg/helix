@@ -1,14 +1,8 @@
 #!/usr/bin/env node
 /**
  * helix init [--preset <name>] [--force] [--list]
- *                                # scaffold .helix/ from shipped presets
- * helix run <issue-number>          # fetch from GitHub via `gh`
- * helix run --title "..." [--body "..."]  # inline: no GitHub, no network
- * helix run --stdin [--title "..."]       # read body from stdin
- *
- * The inline paths prove the orchestrator and trigger adapter are independent:
- * `runIssue()` takes a plain `Issue`, and an inline issue is constructed
- * directly without any `Trigger.fetchIssue()` call.
+ * helix run <issue-number> | --title "..." [--body "..."] | --stdin
+ * helix serve [--port 8319]   # M2: HTTP API + web UI + optional GitHub poll
  */
 import { resolve } from "node:path";
 import { loadConfig } from "./config.js";
@@ -26,13 +20,22 @@ import { FileRunStore } from "./state/runStore.js";
 import { DEFAULT_GATE_CONFIG } from "./orchestrator/gates.js";
 import { init } from "./init.js";
 import type { Issue, Run } from "./engine/types.js";
+import { createRunContext } from "./run/bootstrap.js";
+import { startServer } from "./server/app.js";
+import { DefaultDeliverablePipeline } from "./deliverable/pipeline.js";
+import { ShellGitContext } from "./deliverable/git.js";
+import { GhPullRequestCreator } from "./deliverable/pr.js";
+import { GitHubPollTrigger } from "./triggers/github-poll.js";
+import { startRun } from "./run/bootstrap.js";
+import { HELIX_DEFAULT_PORT } from "./config/defaults.js";
 
 function usage(): never {
   console.error(`Usage:
   helix init [--preset <name>] [--force] [--list]
   helix run <issue-number>                    # fetch from GitHub
   helix run --title "..." [--body "..."]      # inline issue
-  helix run --stdin [--title "..."]           # body from stdin`);
+  helix run --stdin [--title "..."]           # body from stdin
+  helix serve [--port <n>]                    # HTTP API + web UI (default 8319)`);
   process.exit(2);
 }
 
@@ -44,7 +47,7 @@ interface ParsedArgs {
   readStdin: boolean;
 }
 
-function parseArgs(args: string[]): ParsedArgs {
+function parseRunArgs(args: string[]): ParsedArgs {
   let title: string | undefined;
   let body: string | undefined;
   let readStdin = false;
@@ -73,6 +76,20 @@ function parseArgs(args: string[]): ParsedArgs {
   usage();
 }
 
+function parseServeArgs(args: string[]): { port: number } {
+  let port = Number(process.env.PORT ?? HELIX_DEFAULT_PORT);
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--port") port = Number(args[++i]);
+    else usage();
+  }
+  if (!Number.isInteger(port) || port <= 0) {
+    console.error("Invalid port");
+    process.exit(2);
+  }
+  return { port };
+}
+
 async function readStdinBody(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
@@ -86,7 +103,6 @@ async function buildIssue(parsed: ParsedArgs, repo: string): Promise<Issue> {
     if (parsed.readStdin) {
       const stdin = await readStdinBody();
       if (title === undefined) {
-        // first line is the title, rest is the body
         const nl = stdin.indexOf("\n");
         title = nl === -1 ? stdin : stdin.slice(0, nl).trim();
         body = nl === -1 ? "" : stdin.slice(nl + 1).trim();
@@ -101,7 +117,6 @@ async function buildIssue(parsed: ParsedArgs, repo: string): Promise<Issue> {
     return inlineIssue({ title, body });
   }
 
-  // GitHub
   const trigger = new GitHubTrigger(repo);
   try {
     return await trigger.fetchIssue(parsed.issueNumber!);
@@ -113,11 +128,128 @@ async function buildIssue(parsed: ParsedArgs, repo: string): Promise<Issue> {
   }
 }
 
+async function cmdRun(args: string[]): Promise<void> {
+  const parsed = parseRunArgs(args);
+  const helixDir = findHelixDir();
+  let config;
+  try {
+    config = loadConfig(helixDir);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Could not load ${resolve(helixDir, "config.json")}: ${msg}`);
+    process.exit(1);
+  }
+
+  const provider = new OpenRouterProvider({
+    apiKeyEnv: config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY",
+    inheritPi: config.inheritPi,
+  });
+  if (!provider.hasAuth()) {
+    console.error(`No OpenRouter API key found. Set ${config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY"}.`);
+    process.exit(1);
+  }
+
+  const specialists = loadSpecialists(resolve(helixDir, "agents"));
+  if (specialists.length === 0) {
+    console.error(`No specialists found in ${resolve(helixDir, "agents")}.`);
+    process.exit(1);
+  }
+
+  const workflow = loadWorkflow(config);
+  const orchestrator = new LlmOrchestrator(provider, workflow, config.orchestrator.model, {
+    helixDir,
+    inheritPi: config.inheritPi,
+    extensions: config.extensions,
+  });
+
+  const eventStream = new EventStream();
+  attachConsoleLogger(eventStream);
+
+  const factory = new PiSpecialistSessionFactory(provider, specialists, {
+    helixDir,
+    inheritPi: config.inheritPi,
+    extensions: config.extensions,
+  });
+
+  const deps: EngineDeps = {
+    provider,
+    orchestrator,
+    specialistFactory: factory,
+    gates: { ...DEFAULT_GATE_CONFIG, maxIterations: workflow.maxIterations },
+    eventStream,
+  };
+
+  const repo = config.triggers?.github?.repo;
+  if (parsed.mode === "github" && !repo) {
+    console.error("config: triggers.github.repo is required for GitHub issue fetch.");
+    process.exit(1);
+  }
+
+  const issue = await buildIssue(parsed, repo ?? "(inline)");
+
+  let run;
+  try {
+    run = await runIssue(issue, deps);
+  } finally {
+    orchestrator.dispose();
+  }
+
+  const store = new FileRunStore(resolve(helixDir, "runs"));
+  run.runFile = store.save(run);
+  printSummary(run);
+}
+
+async function cmdServe(args: string[]): Promise<void> {
+  const { port } = parseServeArgs(args);
+  const helixDir = findHelixDir();
+  const config = loadConfig(helixDir);
+  const repo = config.triggers?.github?.repo;
+
+  const pr = new GhPullRequestCreator({ cwd: process.cwd(), repo });
+  const ctx = createRunContext({
+    helixDir,
+    deliverable: new DefaultDeliverablePipeline({
+      git: new ShellGitContext({ cwd: process.cwd() }),
+      pr,
+      repo,
+    }),
+  });
+
+  if (!ctx.provider.hasAuth()) {
+    console.error(`No OpenRouter API key found. Set ${config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY"}.`);
+    process.exit(1);
+  }
+
+  if (ctx.specialists.length === 0) {
+    console.error(`No specialists found in ${resolve(helixDir, "agents")}.`);
+    process.exit(1);
+  }
+
+  startServer({ ctx, pr, githubRepo: repo, port, host: "127.0.0.1" });
+
+  const gh = config.triggers?.github;
+  if (gh?.mode === "poll" && repo) {
+    const poll = new GitHubPollTrigger({
+      repo,
+      labelFilter: gh.labelFilter,
+      intervalSec: gh.intervalSec,
+      onIssue: (issue) => {
+        console.log(`Poll: starting run for issue #${issue.number}: ${issue.title}`);
+        const { promise } = startRun(ctx, issue);
+        promise.catch((err) => {
+          console.error(`Run failed for issue #${issue.number}:`, err instanceof Error ? err.message : err);
+        });
+      },
+    });
+    poll.start();
+    console.log(`GitHub poll enabled (${repo}, label=${gh.labelFilter ?? "any"}, every ${gh.intervalSec ?? 60}s)`);
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length === 0 || (args[0] === "run" && args.length === 1)) usage();
+  if (args.length === 0) usage();
 
-  // `helix init` — scaffold .helix/ from presets, then exit.
   if (args[0] === "init") {
     const opts: { preset?: string; force?: boolean; list?: boolean } = {};
     for (let i = 1; i < args.length; i++) {
@@ -139,88 +271,14 @@ async function main(): Promise<void> {
     return;
   }
 
-  // accept `helix run ...` or `helix ...`
+  if (args[0] === "serve") {
+    await cmdServe(args.slice(1));
+    return;
+  }
+
   const rest = args[0] === "run" ? args.slice(1) : args;
   if (rest.length === 0) usage();
-  const parsed = parseArgs(rest);
-
-  const helixDir = findHelixDir();
-  let config;
-  try {
-    config = loadConfig(helixDir);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`Could not load ${resolve(helixDir, "config.json")}: ${msg}`);
-    console.error("(See examples/ts/.helix/config.json for a reference config, and presets/ for specialists.)");
-    process.exit(1);
-  }
-
-  // Provider
-  const provider = new OpenRouterProvider({
-    apiKeyEnv: config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY",
-    inheritPi: config.inheritPi,
-  });
-  if (!provider.hasAuth()) {
-    console.error(
-      `No OpenRouter API key found. Set ${config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY"} or configure auth.json.`,
-    );
-    process.exit(1);
-  }
-
-  // Specialists
-  const specialists = loadSpecialists(resolve(helixDir, "agents"));
-  if (specialists.length === 0) {
-    console.error(`No specialists found in ${resolve(helixDir, "agents")}. Add .md definitions (see presets/).`);
-    process.exit(1);
-  }
-
-  // Orchestrator + workflow
-  const workflow = loadWorkflow(config);
-  const orchestrator = new LlmOrchestrator(provider, workflow, config.orchestrator.model, {
-    helixDir,
-    inheritPi: config.inheritPi,
-    extensions: config.extensions,
-  });
-
-  // Event stream + console logger
-  const eventStream = new EventStream();
-  attachConsoleLogger(eventStream);
-
-  const factory = new PiSpecialistSessionFactory(provider, specialists, {
-    helixDir,
-    inheritPi: config.inheritPi,
-    extensions: config.extensions,
-  });
-
-  const deps: EngineDeps = {
-    provider,
-    orchestrator,
-    specialistFactory: factory,
-    gates: { ...DEFAULT_GATE_CONFIG, maxIterations: workflow.maxIterations },
-    eventStream,
-  };
-
-  // Inline mode needs no repo; GitHub mode does.
-  const repo = config.triggers?.github?.repo;
-  if (parsed.mode === "github" && !repo) {
-    console.error("config: triggers.github.repo is required for GitHub issue fetch. Use --title/--stdin for inline.");
-    process.exit(1);
-  }
-
-  const issue = await buildIssue(parsed, repo ?? "(inline)");
-
-  let run;
-  try {
-    run = await runIssue(issue, deps);
-  } finally {
-    orchestrator.dispose();
-  }
-
-  // Persist
-  const store = new FileRunStore(resolve(helixDir, "runs"));
-  run.runFile = store.save(run);
-
-  printSummary(run);
+  await cmdRun(rest);
 }
 
 function printSummary(run: Run): void {
@@ -230,57 +288,35 @@ function printSummary(run: Run): void {
   const green = (s: string) => p("32", s);
   const yellow = (s: string) => p("33", s);
   const red = (s: string) => p("31", s);
-  const cyan = (s: string) => p("36", s);
+
+  const results = run.results;
+  const ok = results.filter((r) => r.ok).length;
+  const fail = results.length - ok;
+  const elapsed =
+    run.finishedAt != null
+      ? `${Math.max(1, Math.round((run.finishedAt - run.startedAt) / 1000))}s`
+      : "?";
+
+  const stats = `${results.length} specialist${results.length === 1 ? "" : "s"} · ${elapsed}` +
+    (fail > 0 ? ` (${ok} ok, ${fail} failed)` : "");
 
   console.log("");
   console.log(dim("─".repeat(60)));
 
-  const status = run.status;
-  const results = run.results;
-  const ok = results.filter((r) => r.ok).length;
-  const fail = results.length - ok;
-
-  const statsLine = dim(`${results.length} specialist${results.length === 1 ? "" : "s"} ran` + (fail > 0 ? ` (${ok} ok, ${fail} failed)` : ""));
-
-  if (status === "done") {
-    console.log(`${green("✓ done")}  ${statsLine}`);
-    const reason = run.finalDecision?.kind === "done" ? run.finalDecision.reason : "";
-    if (reason) console.log(`  ${dim(reason)}`);
-    if (run.finalDecision?.kind === "done" && run.finalDecision.deliverable) {
-      console.log(`  ${cyan("deliverable")}: ${run.finalDecision.deliverable}`);
-    }
-  } else if (status === "escalated") {
-    const reason = run.finalDecision?.kind === "escalate" ? run.finalDecision.reason : "";
-    console.log(`${yellow("▲ escalated")}  ${statsLine}`);
-    // wrap the reason for readability
-    const width = (process.stdout.columns && process.stdout.columns > 40) ? process.stdout.columns : 80;
-    for (const line of wrapText(reason, width - 2, 2)) console.log(line);
-  } else if (status === "error") {
-    console.log(`${red("✗ error")}  ${statsLine}`);
+  if (run.status === "done") {
+    console.log(`${green("✓ done")}  ${dim(stats)}`);
+    if (run.pullRequest) console.log(`  ${dim("PR:")} ${run.pullRequest.url}`);
+    if (run.approvalStatus === "pending") console.log(`  ${yellow("awaiting approval")}`);
+  } else if (run.status === "escalated") {
+    console.log(`${yellow("▲ escalated")}  ${dim(stats)}`);
+  } else if (run.status === "error") {
+    console.log(`${red("✗ error")}  ${dim(stats)}`);
   } else {
-    console.log(`? ended (${status})  ${statsLine}`);
+    console.log(`? ended (${run.status})  ${dim(stats)}`);
   }
 
-  if (run.runFile) console.log(`\n  ${dim("run file:")} ${run.runFile}`);
+  if (run.runFile) console.log(`  ${dim("run file:")} ${run.runFile}`);
   console.log("");
-}
-
-function wrapText(text: string, width: number, indent: number): string[] {
-  if (!text) return [];
-  const lines: string[] = [];
-  const words = text.split(/\s+/);
-  let line = "".padStart(indent);
-  const pad = " ".repeat(indent);
-  for (const word of words) {
-    if ((line + " " + word).trim().length > width) {
-      lines.push(line.trimEnd());
-      line = pad + word;
-    } else {
-      line += " " + word;
-    }
-  }
-  if (line.trim()) lines.push(line.trimEnd());
-  return lines;
 }
 
 main().catch((err) => {
