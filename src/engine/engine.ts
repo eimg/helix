@@ -23,7 +23,7 @@ import type {
   SpecialistSessionFactory,
 } from "./types.js";
 import { EventStream } from "./eventStream.js";
-import { DEFAULT_GATE_CONFIG, enforceIterationCap, type GateConfig } from "../orchestrator/gates.js";
+import { DEFAULT_GATE_CONFIG, enforceIterationCap, isBlockingFailure, type GateConfig } from "../orchestrator/gates.js";
 
 export interface EngineDeps {
   provider: Provider;
@@ -93,7 +93,21 @@ export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
         break;
       }
 
-      // done
+      // done — but never if a specialist failed. That is a hard gate: the
+      // orchestrator cannot declare success over an unverified run.
+      if (isBlockingFailure(run.results)) {
+        run.status = "escalated";
+        const blocking = run.results.filter((r) => !r.ok);
+        const escalated: OrchestratorDecision = {
+          kind: "escalate",
+          reason: `Orchestrator declared done, but ${blocking.length} specialist(s) failed: ${blocking.map((r) => r.specialist).join(", ")}`,
+        };
+        run.finalDecision = escalated;
+        emit({ ts: Date.now(), type: "gate_blocked", summary: escalated.reason, details: { blocking: blocking.map((r) => r.specialist) } });
+        emit({ ts: Date.now(), type: "run_escalated", summary: escalated.reason });
+        break;
+      }
+
       run.status = "done";
       run.finalDecision = decision;
       emit({ ts: Date.now(), type: "run_done", summary: decision.reason, details: { deliverable: decision.deliverable } });
@@ -111,11 +125,16 @@ export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
 }
 
 async function listSpecialists(factory: SpecialistSessionFactory): Promise<SpecialistDefinition[]> {
-  // The factory exposes the discovered definitions; for the stub/fake path we
-  // need a way to enumerate. We keep it simple: the factory may carry a
-  // `definitions` array (see SpecialistSessionFactoryBase below).
-  const anyFactory = factory as SpecialistSessionFactory & { definitions?: SpecialistDefinition[] };
-  return anyFactory.definitions ?? [];
+  return definitionsOf(factory);
+}
+
+/**
+ * Sessions are created from definitions discovered by the factory. The factory
+ * exposes them as `definitions` (both real and stub factories do). This is the
+ * one place that contract is asserted, instead of scattered casts.
+ */
+function definitionsOf(factory: SpecialistSessionFactory): SpecialistDefinition[] {
+  return (factory as SpecialistSessionFactory & { definitions?: SpecialistDefinition[] }).definitions ?? [];
 }
 
 async function runSpecialists(
@@ -123,28 +142,38 @@ async function runSpecialists(
   factory: SpecialistSessionFactory,
   emit: (e: RunEvent) => void,
 ): Promise<SpecialistResult[]> {
-  const sessions = new Map<string, SpecialistSession>();
-  try {
-    // Parallel, isolated: each call gets its own session and runs concurrently.
-    const results = await Promise.all(
-      calls.map(async (call) => {
-        // The factory resolves a definition by name; for M1 we look it up via
-        // the definitions the factory exposes.
-        const def = (factory as SpecialistSessionFactory & { definitions?: SpecialistDefinition[] }).definitions?.find(
-          (d) => d.name === call.specialist,
-        );
-        if (!def) {
-          return {
-            specialist: call.specialist,
-            task: call.task,
-            ok: false,
-            output: "",
-            error: `Unknown specialist: ${call.specialist}`,
-          } satisfies SpecialistResult;
-        }
-        const session = await factory.create(def);
-        sessions.set(call.specialist, session);
-        emit({ ts: Date.now(), type: "specialist_started", summary: `${call.specialist}: ${truncate(call.task, 80)}` });
+  const sessions: SpecialistSession[] = [];
+  // allSettled: one specialist throwing must not abandon its siblings or kill
+  // the run. A rejection becomes an ok:false result; the run continues and the
+  // orchestrator gets to react to the failure.
+  const settled = await Promise.allSettled(
+    calls.map(async (call): Promise<SpecialistResult> => {
+      const def = definitionsOf(factory).find((d) => d.name === call.specialist);
+      if (!def) {
+        return {
+          specialist: call.specialist,
+          task: call.task,
+          ok: false,
+          output: "",
+          error: `Unknown specialist: ${call.specialist}`,
+        };
+      }
+      let session: SpecialistSession;
+      try {
+        session = await factory.create(def);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          specialist: call.specialist,
+          task: call.task,
+          ok: false,
+          output: "",
+          error: `failed to create session: ${message}`,
+        };
+      }
+      sessions.push(session);
+      emit({ ts: Date.now(), type: "specialist_started", summary: `${call.specialist}: ${truncate(call.task, 80)}` });
+      try {
         const result = await session.run(call.task);
         emit({
           ts: Date.now(),
@@ -153,18 +182,43 @@ async function runSpecialists(
           details: { ok: result.ok },
         });
         return result;
-      }),
-    );
-    return results;
-  } finally {
-    for (const session of sessions.values()) {
-      try {
-        session.dispose();
-      } catch {
-        // ignore
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        emit({
+          ts: Date.now(),
+          type: "specialist_finished",
+          summary: `${call.specialist}: error — ${truncate(message, 80)}`,
+          details: { ok: false },
+        });
+        return {
+          specialist: call.specialist,
+          task: call.task,
+          ok: false,
+          output: "",
+          error: `session threw: ${message}`,
+        };
       }
+    }),
+  );
+  // dispose all sessions that were created, regardless of outcome
+  for (const session of sessions) {
+    try {
+      session.dispose();
+    } catch {
+      // ignore
     }
   }
+  return settled.map((s, i) =>
+    s.status === "fulfilled"
+      ? s.value
+      : {
+          specialist: calls[i].specialist,
+          task: calls[i].task,
+          ok: false,
+          output: "",
+          error: `unhandled: ${s.reason instanceof Error ? s.reason.message : String(s.reason)}`,
+        },
+  );
 }
 
 function describeDecision(d: OrchestratorDecision): string {

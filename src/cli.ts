@@ -182,8 +182,12 @@ async function main(): Promise<void> {
 
   const issue = await buildIssue(parsed, repo ?? "(inline)");
 
-  const run = await runIssue(issue, deps);
-  orchestrator.dispose();
+  let run;
+  try {
+    run = await runIssue(issue, deps);
+  } finally {
+    orchestrator.dispose();
+  }
 
   // Persist
   const store = new FileRunStore(resolve(helixDir, "runs"));

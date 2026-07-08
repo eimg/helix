@@ -99,8 +99,6 @@ export interface Provider {
   name: string;
   /** Resolve a model id from config into a pi Model object. */
   resolveModel(modelId: string): Promise<unknown>;
-  /** API key / auth for pi's AuthStorage, or undefined to use defaults. */
-  auth?: { provider: string; apiKey: string };
 }
 
 /** A factory that creates an isolated specialist session. */

@@ -134,3 +134,65 @@ test("iteration cap: engine escalates instead of looping forever", async () => {
   assert.equal(run.status, "escalated");
   assert.ok(run.results.length <= 7, `should be capped near maxIterations=6, got ${run.results.length}`);
 });
+
+test("specialist crash: a throwing specialist becomes a failure, doesn't kill the run", async () => {
+  // One specialist throws, one succeeds. The throwing one must become an
+  // ok:false result — not reject the whole Promise.all and abandon its sibling.
+  const good = def("good");
+  const bad = def("bad");
+  const baseFactory = new StubSpecialistFactory([good, bad], { good: "done", bad: "should not matter" });
+  const factoryProxy: SpecialistSessionFactory & { definitions: SpecialistDefinition[] } = {
+    definitions: baseFactory.definitions,
+    async create(d) {
+      const base = await baseFactory.create(d);
+      if (d.name === "bad") {
+        return {
+          name: d.name,
+          async run() { throw new Error("specialist exploded"); },
+          dispose: () => base.dispose(),
+        };
+      }
+      return base;
+    },
+  };
+  const script: OrchestratorDecision[] = [
+    { kind: "run", specialists: [
+      { specialist: "good", task: "g" },
+      { specialist: "bad", task: "b" },
+    ], reason: "parallel" },
+    { kind: "done", reason: "should be blocked" },
+  ];
+  const run = await runIssue(issue, {
+    provider: new FakeProvider(),
+    orchestrator: new ScriptedOrchestrator(script),
+    specialistFactory: factoryProxy,
+  });
+  // both results present — the throwing one didn't abandon the sibling
+  assert.equal(run.results.length, 2);
+  const goodResult = run.results.find((r) => r.specialist === "good")!;
+  const badResult = run.results.find((r) => r.specialist === "bad")!;
+  assert.equal(goodResult.ok, true);
+  assert.equal(badResult.ok, false);
+  assert.match(badResult.error!, /specialist exploded/);
+});
+
+test("blocking-failure gate: orchestrator 'done' over a failed result is escalated", async () => {
+  // The orchestrator tries to declare done, but the dev specialist failed.
+  // The engine's hard gate must convert that into an escalation.
+  const factory = new StubSpecialistFactory([def("dev")], { dev: "tried" }, 0, new Set(["dev"]));
+  const script: OrchestratorDecision[] = [
+    { kind: "run", specialists: [{ specialist: "dev", task: "fix" }], reason: "attempt" },
+    { kind: "done", reason: "all good" },
+  ];
+  const events: RunEvent[] = [];
+  const run = await runIssue(issue, {
+    provider: new FakeProvider(),
+    orchestrator: new ScriptedOrchestrator(script),
+    specialistFactory: factory,
+    onEvent: (_r, e) => events.push(e),
+  });
+  assert.equal(run.status, "escalated");
+  assert.equal(run.finalDecision?.kind, "escalate");
+  assert.match((run.finalDecision as { reason: string }).reason, /failed/);
+  assert.ok(events.some((e) => e.type === "gate_blocked"), "gate_blocked event should fire");
+});

@@ -1,6 +1,8 @@
 /**
- * Run state persistence — append-only write of a Run (+ its events) to
- * `.helix/runs/<run-id>.json`. v1: one file per run, written at the end.
+ * Run state persistence. v1: one JSON file per run under `.helix/runs/`,
+ * written when `save()` is called (the CLI calls it once at the end of a run).
+ * Incremental persistence during a long run is a future concern; today a crash
+ * mid-run loses state, which is acceptable for M1's manual/CLI shape.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
