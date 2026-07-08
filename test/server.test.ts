@@ -9,8 +9,6 @@ import { FakeProvider } from "../src/providers/fake.js";
 import { StubSpecialistFactory } from "../src/agents/stubSession.js";
 import { ScriptedOrchestrator } from "../src/orchestrator/scripted.js";
 import type { OrchestratorDecision, SpecialistDefinition } from "../src/engine/types.js";
-import { loadConfig } from "../src/config.js";
-import { loadWorkflow } from "../src/orchestrator/workflow.js";
 import { loadSpecialists } from "../src/agents/loader.js";
 import { NoOpDeliverablePipeline } from "../src/deliverable/pipeline.js";
 import { FakePullRequestCreator } from "../src/deliverable/pr.js";
@@ -29,8 +27,6 @@ function def(name: string): SpecialistDefinition {
 
 function testCtx(script: OrchestratorDecision[]) {
   const store = new MemoryRunStore();
-  const config = loadConfig(fixtureDir);
-  const workflow = loadWorkflow(config);
   const specialists = loadSpecialists(resolve(fixtureDir, "agents"));
   const factory = new StubSpecialistFactory(specialists.length ? specialists : [def("dev")], { dev: "done" });
 
