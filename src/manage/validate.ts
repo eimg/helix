@@ -4,10 +4,12 @@
 import { existsSync } from "node:fs";
 import { resolve, normalize } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
-import type { ManageDraft } from "./types.js";
+import type { ManageDraft, ManageDeletion } from "./types.js";
 
 const AGENT_PATH = /^agents\/[a-z0-9-]+\.md$/;
 const SKILL_PATH = /^skills\/[a-z0-9-]+\/SKILL\.md$/;
+
+export { AGENT_PATH, SKILL_PATH };
 
 export function validateDraft(draft: ManageDraft, _helixDir: string): string | undefined {
   if (draft.kind === "agent") {
@@ -73,4 +75,65 @@ export function validateDraftsForApply(
 
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true };
+}
+
+export function validateDeletion(deletion: ManageDeletion): string | undefined {
+  if (deletion.kind === "agent" && !AGENT_PATH.test(deletion.relativePath)) {
+    return `Invalid agent delete path "${deletion.relativePath}"`;
+  }
+  if (deletion.kind === "skill" && !SKILL_PATH.test(deletion.relativePath)) {
+    return `Invalid skill delete path "${deletion.relativePath}"`;
+  }
+  return undefined;
+}
+
+export function validateDeletionsForApply(
+  deletions: ManageDeletion[],
+  helixDir: string,
+  workflowAgents: string[],
+  draftPaths: Set<string>,
+  force: boolean,
+): { ok: true } | { ok: false; errors: string[] } {
+  const errors: string[] = [];
+  const seen = new Set<string>();
+
+  for (const deletion of deletions) {
+    const pathErr = validateDeletion(deletion);
+    if (pathErr) errors.push(pathErr);
+
+    if (seen.has(deletion.relativePath)) {
+      errors.push(`Duplicate deletion path: ${deletion.relativePath}`);
+    }
+    seen.add(deletion.relativePath);
+
+    if (draftPaths.has(deletion.relativePath)) {
+      errors.push(`Cannot delete and write the same path: ${deletion.relativePath}`);
+    }
+
+    if (!resolveDraftPath(helixDir, deletion.relativePath)) {
+      errors.push(`Path escapes .helix/: ${deletion.relativePath}`);
+      continue;
+    }
+
+    if (!draftExists(helixDir, deletion.relativePath)) {
+      errors.push(`File does not exist: ${deletion.relativePath}`);
+    }
+
+    if (deletion.kind === "agent" && !force) {
+      const agentName = agentNameFromPath(deletion.relativePath);
+      if (agentName && workflowAgents.includes(agentName)) {
+        errors.push(
+          `Agent "${agentName}" is in orchestrator.workflow — enable overwrite or remove from workflow first`,
+        );
+      }
+    }
+  }
+
+  if (errors.length > 0) return { ok: false, errors };
+  return { ok: true };
+}
+
+function agentNameFromPath(relativePath: string): string | undefined {
+  const m = relativePath.match(/^agents\/([a-z0-9-]+)\.md$/);
+  return m?.[1];
 }

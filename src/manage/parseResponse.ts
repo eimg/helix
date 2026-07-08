@@ -1,7 +1,7 @@
 /**
  * Parse manage agent JSON output (defensive — first {...} block).
  */
-import type { ManageAuthorTurn, ManageDraft } from "./types.js";
+import type { ManageAuthorTurn, ManageDraft, ManageDeletion } from "./types.js";
 
 export function parseManageResponse(text: string): ManageAuthorTurn | undefined {
   const jsonText = extractJsonObject(text);
@@ -26,7 +26,15 @@ export function parseManageResponse(text: string): ManageAuthorTurn | undefined 
     }
   }
 
-  return { message: obj.message.trim(), drafts };
+  const deletions: ManageDeletion[] = [];
+  if (Array.isArray(obj.deletions)) {
+    for (const item of obj.deletions) {
+      const deletion = normalizeDeletion(item);
+      if (deletion) deletions.push(deletion);
+    }
+  }
+
+  return { message: obj.message.trim(), drafts, deletions };
 }
 
 function extractJsonObject(text: string): string | undefined {
@@ -55,5 +63,17 @@ function normalizeDraft(item: unknown): ManageDraft | undefined {
     kind,
     relativePath: d.relativePath.trim().replace(/\\/g, "/"),
     content: d.content,
+  };
+}
+
+function normalizeDeletion(item: unknown): ManageDeletion | undefined {
+  if (!item || typeof item !== "object") return undefined;
+  const d = item as Record<string, unknown>;
+  const kind = d.kind;
+  if (kind !== "agent" && kind !== "skill") return undefined;
+  if (typeof d.relativePath !== "string" || !d.relativePath.trim()) return undefined;
+  return {
+    kind,
+    relativePath: d.relativePath.trim().replace(/\\/g, "/"),
   };
 }

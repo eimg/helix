@@ -47,6 +47,7 @@ export class LlmManageAuthor implements ManageAuthor {
       return {
         message: `Manage assistant call failed: ${message}`,
         drafts: [],
+        deletions: [],
       };
     }
 
@@ -65,6 +66,7 @@ export class LlmManageAuthor implements ManageAuthor {
     return {
       message: raw || "Manage assistant returned an empty response.",
       drafts: [],
+      deletions: [],
     };
   }
 

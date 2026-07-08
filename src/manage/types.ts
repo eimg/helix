@@ -7,6 +7,7 @@ export type ManageEventType =
   | "message_sent"
   | "assistant_replied"
   | "draft_updated"
+  | "deletion_updated"
   | "applied"
   | "error";
 
@@ -29,6 +30,13 @@ export interface ManageDraft {
   content: string;
 }
 
+/** Explicit delete proposal — applied only after operator confirms Apply. */
+export interface ManageDeletion {
+  kind: "agent" | "skill";
+  /** Path relative to `.helix/` — same rules as drafts. */
+  relativePath: string;
+}
+
 export interface ManageSession {
   id: string;
   status: ManageSessionStatus;
@@ -36,6 +44,7 @@ export interface ManageSession {
   finishedAt?: number;
   messages: ManageMessage[];
   drafts: ManageDraft[];
+  deletions: ManageDeletion[];
   events: ManageEvent[];
   error?: string;
 }
@@ -59,6 +68,7 @@ export interface ManageInventory {
 export interface ManageAuthorTurn {
   message: string;
   drafts: ManageDraft[];
+  deletions: ManageDeletion[];
 }
 
 export interface ManageAuthorOptions {
@@ -76,5 +86,5 @@ export interface ManageAuthor {
 
 export interface ApplyResult {
   written: string[];
-  skipped: string[];
+  deleted: string[];
 }

@@ -15,6 +15,7 @@ const inventoryEl = document.getElementById("inventory");
 let sessionId = null;
 let activeSource = null;
 let currentDrafts = null;
+let currentDeletions = null;
 
 loadInventory();
 
@@ -43,7 +44,7 @@ followUpBtn.addEventListener("click", async () => {
 });
 
 applyBtn.addEventListener("click", async () => {
-  if (!sessionId || !currentDrafts?.length) return;
+  if (!sessionId || (!currentDrafts?.length && !currentDeletions?.length)) return;
   setBusy(true);
   try {
     const res = await fetch(`/manage/sessions/${sessionId}/apply`, {
@@ -109,6 +110,7 @@ async function startSession(prompt) {
   logEl.innerHTML = "";
   previewPanel.classList.add("hidden");
   currentDrafts = null;
+  currentDeletions = null;
 
   try {
     const res = await fetch("/manage/sessions", {
@@ -126,7 +128,7 @@ async function startSession(prompt) {
 
     await streamSession(sessionId);
     const session = await fetchSession(sessionId);
-    showDrafts(session.drafts);
+    showChanges(session.drafts, session.deletions);
     setPill(session.status, session.status);
   } catch (err) {
     appendLine(formatError(err instanceof Error ? err.message : String(err)));
@@ -155,7 +157,7 @@ async function sendFollowUp(content) {
       appendLine(`<p class="event"><span class="tag tag-assistant">Assistant</span> ${escapeHtml(session.messages.at(-1).content)}</p>`);
     }
     promptEl.value = "";
-    showDrafts(session.drafts);
+    showChanges(session.drafts, session.deletions);
     setPill(session.status, session.status);
   } catch (err) {
     appendLine(formatError(err instanceof Error ? err.message : String(err)));
@@ -203,30 +205,56 @@ function handleEvent(event) {
   const html = formatEvent(event);
   if (html) appendLine(html);
 
-  if (event.type === "draft_updated" && event.details?.drafts) {
+  if (event.type === "draft_updated" || event.type === "deletion_updated") {
     previewPanel.classList.remove("hidden");
   }
 }
 
-function showDrafts(drafts) {
-  if (!drafts?.length) {
+function showChanges(drafts, deletions) {
+  const hasDrafts = drafts?.length > 0;
+  const hasDeletions = deletions?.length > 0;
+  if (!hasDrafts && !hasDeletions) {
     previewPanel.classList.add("hidden");
     currentDrafts = null;
+    currentDeletions = null;
     return;
   }
-  currentDrafts = drafts;
+  currentDrafts = drafts ?? [];
+  currentDeletions = deletions ?? [];
   previewPanel.classList.remove("hidden");
-  previewEl.innerHTML = drafts
-    .map(
-      (d) =>
-        `<details open><summary>${escapeHtml(d.relativePath)} <span class="tag tag-draft">${escapeHtml(d.kind)}</span></summary><pre>${escapeHtml(d.content)}</pre></details>`,
-    )
-    .join("");
+
+  const parts = [];
+  if (hasDrafts) {
+    parts.push(
+      drafts
+        .map(
+          (d) =>
+            `<details open><summary>${escapeHtml(d.relativePath)} <span class="tag tag-draft">${escapeHtml(d.kind)}</span></summary><pre>${escapeHtml(d.content)}</pre></details>`,
+        )
+        .join(""),
+    );
+  }
+  if (hasDeletions) {
+    parts.push(
+      deletions
+        .map(
+          (d) =>
+            `<p class="deletion-row"><span class="tag tag-delete">DELETE</span> <code>${escapeHtml(d.relativePath)}</code> <span class="muted">(${escapeHtml(d.kind)})</span></p>`,
+        )
+        .join(""),
+    );
+  }
+  previewEl.innerHTML = parts.join("");
+}
+
+function showDrafts(drafts) {
+  showChanges(drafts, currentDeletions);
 }
 
 function resetSession() {
   sessionId = null;
   currentDrafts = null;
+  currentDeletions = null;
   followUpBtn.classList.add("hidden");
   promptEl.placeholder = "Create a verifier that runs eslint and tsc…";
   if (activeSource) {
@@ -277,6 +305,8 @@ function formatEvent(event) {
       return `<p class="event"><span class="tag tag-assistant">Assistant</span> ${escapeHtml(event.details?.message ?? event.summary)}</p>`;
     case "draft_updated":
       return `<p class="event"><span class="tag tag-draft">Draft</span> ${escapeHtml(event.summary)}</p>`;
+    case "deletion_updated":
+      return `<p class="event"><span class="tag tag-delete">Delete</span> ${escapeHtml(event.summary)}</p>`;
     case "applied":
       return `<p class="event"><span class="tag tag-done">✓ Applied</span> ${escapeHtml(event.summary)}</p>`;
     case "error":

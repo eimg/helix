@@ -17,9 +17,20 @@ export class FakeManageAuthor implements ManageAuthor {
     if (this.handler) return this.handler(userText, inventory);
 
     const lower = userText.toLowerCase();
+    if (lower.includes("delete") || lower.includes("remove")) {
+      const skill = inventory.skills.find((s) => lower.includes(s.name)) ?? inventory.skills.at(-1);
+      if (skill) {
+        return {
+          message: `Proposed deleting skill "${skill.name}". Review and click Apply to confirm.`,
+          drafts: [],
+          deletions: [{ kind: "skill", relativePath: skill.relativePath }],
+        };
+      }
+    }
+
     if (lower.includes("list") || lower.includes("what agents")) {
       const names = inventory.agents.map((a) => a.name).join(", ") || "(none)";
-      return { message: `Current agents: ${names}`, drafts: [] };
+      return { message: `Current agents: ${names}`, drafts: [], deletions: [] };
     }
 
     if (lower.includes("skill")) {
@@ -32,6 +43,7 @@ export class FakeManageAuthor implements ManageAuthor {
             content: "# Sample Skill\n\nGate commands for tests.\n",
           },
         ],
+        deletions: [],
       };
     }
 
@@ -51,6 +63,7 @@ You are a sample specialist for testing.
 `,
         },
       ],
+      deletions: [],
     };
   }
 }

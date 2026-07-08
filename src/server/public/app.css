@@ -319,4 +319,14 @@ button.ghost {
 .tag-user { color: var(--yellow); }
 .tag-assistant { color: var(--accent); }
 .tag-draft { color: var(--yellow); }
-.tag-muted { color: var(--muted); }
+.tag-delete { color: var(--red); }
+
+.deletion-row {
+  margin: 0.35rem 0;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+}
+
+.deletion-row code {
+  color: var(--red);
+}

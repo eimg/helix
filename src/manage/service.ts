@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import type { HelixConfig } from "../config.js";
 import type { PiProvider } from "../providers/openrouter.js";
-import { applyDrafts } from "./apply.js";
+import { applyChanges } from "./delete.js";
 import { LlmManageAuthor } from "./author.js";
 import { ManageEventStream } from "./eventStream.js";
 import { loadManageInventory } from "./inventory.js";
@@ -22,6 +22,7 @@ export interface ManageServiceOptions {
 export class ManageService {
   private readonly helixDir: string;
   private readonly provider: PiProvider;
+  private readonly workflowAgents: string[];
   private readonly store: ManageStore;
   private readonly createAuthor: (sessionId: string) => ManageAuthor;
   private readonly authors = new Map<string, ManageAuthor>();
@@ -30,6 +31,7 @@ export class ManageService {
   constructor(opts: ManageServiceOptions) {
     this.helixDir = opts.helixDir;
     this.provider = opts.provider;
+    this.workflowAgents = opts.config.orchestrator.workflow;
     this.store = opts.store ?? new MemoryManageStore();
     this.createAuthor =
       opts.createAuthor ??
@@ -57,6 +59,7 @@ export class ManageService {
       startedAt: Date.now(),
       messages: [],
       drafts: [],
+      deletions: [],
       events: [],
     };
 
@@ -80,20 +83,31 @@ export class ManageService {
   applySession(id: string, force = false): ManageSession {
     const session = this.store.load(id);
     if (!session) throw new Error("Manage session not found");
-    if (session.drafts.length === 0) throw new Error("No drafts to apply");
+    if (session.drafts.length === 0 && session.deletions.length === 0) {
+      throw new Error("No changes to apply");
+    }
 
-    const result = applyDrafts(this.helixDir, session.drafts, force);
+    const result = applyChanges(
+      this.helixDir,
+      session.drafts,
+      session.deletions,
+      this.workflowAgents,
+      force,
+    );
     if (!result.ok) {
       throw new Error(result.errors.join("; "));
     }
 
     session.status = "applied";
     session.finishedAt = Date.now();
+    const parts: string[] = [];
+    if (result.written.length > 0) parts.push(`wrote ${result.written.length}`);
+    if (result.deleted.length > 0) parts.push(`deleted ${result.deleted.length}`);
     const appliedEvent: ManageEvent = {
       ts: Date.now(),
       type: "applied",
-      summary: `Applied ${result.written.length} file(s)`,
-      details: { written: result.written },
+      summary: `Applied (${parts.join(", ")})`,
+      details: { written: result.written, deleted: result.deleted },
     };
     this.pushEvent(session, appliedEvent);
     this.streamFor(id).emit(appliedEvent);
@@ -160,12 +174,25 @@ export class ManageService {
           details: { drafts: turn.drafts.map((d) => d.relativePath) },
         });
       }
+      if (turn.deletions.length > 0) {
+        session.deletions = turn.deletions;
+        emit({
+          ts: Date.now(),
+          type: "deletion_updated",
+          summary: `${turn.deletions.length} deletion(s) proposed`,
+          details: { deletions: turn.deletions.map((d) => d.relativePath) },
+        });
+      }
 
       emit({
         ts: Date.now(),
         type: "assistant_replied",
         summary: turn.message.split("\n")[0] ?? turn.message,
-        details: { message: turn.message, draftCount: turn.drafts.length },
+        details: {
+          message: turn.message,
+          draftCount: turn.drafts.length,
+          deletionCount: turn.deletions.length,
+        },
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
