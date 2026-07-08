@@ -1,0 +1,28 @@
+{
+  "provider": {
+    "name": "openrouter",
+    "apiKeyEnv": "OPENROUTER_API_KEY"
+  },
+  "orchestrator": {
+    "model": "openrouter/anthropic/claude-sonnet-4",
+    "workflow": ["planner", "dev", "verifier"],
+    "maxIterations": 6,
+    "loops": {
+      "verifier-fail": { "backTo": "dev", "maxRetries": 2 }
+    }
+  },
+  "triggers": {
+    "github": {
+      "repo": "acme/widget",
+      "labelFilter": "helix",
+      "mode": "poll",
+      "intervalSec": 60
+    }
+  },
+  "mergeGate": {
+    "autoMerge": true,
+    "maxDiffLines": 300,
+    "maxFiles": 10,
+    "requireVerifierPass": true
+  }
+}

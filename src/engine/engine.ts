@@ -1,0 +1,186 @@
+/**
+ * The Helix core loop.
+ *
+ *   trigger (issue) -> orchestrator (decide) -> specialists (parallel, isolated)
+ *                       -> read results -> loop / proceed / escalate / done
+ *
+ * The engine is decoupled from Express, from the real provider, and from the
+ * real specialist session implementation: it takes injected `Provider` and
+ * `SpecialistSessionFactory`, so a full run can be exercised with fakes.
+ */
+import { randomUUID } from "node:crypto";
+import type {
+  Issue,
+  Orchestrator,
+  OrchestratorDecision,
+  Provider,
+  Run,
+  RunEvent,
+  SpecialistCall,
+  SpecialistDefinition,
+  SpecialistResult,
+  SpecialistSession,
+  SpecialistSessionFactory,
+} from "./types.js";
+import { EventStream } from "./eventStream.js";
+import { DEFAULT_GATE_CONFIG, enforceIterationCap, type GateConfig } from "../orchestrator/gates.js";
+
+export interface EngineDeps {
+  provider: Provider;
+  orchestrator: Orchestrator;
+  specialistFactory: SpecialistSessionFactory;
+  gates?: GateConfig;
+  eventStream?: EventStream;
+  onEvent?: (run: Run, event: RunEvent) => void;
+}
+
+export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
+  const events = new EventStream();
+  if (deps.eventStream) {
+    // bridge: also forward to an externally-supplied stream if given
+    const external = deps.eventStream;
+    events.subscribe((e) => external.emit(e));
+  }
+
+  const run: Run = {
+    id: randomUUID(),
+    issue,
+    startedAt: Date.now(),
+    status: "running",
+    events: [],
+    results: [],
+  };
+
+  const emit = (event: RunEvent) => {
+    run.events.push(event);
+    events.emit(event);
+    deps.onEvent?.(run, event);
+  };
+
+  try {
+    emit({ ts: Date.now(), type: "run_started", summary: `Run for ${issue.source} #${issue.number}: ${issue.title}` });
+    emit({ ts: Date.now(), type: "issue_fetched", summary: issue.url, details: { number: issue.number, repo: issue.repo } });
+
+    const gates = deps.gates ?? DEFAULT_GATE_CONFIG;
+    let iteration = 0;
+
+    while (true) {
+      let decision: OrchestratorDecision = await deps.orchestrator.decide({
+        issue,
+        specialists: await listSpecialists(deps.specialistFactory),
+        results: run.results,
+        iteration,
+      });
+      decision = enforceIterationCap(decision, iteration, gates);
+      emit({
+        ts: Date.now(),
+        type: "orchestrator_decided",
+        summary: describeDecision(decision),
+        details: { iteration, decision },
+      });
+
+      if (decision.kind === "run") {
+        const newResults = await runSpecialists(decision.specialists, deps.specialistFactory, emit);
+        run.results.push(...newResults);
+        iteration++;
+        continue;
+      }
+
+      if (decision.kind === "escalate") {
+        run.status = "escalated";
+        run.finalDecision = decision;
+        emit({ ts: Date.now(), type: "run_escalated", summary: decision.reason });
+        break;
+      }
+
+      // done
+      run.status = "done";
+      run.finalDecision = decision;
+      emit({ ts: Date.now(), type: "run_done", summary: decision.reason, details: { deliverable: decision.deliverable } });
+      break;
+    }
+  } catch (err) {
+    run.status = "error";
+    const message = err instanceof Error ? err.message : String(err);
+    emit({ ts: Date.now(), type: "run_error", summary: message });
+  } finally {
+    run.finishedAt = Date.now();
+  }
+
+  return run;
+}
+
+async function listSpecialists(factory: SpecialistSessionFactory): Promise<SpecialistDefinition[]> {
+  // The factory exposes the discovered definitions; for the stub/fake path we
+  // need a way to enumerate. We keep it simple: the factory may carry a
+  // `definitions` array (see SpecialistSessionFactoryBase below).
+  const anyFactory = factory as SpecialistSessionFactory & { definitions?: SpecialistDefinition[] };
+  return anyFactory.definitions ?? [];
+}
+
+async function runSpecialists(
+  calls: SpecialistCall[],
+  factory: SpecialistSessionFactory,
+  emit: (e: RunEvent) => void,
+): Promise<SpecialistResult[]> {
+  const sessions = new Map<string, SpecialistSession>();
+  try {
+    // Parallel, isolated: each call gets its own session and runs concurrently.
+    const results = await Promise.all(
+      calls.map(async (call) => {
+        // The factory resolves a definition by name; for M1 we look it up via
+        // the definitions the factory exposes.
+        const def = (factory as SpecialistSessionFactory & { definitions?: SpecialistDefinition[] }).definitions?.find(
+          (d) => d.name === call.specialist,
+        );
+        if (!def) {
+          return {
+            specialist: call.specialist,
+            task: call.task,
+            ok: false,
+            output: "",
+            error: `Unknown specialist: ${call.specialist}`,
+          } satisfies SpecialistResult;
+        }
+        const session = await factory.create(def);
+        sessions.set(call.specialist, session);
+        emit({ ts: Date.now(), type: "specialist_started", summary: `${call.specialist}: ${truncate(call.task, 80)}` });
+        const result = await session.run(call.task);
+        emit({
+          ts: Date.now(),
+          type: "specialist_finished",
+          summary: `${call.specialist}: ${result.ok ? "ok" : "fail"} — ${truncate(result.output, 80)}`,
+          details: { ok: result.ok },
+        });
+        return result;
+      }),
+    );
+    return results;
+  } finally {
+    for (const session of sessions.values()) {
+      try {
+        session.dispose();
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
+function describeDecision(d: OrchestratorDecision): string {
+  switch (d.kind) {
+    case "run":
+      return `run [${d.specialists.map((s) => s.specialist).join(", ")}] — ${d.reason}`;
+    case "done":
+      return `done — ${d.reason}`;
+    case "escalate":
+      return `escalate — ${d.reason}`;
+  }
+}
+
+function truncate(s: string, n: number): string {
+  return s.length > n ? `${s.slice(0, n)}…` : s;
+}
+
+// re-export for callers
+export { EventStream };
