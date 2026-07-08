@@ -104,9 +104,32 @@ export class LlmOrchestrator implements Orchestrator {
   async decide(input: OrchestratorInput): Promise<OrchestratorDecision> {
     const session = await this.ensureSession();
     const prompt = buildPrompt(input, this.workflow);
-    await session.prompt(prompt);
 
-    const text = finalAssistantText(session.messages as Message[]);
+    let promptError: string | undefined;
+    try {
+      await session.prompt(prompt);
+    } catch (err) {
+      promptError = err instanceof Error ? err.message : String(err);
+    }
+
+    const messages = session.messages as Message[];
+    const assistant = [...messages].reverse().find((m): m is AssistantMessage => m.role === "assistant");
+
+    // Surface LLM errors — without this, a failed model call (auth, rate limit,
+    // network) produces an empty assistant message, and the driver reports
+    // "unparseable decision" instead of the actual error.
+    if (promptError) {
+      return { kind: "escalate", reason: `Orchestrator LLM call failed: ${promptError}` };
+    }
+    if (!assistant) {
+      return { kind: "escalate", reason: "Orchestrator produced no assistant response." };
+    }
+    if (assistant.stopReason === "error" || assistant.stopReason === "aborted") {
+      const detail = assistant.errorMessage ?? assistant.stopReason;
+      return { kind: "escalate", reason: `Orchestrator LLM error (${assistant.stopReason}): ${detail}` };
+    }
+
+    const text = finalAssistantText(messages);
     const decision = sanitizeDecision(text, input.specialists);
     if (!decision) {
       return {
