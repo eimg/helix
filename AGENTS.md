@@ -84,25 +84,47 @@ Consumer projects (any repo that uses Helix) carry only:
 <consumer-repo>/.helix/
   config.json                   # provider, triggers, orchestrator workflow + merge gate
   agents/*.md                   # specialist definitions
-  skills/*/SKILL.md             # skills
+  skills/*/SKILL.md             # skills (always loaded into specialist sessions)
+  extensions/                   # repo-local extensions (opt-in; see Portability)
   runs/                         # persisted run state
 ```
 
-Helix points pi's `DefaultResourceLoader` at `.helix/` so specialists and skills are discovered automatically. Global `~/.helix/` is reserved for secrets/defaults only.
+### Portability & secrets
+
+Helix is an npm-installable package (`@helix/cli`) that runs anywhere with Node + an env var. No pre-existing pi install is required, and Helix never *writes* to a fallback source.
+
+**Resource resolution (first wins):**
+
+| Resource | 1. Env var (portable default) | 2. `~/.helix/` | 3. `~/.pi/agent/` |
+|---|---|---|---|
+| Secrets (API keys) | `OPENROUTER_API_KEY` etc. → `setRuntimeApiKey` | `secrets.json` | `auth.json` — **only if `inheritPi`** |
+| Model/provider defs | — | `models.json` | `models.json` — **only if `inheritPi`** |
+| Skills | — | `.helix/skills/` (always) | global pi skills — only if `inheritPi` |
+| Extensions | — | `.helix/extensions/` (only if `extensions.enabled`) | global pi extensions — only if `inheritPi` |
+
+**`inheritPi` (default `false`)** is one toggle gating ALL access to the operator's global pi config. When false, Helix is fully self-contained: it never reads `~/.pi/` at all — not for secrets, not for models, not for skills/extensions/settings. When true, pi's global dir is a read-only last-resort fallback, and pi's default skill/extension discovery is enabled. This resolves the "which config am I using?" ambiguity with a hard line.
+
+**Repo-local extensions** (`extensions.enabled`, default `false`) are orthogonal to `inheritPi`: they govern whether `.helix/extensions/` code runs in-process, regardless of global pi inheritance. Both default off; each can be turned on independently.
+
+Local `.helix/skills/` are **always loaded** into specialist sessions (via pi's `additionalSkillPaths`, which pi honors even with `noSkills`), because project-specific skills are the point of the project.
+
+Specialist and orchestrator sessions are **isolated by default**: `noExtensions`, `noSkills`, `noContextFiles`, `noThemes`, `noPromptTemplates` are all set when `inheritPi` is false. Built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`) are unaffected — they are tool factories, not extensions.
 
 ## Config model (sketch — not final)
 
 ```jsonc
 // .helix/config.json
 {
-  "provider": { "openrouter": { "apiKeyEnv": "OPENROUTER_API_KEY" } },
+  "provider": { "name": "openrouter", "apiKeyEnv": "OPENROUTER_API_KEY" },
+  "inheritPi": false,
+  "extensions": { "enabled": false },
   "triggers": {
     "github": { "repo": "owner/name", "labelFilter": "helix", "mode": "poll", "intervalSec": 60 }
   },
   "orchestrator": {
-    "model": "anthropic/claude-sonnet-4",
+    "model": "openrouter/anthropic/claude-sonnet-4",
     "workflow": ["planner", "dev", "verifier"],
-    "loops": { "verifier-fail": { "back-to": "dev", "maxRetries": 2 } },
+    "loops": { "verifier-fail": { "backTo": "dev", "maxRetries": 2 } },
     "parallelism": "orchestrator-decides"
   },
   "mergeGate": {

@@ -16,10 +16,9 @@
 import type { Message, AssistantMessage } from "@earendil-works/pi-ai";
 import {
   createAgentSession,
-  DefaultResourceLoader,
-  getAgentDir,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { resolve } from "node:path";
 import type {
   Issue,
   Orchestrator,
@@ -29,6 +28,7 @@ import type {
   SpecialistDefinition,
 } from "../engine/types.js";
 import type { PiProvider } from "../providers/openrouter.js";
+import { buildSessionLoader } from "../agents/loaderBuilder.js";
 import { describeWorkflow, type Workflow } from "./workflow.js";
 
 const SYSTEM_PROMPT = `You are Helix's orchestrator. You coordinate specialist agents to drive a GitHub issue to a deliverable.
@@ -51,18 +51,27 @@ Rules:
 
 export interface LlmOrchestratorOptions {
   cwd?: string;
+  helixDir?: string;
+  inheritPi?: boolean;
+  extensions?: { enabled?: boolean; paths?: string[] };
 }
 
 export class LlmOrchestrator implements Orchestrator {
   private readonly provider: PiProvider;
   private readonly workflow: Workflow;
   private readonly cwd: string;
+  private readonly helixDir: string;
+  private readonly inheritPi: boolean;
+  private readonly extensions: { enabled?: boolean; paths?: string[] } | undefined;
   private session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
 
   constructor(provider: PiProvider, workflow: Workflow, modelRef: string, opts: LlmOrchestratorOptions = {}) {
     this.provider = provider;
     this.workflow = workflow;
     this.cwd = opts.cwd ?? process.cwd();
+    this.helixDir = opts.helixDir ?? resolve(this.cwd, ".helix");
+    this.inheritPi = opts.inheritPi ?? false;
+    this.extensions = opts.extensions;
     this._modelRef = modelRef;
   }
   private _modelRef: string;
@@ -70,10 +79,12 @@ export class LlmOrchestrator implements Orchestrator {
   private async ensureSession(): Promise<NonNullable<LlmOrchestrator["session"]>> {
     if (this.session) return this.session;
     const model = await this.provider.resolveModel(this._modelRef);
-    const loader = new DefaultResourceLoader({
+    const loader = buildSessionLoader({
       cwd: this.cwd,
-      agentDir: getAgentDir(),
-      systemPromptOverride: () => SYSTEM_PROMPT,
+      helixDir: this.helixDir,
+      inheritPi: this.inheritPi,
+      extensions: this.extensions,
+      systemPromptOverride: SYSTEM_PROMPT,
     });
     await loader.reload();
     const { session } = await createAgentSession({

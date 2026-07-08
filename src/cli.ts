@@ -131,6 +131,7 @@ async function main(): Promise<void> {
   // Provider
   const provider = new OpenRouterProvider({
     apiKeyEnv: config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY",
+    inheritPi: config.inheritPi,
   });
   if (!provider.hasAuth()) {
     console.error(
@@ -148,13 +149,21 @@ async function main(): Promise<void> {
 
   // Orchestrator + workflow
   const workflow = loadWorkflow(config);
-  const orchestrator = new LlmOrchestrator(provider, workflow, config.orchestrator.model);
+  const orchestrator = new LlmOrchestrator(provider, workflow, config.orchestrator.model, {
+    helixDir,
+    inheritPi: config.inheritPi,
+    extensions: config.extensions,
+  });
 
   // Event stream + console logger
   const eventStream = new EventStream();
   attachConsoleLogger(eventStream);
 
-  const factory = new PiSpecialistSessionFactory(provider, specialists);
+  const factory = new PiSpecialistSessionFactory(provider, specialists, {
+    helixDir,
+    inheritPi: config.inheritPi,
+    extensions: config.extensions,
+  });
 
   const deps: EngineDeps = {
     provider,

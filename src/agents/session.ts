@@ -12,10 +12,9 @@
 import type { Api, Model, Message, AssistantMessage } from "@earendil-works/pi-ai";
 import {
   createAgentSession,
-  DefaultResourceLoader,
-  getAgentDir,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { resolve } from "node:path";
 import type {
   SpecialistDefinition,
   SpecialistResult,
@@ -23,10 +22,17 @@ import type {
   SpecialistSessionFactory,
 } from "../engine/types.js";
 import type { PiProvider } from "../providers/openrouter.js";
+import { buildSessionLoader } from "./loaderBuilder.js";
 
 export interface PiSpecialistFactoryOptions {
   /** Working directory specialists operate in. Default process.cwd(). */
   cwd?: string;
+  /** `.helix/` dir of the repo. Default <cwd>/.helix. */
+  helixDir?: string;
+  /** Inherit global pi config. Default false (sessions are isolated). */
+  inheritPi?: boolean;
+  /** Repo-local extension config. Default disabled. */
+  extensions?: { enabled?: boolean; paths?: string[] };
 }
 
 export class PiSpecialistSessionFactory implements SpecialistSessionFactory {
@@ -34,21 +40,29 @@ export class PiSpecialistSessionFactory implements SpecialistSessionFactory {
   readonly definitions: SpecialistDefinition[];
   private readonly provider: PiProvider;
   private readonly cwd: string;
+  private readonly helixDir: string;
+  private readonly inheritPi: boolean;
+  private readonly extensions: { enabled?: boolean; paths?: string[] } | undefined;
 
   constructor(provider: PiProvider, definitions: SpecialistDefinition[], opts: PiSpecialistFactoryOptions = {}) {
     this.provider = provider;
     this.definitions = definitions;
     this.cwd = opts.cwd ?? process.cwd();
+    this.helixDir = opts.helixDir ?? resolve(this.cwd, ".helix");
+    this.inheritPi = opts.inheritPi ?? false;
+    this.extensions = opts.extensions;
   }
 
   async create(def: SpecialistDefinition): Promise<SpecialistSession> {
     const model = def.model ? await this.provider.resolveModel(def.model) : undefined;
     if (!model) throw new Error(`Specialist "${def.name}" has no resolvable model (${def.model ?? "undefined"})`);
 
-    const loader = new DefaultResourceLoader({
+    const loader = buildSessionLoader({
       cwd: this.cwd,
-      agentDir: getAgentDir(),
-      systemPromptOverride: () => def.systemPrompt,
+      helixDir: this.helixDir,
+      inheritPi: this.inheritPi,
+      extensions: this.extensions,
+      systemPromptOverride: def.systemPrompt,
     });
     await loader.reload();
 

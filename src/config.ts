@@ -18,6 +18,22 @@ export interface HelixConfig {
     maxIterations?: number;
     loops?: Record<string, { backTo: string; maxRetries: number }>;
   };
+  /**
+   * When true, Helix falls back to the operator's global pi config
+   * (`~/.pi/agent/`) for secrets, model definitions, skills, extensions, and
+   * settings — as a read-only last resort. When false (default), Helix is
+   * fully self-contained: env var / `~/.helix/` only, never touches `~/.pi/`.
+   */
+  inheritPi?: boolean;
+  /**
+   * Repo-local extensions (arbitrary in-process code). OFF by default for
+   * safety/portability. Plumbing only for now — enabling later is a config
+   * flip, no refactor.
+   */
+  extensions?: {
+    enabled?: boolean; // default false
+    paths?: string[]; // additional dirs beyond .helix/extensions/
+  };
   triggers?: {
     github?: {
       repo: string;
@@ -36,6 +52,8 @@ export interface HelixConfig {
 
 const DEFAULTS: Partial<HelixConfig> = {
   orchestrator: { model: "", workflow: ["planner", "dev", "verifier"], maxIterations: 6 },
+  inheritPi: false,
+  extensions: { enabled: false },
 };
 
 export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixConfig {
@@ -49,6 +67,11 @@ export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixCo
       maxIterations: parsed.orchestrator?.maxIterations ?? DEFAULTS.orchestrator!.maxIterations,
       loops: parsed.orchestrator?.loops,
     },
+    inheritPi: parsed.inheritPi ?? DEFAULTS.inheritPi,
+    extensions: {
+      enabled: parsed.extensions?.enabled ?? DEFAULTS.extensions!.enabled!,
+      paths: parsed.extensions?.paths,
+    },
     triggers: parsed.triggers,
     mergeGate: parsed.mergeGate,
   };
@@ -58,4 +81,9 @@ export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixCo
   if (config.orchestrator.workflow.length === 0) throw new Error("config: orchestrator.workflow must list at least one specialist");
 
   return config;
+}
+
+/** Convenience: true if repo-local extensions are enabled. */
+export function extensionsEnabled(config: HelixConfig): boolean {
+  return config.extensions?.enabled === true;
 }

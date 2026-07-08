@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { loadConfig } from "../src/config.js";
 import { loadSpecialists } from "../src/agents/loader.js";
 import { loadWorkflow, describeWorkflow } from "../src/orchestrator/workflow.js";
@@ -15,6 +17,20 @@ test("config: loads and validates the TS fixture config", () => {
   assert.equal(config.orchestrator.loops?.["verifier-fail"]?.backTo, "dev");
   assert.equal(config.triggers?.github?.repo, "acme/widget");
   assert.equal(config.mergeGate?.requireVerifierPass, true);
+  // inheritPi + extensions defaults (explicitly set false in the fixture)
+  assert.equal(config.inheritPi, false);
+  assert.equal(config.extensions?.enabled, false);
+});
+
+test("config: inheritPi and extensions default to false when absent", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "helix-cfg-"));
+  writeFileSync(join(tmp, "config.json"), JSON.stringify({
+    provider: { name: "openrouter" },
+    orchestrator: { model: "openrouter/x", workflow: ["dev"] },
+  }));
+  const config = loadConfig(tmp);
+  assert.equal(config.inheritPi, false);
+  assert.equal(config.extensions?.enabled, false);
 });
 
 test("loader: discovers the three preset specialists with frontmatter + body", () => {

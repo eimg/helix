@@ -3,6 +3,8 @@
     "name": "openrouter",
     "apiKeyEnv": "OPENROUTER_API_KEY"
   },
+  "inheritPi": false,
+  "extensions": { "enabled": false },
   "orchestrator": {
     "model": "openrouter/anthropic/claude-sonnet-4",
     "workflow": ["planner", "dev", "verifier"],

@@ -1,7 +1,7 @@
 {
-  "name": "helix",
+  "name": "@helix/cli",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "description": "Agent orchestration loop system built on pi",
   "engines": { "node": ">=20" },
