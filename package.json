@@ -1,21 +1,50 @@
 {
-  "name": "@helix/cli",
+  "name": "@eimg/helix",
   "version": "0.1.0",
   "private": false,
   "type": "module",
-  "description": "Agent orchestration loop system built on pi",
+  "description": "Experimental agent orchestration loop built on pi — not for production",
+  "license": "MIT",
+  "author": "Ei Maung",
+  "keywords": [
+    "agents",
+    "orchestration",
+    "pi",
+    "openrouter",
+    "helix",
+    "experimental"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eimg/helix.git"
+  },
+  "bugs": {
+    "url": "https://github.com/eimg/helix/issues"
+  },
+  "homepage": "https://github.com/eimg/helix#readme",
   "engines": {
     "node": ">=20"
   },
   "bin": {
     "helix": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "presets",
+    "README.md",
+    "AGENTS.md",
+    "LICENSE",
+    "docs/plan.md",
+    "docs/manage.md",
+    "docs/repo-context.md"
+  ],
   "scripts": {
     "build": "tsc && cp -r src/server/public dist/server/",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",
     "test": "node --test --import tsx test/*.test.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.test.json"
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "^0.80.3",

@@ -1,16 +1,77 @@
 # Helix
 
-Agent orchestration loop built on [pi](https://pi.dev). Takes a work item (GitHub issue or inline task) and drives it through specialist agents (planner, dev, verifier, …) to a deliverable.
+Experimental agent orchestration loop built on [pi](https://pi.dev).
 
-## Quick start
+Helix takes a work item and drives it through specialist agents (planner, dev, verifier, …) toward a deliverable. It is **not** an LLM and **not** a coding agent — it is the system that *orchestrates* coding agents.
+
+> **Status:** experimental / idea & testing release. **Not intended for production.**  
+> Agents can edit your repo and run shell commands. Expect cost, flaky runs, and sharp edges.  
+> Package: [`@eimg/helix`](https://github.com/eimg/helix) · command: `helix`
+
+## Requirements
+
+- Node.js ≥ 20
+- An [OpenRouter](https://openrouter.ai) API key
+- Optional: [`gh`](https://cli.github.com/) only if you use GitHub issue/PR paths
+
+## Install (from source today)
+
+npm publish is not the focus yet. From this repo:
 
 ```bash
-npm install -g @helix/cli
+git clone https://github.com/eimg/helix.git
+cd helix
+npm install
+npm run build
+npm link          # exposes the `helix` command
+```
+
+Later (when published):
+
+```bash
+npm install -g @eimg/helix
+```
+
+## Quick start (inline task)
+
+```bash
 cd your-project
 helix init --preset typescript
-export OPENROUTER_API_KEY=...   # or ~/.helix/secrets.json
+export OPENROUTER_API_KEY=sk-or-...   # or ~/.helix/secrets.json
 helix run --title "Fix login" --body "Empty password returns 500"
 ```
+
+## Recommended demo loop: local issues + Helix serve
+
+Day-to-day testing here does **not** require GitHub. Use [local-issues](https://github.com/eimg/local-issues) (private for now; will be public later) as a small local issue tracker that POSTs into Helix.
+
+**Terminal 1 — Helix on your target repo**
+
+```bash
+cd your-project
+helix init --preset typescript   # once
+export OPENROUTER_API_KEY=sk-or-...
+helix serve
+# → http://127.0.0.1:8319/
+```
+
+**Terminal 2 — local issue tracker**
+
+```bash
+git clone https://github.com/eimg/local-issues.git
+cd local-issues
+npm install
+npm run dev serve
+# → http://127.0.0.1:8320/
+```
+
+Create an issue with the `helix` label (default). local-issues webhooks Helix’s `POST /runs` and a run starts. Completion callbacks back to the tracker are a best-effort POC (no auth).
+
+### Safer first-run tips
+
+- Prefer **inline** / **local-issues** over GitHub poll until you understand merge-gate behavior.
+- `mergeGate.autoMerge` can merge PRs when thresholds pass — turn it off or avoid wiring `gh` until you want that.
+- Run history **delete (×)** permanently removes `.helix/runs/<id>.json` (handy while testing).
 
 ## Server & web UI
 
@@ -19,38 +80,46 @@ helix serve
 # → http://127.0.0.1:8319/
 ```
 
-The server exposes:
-- **Run UI** (`/`) — title + body form, live log, result
-- **Manage UI** (`/manage`) — experimental prompt-driven agent/skill authoring (web + API only; no CLI yet — see [`docs/manage.md`](./docs/manage.md))
-- JSON/SSE API (`POST /runs`, `GET /runs/:id/events`, `POST /manage/sessions`, …)
+| Surface | URL | Notes |
+|--------|-----|--------|
+| Run console | `/` | Form, live log, run history, delete finished runs |
+| Manage | `/manage` | Experimental agent/skill authoring (web/API only) |
+| API | `/runs`, `/runs/:id/events`, … | JSON + SSE |
 
-### Default port: 8319
-
-Helix uses port **8319** by default — a phone-keypad mnemonic for the name:
-
-| Digit | Key | Letter(s) |
-|-------|-----|-----------|
-| 8 | TUV | **H** |
-| 3 | DEF | **E** |
-| 1 | — | **L** |
-| 9 | WXYZ | **I** + **X** |
-
-Override with `--port` or the `PORT` environment variable.
+Default port **8319** (phone-keypad mnemonic for HELIX). Override with `--port` or `PORT`.
 
 ## Config
 
-Project-local `.helix/` (created by `helix init`):
+`helix init` creates project-local `.helix/`:
 
 ```
 .helix/
-  config.json      # provider, orchestrator, triggers, merge gate
-  agents/*.md      # specialist definitions
+  config.json       # provider, orchestrator, triggers, mergeGate, repoContext
+  agents/*.md       # specialists
   skills/*/SKILL.md
-  runs/            # persisted run state (gitignored)
+  context/*.md      # optional curated notes (Phase A bootstrap)
+  runs/             # persisted runs (gitignored)
 ```
 
-See [`AGENTS.md`](./AGENTS.md) and [`docs/plan.md`](./docs/plan.md) for architecture and milestones.
+Useful knobs:
+
+- `repoContext.enabled` (default `true`) — deterministic repo bootstrap injected into the first specialist wave
+- `inheritPi` (default `false`) — do not read `~/.pi/` unless you opt in
+- `mergeGate` — auto-merge thresholds (dangerous on a real remote)
+
+Architecture: [`AGENTS.md`](./AGENTS.md) · milestones: [`docs/plan.md`](./docs/plan.md) · Manage: [`docs/manage.md`](./docs/manage.md) · cold-start: [`docs/repo-context.md`](./docs/repo-context.md)
+
+## GitHub paths (optional)
+
+Still supported, not the primary demo path:
+
+```bash
+helix run 42                          # gh issue view
+# config triggers.github.mode: "poll" # helix serve polls labeled issues
+```
+
+Needs `gh` auth and a configured `triggers.github.repo`.
 
 ## License
 
-See repository license.
+[MIT](./LICENSE)

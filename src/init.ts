@@ -1,6 +1,6 @@
 /**
  * `helix init` — scaffold a `.helix/` in the current project from the shipped
- * presets. Closes the install-to-first-run loop: `npm i -g @helix/cli` then
+ * presets. Closes the install-to-first-run loop: `npm i -g @eimg/helix` then
  * `helix init` and you have a working config + agents + skill.
  *
  * Does NOT auto-create on `run` (silent scaffolding hides the contract; init

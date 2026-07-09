@@ -1,6 +1,6 @@
 # Manage — agent & skill authoring
 
-**Status:** Experimental. Web UI + HTTP API shipped on `feat/manage-ui`; **CLI not implemented**.
+**Status:** Experimental. Web UI + HTTP API shipped; **CLI not implemented**.
 
 Manage is a separate surface from the issue orchestration loop (`helix run` / Run UI). Operators use natural language to create, edit, or delete repo-local specialists and skills under `.helix/`.
 
