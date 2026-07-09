@@ -70,7 +70,8 @@ Create an issue with the `helix` label (default). local-issues webhooks Helix’
 ### Safer first-run tips
 
 - Prefer **inline** / **local-issues** over GitHub poll until you understand merge-gate behavior.
-- `mergeGate.autoMerge` can merge PRs when thresholds pass — turn it off or avoid wiring `gh` until you want that.
+- **GitHub PR create/merge is off by default** (`deliverable.pr: false`). Local-issues demos do not need `gh`. Enable later with `"deliverable": { "pr": true }` plus `triggers.github.repo`.
+- `mergeGate.autoMerge` only matters when PR deliverables are enabled.
 - Run history **delete (×)** permanently removes `.helix/runs/<id>.json` (handy while testing).
 
 ## Server & web UI
@@ -104,10 +105,11 @@ Default port **8319** (phone-keypad mnemonic for HELIX). Override with `--port` 
 Useful knobs:
 
 - `repoContext.enabled` (default `true`) — deterministic repo bootstrap injected into the first specialist wave
+- `deliverable.pr` (default `false`) — opt into GitHub PR create/merge via `gh` after successful runs
 - `inheritPi` (default `false`) — do not read `~/.pi/` unless you opt in
-- `mergeGate` — auto-merge thresholds (dangerous on a real remote)
+- `mergeGate` — auto-merge thresholds (only applies when `deliverable.pr` is true)
 
-Architecture: [`AGENTS.md`](./AGENTS.md) · milestones: [`docs/plan.md`](./docs/plan.md) · Manage: [`docs/manage.md`](./docs/manage.md) · cold-start: [`docs/repo-context.md`](./docs/repo-context.md)
+Architecture: [`AGENTS.md`](./AGENTS.md) · milestones: [`docs/plan.md`](./docs/plan.md) · Manage: [`docs/manage.md`](./docs/manage.md) · cold-start: [`docs/repo-context.md`](./docs/repo-context.md) · guardrails/escalation: [`docs/guardrails.md`](./docs/guardrails.md)
 
 ## GitHub paths (optional)
 

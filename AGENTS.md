@@ -58,6 +58,7 @@ The config gives rails; the LLM adapts to the task; code enforces safety.
 | Run state | File-based, one JSON per run under `.helix/runs/` |
 | Repo context | Phase A: deterministic bootstrap + allowlisted docs injected into first specialist wave |
 | Merge gate | Small + verified → auto-merge; big/risky → human approval via API/UI |
+| Deliverable | Opt-in GitHub PR via `deliverable.pr` (default off); otherwise no-op after run |
 | Web UI | Run console + experimental Manage; consumers of engine event stream + HTTP API |
 
 ## Folder layout
@@ -129,6 +130,7 @@ Specialist and orchestrator sessions are **isolated by default** when `inheritPi
   "inheritPi": false,
   "extensions": { "enabled": false },
   "repoContext": { "enabled": true },
+  "deliverable": { "pr": false },
   "triggers": {
     "github": { "repo": "owner/name", "labelFilter": "helix", "mode": "poll", "intervalSec": 60 }
   },
@@ -145,6 +147,8 @@ Specialist and orchestrator sessions are **isolated by default** when `inheritPi
   }
 }
 ```
+
+GitHub PR create/merge runs only when `deliverable.pr` is `true` (and typically `triggers.github.repo` is set). Default is off for local-issues / inline demos.
 
 ## Testing & observability
 
@@ -168,6 +172,7 @@ Reference specialists + skills for common stacks, under `presets/` (double as te
 - **M1 — Core engine (shipped).** CLI, hybrid orchestrator, OpenRouter provider, in-process pi specialist sessions, GitHub + inline triggers, run state, live event log, presets.
 - **M2 — Auto + deliverable (shipped).** Express server + Run UI; GitHub poll; PR creation; merge gate execution; `helix serve`.
 - **Beyond M2 (partial).** Manage UI/API (experimental); Phase A repo bootstrap; run history + delete; local-issues integration path. [details](./docs/plan.md)
+- **Guardrails & escalation (design).** Structured stop/pause model and safety policy — not implemented yet. [→](./docs/guardrails.md)
 
 ## Working conventions
 

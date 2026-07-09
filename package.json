@@ -36,7 +36,8 @@
     "LICENSE",
     "docs/plan.md",
     "docs/manage.md",
-    "docs/repo-context.md"
+    "docs/repo-context.md",
+    "docs/guardrails.md"
   ],
   "scripts": {
     "build": "tsc && cp -r src/server/public dist/server/",

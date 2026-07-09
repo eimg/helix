@@ -5,7 +5,7 @@
  * helix serve [--port 8319]   # M2: HTTP API + web UI + optional GitHub poll
  */
 import { resolve } from "node:path";
-import { loadConfig } from "./config.js";
+import { loadConfig, githubPrEnabled } from "./config.js";
 import { runIssue, type EngineDeps } from "./engine/engine.js";
 import { EventStream } from "./engine/eventStream.js";
 import { attachConsoleLogger } from "./engine/consoleLogger.js";
@@ -22,7 +22,7 @@ import { init } from "./init.js";
 import type { Issue, Run } from "./engine/types.js";
 import { createRunContext } from "./run/bootstrap.js";
 import { startServer } from "./server/app.js";
-import { DefaultDeliverablePipeline } from "./deliverable/pipeline.js";
+import { DefaultDeliverablePipeline, NoOpDeliverablePipeline } from "./deliverable/pipeline.js";
 import { ShellGitContext } from "./deliverable/git.js";
 import { GhPullRequestCreator } from "./deliverable/pr.js";
 import { GitHubPollTrigger } from "./triggers/github-poll.js";
@@ -204,15 +204,25 @@ async function cmdServe(args: string[]): Promise<void> {
   const helixDir = findHelixDir();
   const config = loadConfig(helixDir);
   const repo = config.triggers?.github?.repo;
+  const prEnabled = githubPrEnabled(config);
 
-  const pr = new GhPullRequestCreator({ cwd: process.cwd(), repo });
+  if (prEnabled && !repo) {
+    console.error('config: deliverable.pr is true but triggers.github.repo is missing.');
+    process.exit(1);
+  }
+
+  const pr = prEnabled ? new GhPullRequestCreator({ cwd: process.cwd(), repo }) : undefined;
+  const deliverable = prEnabled && pr
+    ? new DefaultDeliverablePipeline({
+        git: new ShellGitContext({ cwd: process.cwd() }),
+        pr,
+        repo,
+      })
+    : new NoOpDeliverablePipeline();
+
   const ctx = createRunContext({
     helixDir,
-    deliverable: new DefaultDeliverablePipeline({
-      git: new ShellGitContext({ cwd: process.cwd() }),
-      pr,
-      repo,
-    }),
+    deliverable,
   });
 
   if (!ctx.provider.hasAuth()) {
@@ -226,6 +236,9 @@ async function cmdServe(args: string[]): Promise<void> {
   }
 
   startServer({ ctx, pr, githubRepo: repo, port, host: "127.0.0.1" });
+  if (!prEnabled) {
+    console.log("Deliverable: PR create/merge disabled (set deliverable.pr=true to enable gh).");
+  }
 
   const gh = config.triggers?.github;
   if (gh?.mode === "poll" && repo) {

@@ -31,6 +31,7 @@ const CONFIG_TEMPLATE = `{
   "inheritPi": false,
   "extensions": { "enabled": false },
   "repoContext": { "enabled": true },
+  "deliverable": { "pr": false },
   "orchestrator": {
     "model": "openrouter/xiaomi/mimo-v2.5-pro",
     "workflow": ["planner", "dev", "verifier"],

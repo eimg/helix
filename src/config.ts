@@ -54,6 +54,15 @@ export interface HelixConfig {
     maxFiles?: number;
     requireVerifierPass?: boolean;
   };
+  /**
+   * Post-run deliverable side effects. GitHub PR create/merge via `gh` is
+   * **off by default** so local-issues / inline demos do not require GitHub.
+   * Set `deliverable.pr: true` (and usually `triggers.github.repo`) to enable.
+   */
+  deliverable?: {
+    /** Create/merge a GitHub PR after a successful run. Default false. */
+    pr?: boolean;
+  };
 }
 
 const DEFAULTS: Partial<HelixConfig> = {
@@ -61,6 +70,7 @@ const DEFAULTS: Partial<HelixConfig> = {
   inheritPi: false,
   extensions: { enabled: false },
   repoContext: { enabled: true },
+  deliverable: { pr: false },
 };
 
 export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixConfig {
@@ -83,6 +93,10 @@ export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixCo
       ...DEFAULTS.repoContext,
       ...parsed.repoContext,
     },
+    deliverable: {
+      ...DEFAULTS.deliverable,
+      ...parsed.deliverable,
+    },
     triggers: parsed.triggers,
     mergeGate: parsed.mergeGate,
   };
@@ -97,4 +111,9 @@ export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixCo
 /** Convenience: true if repo-local extensions are enabled. */
 export function extensionsEnabled(config: HelixConfig): boolean {
   return config.extensions?.enabled === true;
+}
+
+/** True when post-run GitHub PR create/merge via `gh` is enabled. */
+export function githubPrEnabled(config: HelixConfig): boolean {
+  return config.deliverable?.pr === true;
 }

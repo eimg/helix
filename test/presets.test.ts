@@ -31,6 +31,18 @@ test("config: inheritPi and extensions default to false when absent", () => {
   const config = loadConfig(tmp);
   assert.equal(config.inheritPi, false);
   assert.equal(config.extensions?.enabled, false);
+  assert.equal(config.deliverable?.pr, false);
+});
+
+test("config: deliverable.pr can be enabled explicitly", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "helix-cfg-pr-"));
+  writeFileSync(join(tmp, "config.json"), JSON.stringify({
+    provider: { name: "openrouter" },
+    orchestrator: { model: "openrouter/x", workflow: ["dev"] },
+    deliverable: { pr: true },
+  }));
+  const config = loadConfig(tmp);
+  assert.equal(config.deliverable?.pr, true);
 });
 
 test("loader: discovers the three preset specialists with frontmatter + body", () => {

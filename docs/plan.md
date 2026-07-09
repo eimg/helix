@@ -61,7 +61,7 @@ Turn the engine into a self-driving service: issues can arrive automatically, ru
 | Git / diff | `src/deliverable/git.ts` — `ShellGitContext` for merge gate diff stats |
 | Deliverable pipeline | `src/deliverable/pipeline.ts` — merge gate → PR → auto-merge or pending approval |
 | Merge gate | `src/orchestrator/mergeGate.ts` — pure threshold evaluation |
-| CLI | `helix serve [--port]` — starts server; honors `triggers.github.mode: "poll"` |
+| CLI | `helix serve [--port]` — starts server; PR deliverable only if `deliverable.pr`; honors `triggers.github.mode: "poll"` |
 | Run UI | `src/server/public/{index.html,app.js,app.css}` — form, live log, history, delete |
 | State | `RunStore` load/list/delete + incremental save during runs |
 | Tests | `test/{server,merge-gate,github-poll}.test.ts` — HTTP + fakes, no GitHub required |
@@ -89,10 +89,12 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 
 ## Still open (scale sketch)
 
+- **Guardrails & escalation** — structured escalation codes, budgets, workspace jail, pause/resume; design only. [→](./guardrails.md)
 - **Repo context B–D** — persistent `.helix/repo-memory.md`, freshness/`helix index`, semantic index
 - **Observability** — cost/token dashboards, searchable history beyond local JSON
 - **More providers** — Anthropic, OpenAI, … (`Provider` interface is ready)
 - **First-class webhook trigger** in Helix core (today: HTTP `POST /runs` + external local-issues)
 - **Subprocess isolation** for untrusted specialists
 - **Manage CLI** (`helix manage`) parity
+- **Settings UI/API** — edit config/secrets without hand-editing files (related to guardrail presets)
 - **pi settings** — explicit `SettingsManager.inMemory(...)` Helix defaults when `inheritPi` is false
