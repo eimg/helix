@@ -6,6 +6,12 @@
  * network — see test/m1-happy-path.test.ts.
  */
 
+/** Link back to an external issue tracker for completion callbacks. */
+export interface IssueExternalRef {
+  trackerUrl: string;
+  issueId: number;
+}
+
 /** A work item that triggers a run. */
 export interface Issue {
   /** Origin of the issue — "github" (fetched) or "inline" (passed directly). */
@@ -17,6 +23,8 @@ export interface Issue {
   repo?: string;
   number?: number;
   url?: string;
+  /** External tracker correlation for completion webhooks. */
+  external?: IssueExternalRef;
 }
 
 /**
@@ -146,4 +154,9 @@ export interface OrchestratorInput {
   results: SpecialistResult[];
   /** 0-based iteration counter for loop-limit enforcement. */
   iteration: number;
+  /**
+   * Deterministic repo bootstrap (tree, manifests, allowlisted docs).
+   * Injected by the engine on the first specialist wave; also shown to the orchestrator.
+   */
+  repoContext?: string;
 }

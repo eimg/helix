@@ -17,9 +17,12 @@ import type { RunStore } from "../state/runStore.js";
 import { FileRunStore } from "../state/runStore.js";
 import type { DeliverablePipeline } from "../deliverable/pipeline.js";
 import { NoOpDeliverablePipeline } from "../deliverable/pipeline.js";
+import { notifyIssueTracker } from "../callbacks/issueTracker.js";
+import { buildRepoBootstrap } from "../context/bootstrap.js";
 
 export interface RunContext {
   helixDir: string;
+  cwd: string;
   config: HelixConfig;
   workflow: Workflow;
   provider: PiProvider;
@@ -28,6 +31,7 @@ export interface RunContext {
   deliverable: DeliverablePipeline;
   createOrchestrator?: (ctx: RunContext) => Orchestrator;
   createSpecialistFactory?: (ctx: RunContext) => SpecialistSessionFactory;
+  issueTrackerFetch?: typeof fetch;
 }
 
 export interface RunContextOptions {
@@ -36,13 +40,15 @@ export interface RunContextOptions {
   store?: RunStore;
   deliverable?: DeliverablePipeline;
   provider?: PiProvider;
+  issueTrackerFetch?: typeof fetch;
   createOrchestrator?: (ctx: RunContext) => Orchestrator;
   createSpecialistFactory?: (ctx: RunContext) => SpecialistSessionFactory;
 }
 
 export function createRunContext(opts: RunContextOptions = {}): RunContext {
-  const cwd = opts.cwd ?? process.cwd();
-  const helixDir = opts.helixDir ?? findHelixDir(cwd);
+  const helixDir = opts.helixDir ?? findHelixDir(opts.cwd ?? process.cwd());
+  // Repo root is the parent of `.helix/` unless the caller overrides cwd.
+  const cwd = opts.cwd ?? resolve(helixDir, "..");
   const config = loadConfig(helixDir);
   const workflow = loadWorkflow(config);
   const provider = opts.provider ?? new OpenRouterProvider({
@@ -55,6 +61,7 @@ export function createRunContext(opts: RunContextOptions = {}): RunContext {
 
   return {
     helixDir,
+    cwd,
     config,
     workflow,
     provider,
@@ -63,6 +70,7 @@ export function createRunContext(opts: RunContextOptions = {}): RunContext {
     deliverable,
     createOrchestrator: opts.createOrchestrator,
     createSpecialistFactory: opts.createSpecialistFactory,
+    issueTrackerFetch: opts.issueTrackerFetch,
   };
 }
 
@@ -83,6 +91,7 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
   const orchestrator =
     ctx.createOrchestrator?.(ctx) ??
     new LlmOrchestrator(ctx.provider, ctx.workflow, ctx.config.orchestrator.model, {
+      cwd: ctx.cwd,
       helixDir: ctx.helixDir,
       inheritPi: ctx.config.inheritPi,
       extensions: ctx.config.extensions,
@@ -91,10 +100,13 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
   const factory =
     ctx.createSpecialistFactory?.(ctx) ??
     new PiSpecialistSessionFactory(ctx.provider, ctx.specialists, {
+      cwd: ctx.cwd,
       helixDir: ctx.helixDir,
       inheritPi: ctx.config.inheritPi,
       extensions: ctx.config.extensions,
     });
+
+  const repoContext = buildRepoBootstrap(ctx.cwd, ctx.config.repoContext);
 
   const deps: EngineDeps = {
     provider: ctx.provider,
@@ -103,6 +115,7 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
     gates: { ...DEFAULT_GATE_CONFIG, maxIterations: ctx.workflow.maxIterations },
     eventStream,
     runId,
+    repoContext,
     onEvent: (run, event) => {
       opts.onEvent?.(run, event);
       run.runFile = ctx.store.save(run);
@@ -124,6 +137,7 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
     }
 
     run.runFile = ctx.store.save(run);
+    void notifyIssueTracker(run, { fetchFn: ctx.issueTrackerFetch });
     return run;
   })();
 

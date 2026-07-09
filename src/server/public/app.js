@@ -1,4 +1,6 @@
 const form = document.getElementById("run-form");
+const formPanel = document.querySelector(".form-panel");
+const historyPanel = document.querySelector(".history-panel");
 const titleEl = document.getElementById("title");
 const bodyEl = document.getElementById("body");
 const submitBtn = document.getElementById("submit");
@@ -7,17 +9,56 @@ const logEl = document.getElementById("log");
 const resultPanel = document.getElementById("result-panel");
 const resultEl = document.getElementById("result");
 const clearBtn = document.getElementById("clear-log");
+const historyListEl = document.getElementById("history-list");
+const refreshHistoryBtn = document.getElementById("refresh-history");
 
 let activeSource = null;
+let selectedRunId = null;
+let historyPollTimer = null;
+let userPinnedSelection = false;
+/** @type {Set<string>} */
+const knownRunIds = new Set();
+let runHistory = [];
 /** @type {Map<string, HTMLElement>} */
 const workingEls = new Map();
 /** @type {Set<string>} */
 const activeSpecialists = new Set();
 
+function syncHistoryHeight() {
+  if (!formPanel || !historyPanel) return;
+  if (window.matchMedia("(max-width: 900px)").matches) {
+    historyPanel.style.removeProperty("height");
+    return;
+  }
+  const h = Math.round(formPanel.getBoundingClientRect().height);
+  if (h > 0) historyPanel.style.height = `${h}px`;
+}
+
+if (formPanel && typeof ResizeObserver !== "undefined") {
+  new ResizeObserver(() => syncHistoryHeight()).observe(formPanel);
+}
+window.addEventListener("resize", syncHistoryHeight);
+
 clearBtn.addEventListener("click", () => {
   logEl.innerHTML = "";
   clearAllWorking();
-  showLogPlaceholder();
+  showLogPlaceholder(selectedRunId ? "Log cleared." : undefined);
+});
+
+refreshHistoryBtn.addEventListener("click", () => void loadHistory());
+
+historyListEl.addEventListener("click", (e) => {
+  const deleteBtn = e.target.closest("[data-delete-run-id]");
+  if (deleteBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    void deleteRun(deleteBtn.dataset.deleteRunId);
+    return;
+  }
+  const item = e.target.closest("[data-run-id]");
+  if (!item) return;
+  userPinnedSelection = true;
+  void openRun(item.dataset.runId);
 });
 
 form.addEventListener("submit", async (e) => {
@@ -28,9 +69,6 @@ form.addEventListener("submit", async (e) => {
 
   setRunning(true);
   setPill("running", "running");
-  resultPanel.classList.add("hidden");
-  logEl.innerHTML = "";
-  clearAllWorking();
 
   try {
     const res = await fetch("/runs", {
@@ -43,10 +81,10 @@ form.addEventListener("submit", async (e) => {
       throw new Error(err.error || `HTTP ${res.status}`);
     }
     const { id } = await res.json();
-    await streamRun(id);
-    const run = await fetchRun(id);
-    showResult(run);
-    setPill(run.status, run.status);
+    userPinnedSelection = false;
+    await loadHistory();
+    startHistoryPoll();
+    await openRun(id);
   } catch (err) {
     appendLine(formatError(err instanceof Error ? err.message : String(err)));
     setPill("error", "error");
@@ -66,13 +104,151 @@ function setPill(klass, label) {
   statusPill.textContent = label;
 }
 
-function showLogPlaceholder() {
-  logEl.innerHTML = '<p class="log-empty">Submit a task to start a run.</p>';
+function showLogPlaceholder(message) {
+  logEl.innerHTML = `<p class="log-empty">${escapeHtml(message ?? "Submit a task or select a run from history.")}</p>`;
+}
+
+async function loadHistory() {
+  try {
+    const res = await fetch("/runs?limit=50");
+    if (!res.ok) return;
+    const prevIds = new Set(knownRunIds);
+    runHistory = await res.json();
+    for (const run of runHistory) knownRunIds.add(run.id);
+    renderHistory();
+
+    const newLive = runHistory.filter(
+      (r) => (r.live || r.status === "running") && !prevIds.has(r.id)
+    );
+    if (newLive.length > 0 && !userPinnedSelection) {
+      void openRun(newLive[0].id);
+    }
+    if (runHistory.some((r) => r.live || r.status === "running")) {
+      startHistoryPoll();
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function renderHistory() {
+  if (runHistory.length === 0) {
+    historyListEl.innerHTML = '<li class="history-empty">No runs yet.</li>';
+    requestAnimationFrame(syncHistoryHeight);
+    return;
+  }
+
+  historyListEl.innerHTML = runHistory
+    .map((run) => {
+      const active = run.id === selectedRunId ? " active" : "";
+      const live = run.live || run.status === "running";
+      const pillClass = live ? "live" : run.status;
+      const pillLabel = live ? "live" : run.status;
+      const deleteBtn = live
+        ? ""
+        : `<button type="button" class="history-delete" data-delete-run-id="${escapeHtml(run.id)}" title="Delete run" aria-label="Delete run">×</button>`;
+      return `<li class="history-item${active}" data-run-id="${escapeHtml(run.id)}">
+        <div class="history-item-top">
+          <p class="history-title" title="${escapeHtml(run.title)}">${escapeHtml(run.title)}</p>
+          ${deleteBtn}
+        </div>
+        <div class="history-item-foot">
+          <p class="history-meta">${escapeHtml(shortId(run.id))} · ${escapeHtml(timeAgo(run.startedAt))}</p>
+          <span class="pill ${pillClass}">${escapeHtml(pillLabel)}</span>
+        </div>
+      </li>`;
+    })
+    .join("");
+  requestAnimationFrame(syncHistoryHeight);
+}
+
+async function deleteRun(id) {
+  if (!id) return;
+  const run = runHistory.find((r) => r.id === id);
+  const label = run?.title ? `"${run.title}"` : shortId(id);
+  if (!window.confirm(`Delete run ${label}? This cannot be undone.`)) return;
+
+  try {
+    const res = await fetch(`/runs/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!res.ok && res.status !== 204) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    knownRunIds.delete(id);
+    if (selectedRunId === id) {
+      if (activeSource) {
+        activeSource.close();
+        activeSource = null;
+      }
+      selectedRunId = null;
+      userPinnedSelection = false;
+      resultPanel.classList.add("hidden");
+      setPill("idle", "idle");
+      showLogPlaceholder();
+    }
+    await loadHistory();
+  } catch (err) {
+    appendLine(formatError(err instanceof Error ? err.message : String(err)));
+  }
+}
+
+function startHistoryPoll() {
+  if (historyPollTimer) return;
+  historyPollTimer = setInterval(() => {
+    void loadHistory();
+    if (!selectedRunId) return;
+    const selected = runHistory.find((r) => r.id === selectedRunId);
+    if (selected && (selected.live || selected.status === "running")) {
+      void refreshSelectedRun();
+    }
+  }, 2000);
+}
+
+function stopHistoryPoll() {
+  if (!historyPollTimer) return;
+  clearInterval(historyPollTimer);
+  historyPollTimer = null;
+}
+
+async function refreshSelectedRun() {
+  if (!selectedRunId) return;
+  try {
+    const run = await fetchRun(selectedRunId);
+    setPill(run.status, run.status);
+    if (run.status !== "running") showResult(run);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function openRun(id) {
+  if (activeSource) {
+    activeSource.close();
+    activeSource = null;
+  }
+
+  selectedRunId = id;
+  renderHistory();
+  resultPanel.classList.add("hidden");
+  logEl.innerHTML = "";
+  clearAllWorking();
+  setPill("running", "running");
+
+  try {
+    await streamRun(id);
+    const run = await fetchRun(id);
+    showResult(run);
+    setPill(run.status, run.status);
+    await loadHistory();
+    if (!runHistory.some((r) => r.live || r.status === "running")) stopHistoryPoll();
+  } catch (err) {
+    appendLine(formatError(err instanceof Error ? err.message : String(err)));
+    setPill("error", "error");
+  }
 }
 
 function streamRun(id) {
-  return new Promise((resolve, reject) => {
-    if (activeSource) activeSource.close();
+  return new Promise((resolve) => {
     const source = new EventSource(`/runs/${id}/events`);
     activeSource = source;
 
@@ -95,7 +271,6 @@ function streamRun(id) {
     source.onerror = () => {
       source.close();
       activeSource = null;
-      // SSE closes when run finishes — fetch final state either way
       resolve();
     };
   });
@@ -129,9 +304,7 @@ function handleEvent(event) {
       const name = event.details?.specialist ?? event.summary;
       activeSpecialists.delete(name);
       clearWorking(name);
-      if (activeSpecialists.size === 0) {
-        setWorking("orchestrator", "Orchestrator");
-      }
+      if (activeSpecialists.size === 0) setWorking("orchestrator", "Orchestrator");
       break;
     }
     case "run_done":
@@ -169,9 +342,7 @@ function clearWorking(key) {
 
 function clearAllWorking() {
   activeSpecialists.clear();
-  for (const key of [...workingEls.keys()]) {
-    clearWorking(key);
-  }
+  for (const key of [...workingEls.keys()]) clearWorking(key);
 }
 
 function scrollLog() {
@@ -212,20 +383,15 @@ function showResult(run) {
   if (run.pullRequest?.url) {
     parts.push(`<p><a href="${escapeHtml(run.pullRequest.url)}" target="_blank" rel="noopener">Pull request #${run.pullRequest.number}</a></p>`);
   }
-  if (run.approvalStatus === "pending") {
-    parts.push(`<p>Awaiting approval</p>`);
-  }
-  if (run.deliverableError) {
-    parts.push(`<p class="tag-fail">${escapeHtml(run.deliverableError)}</p>`);
-  }
-  if (run.runFile) {
-    parts.push(`<p class="stat">Run file: ${escapeHtml(run.runFile)}</p>`);
-  }
+  if (run.approvalStatus === "pending") parts.push(`<p>Awaiting approval</p>`);
+  if (run.deliverableError) parts.push(`<p class="tag-fail">${escapeHtml(run.deliverableError)}</p>`);
 
   resultEl.innerHTML = parts.join("");
 }
 
 function formatEvent(event) {
+  if (event.type === "issue_fetched") return [];
+
   const ts = timeStr(event.ts);
   const lines = [];
 
@@ -241,13 +407,13 @@ function formatEvent(event) {
       const iterLabel = iter != null ? ` · turn ${iter + 1}` : "";
       const head = d ? formatDecisionHead(d) : escapeHtml(event.summary);
       lines.push(section(`<span class="ts">${ts}</span> <span class="tag tag-orch">↳ Orchestrator${iterLabel}</span> ${escapeHtml(head)}`));
-      if (d?.reason) lines.push(`<span class="detail">${escapeHtml(d.reason)}</span>`);
+      if (d?.reason) lines.push(`<span class="detail">${escapeHtml(previewText(d.reason, 120))}</span>`);
       break;
     }
     case "specialist_started": {
       const name = event.details?.specialist ?? event.summary;
-      const task = fullText(event.details?.task ?? "");
-      lines.push(`<p class="event"><span class="ts">${ts}</span> <span class="tag tag-start">→ ${escapeHtml(name)}</span> ${task ? "task" : "starting"}</p>`);
+      const task = previewText(event.details?.task ?? "", 100);
+      lines.push(`<p class="event"><span class="ts">${ts}</span> <span class="tag tag-start">→ ${escapeHtml(name)}</span> starting</p>`);
       if (task) lines.push(`<span class="detail">${escapeHtml(task)}</span>`);
       break;
     }
@@ -259,13 +425,12 @@ function formatEvent(event) {
       const tag = ok ? "tag-ok" : "tag-fail";
       const icon = ok ? "✓" : "✗";
       lines.push(`<p class="event"><span class="ts">${ts}</span> <span class="tag ${tag}">${icon} ${escapeHtml(name)}</span> ${ok ? "finished" : "failed"}</p>`);
-      const body = fullText(ok ? output : error || output);
+      const body = previewText(ok ? output : error || output, 160);
       if (body) lines.push(`<span class="detail">${escapeHtml(body)}</span>`);
       break;
     }
     case "run_done":
       lines.push(section(`<span class="ts">${ts}</span> <span class="tag tag-done">■ Done</span> ${escapeHtml(event.summary)}`));
-      if (event.details?.deliverable) lines.push(`<span class="detail">${escapeHtml(String(event.details.deliverable))}</span>`);
       break;
     case "run_escalated":
       lines.push(section(`<span class="ts">${ts}</span> <span class="tag tag-escalated">▲ Escalated</span> ${escapeHtml(event.summary)}`));
@@ -295,8 +460,23 @@ function timeStr(ts) {
   return new Date(ts).toISOString().slice(11, 19);
 }
 
-function fullText(text) {
-  return String(text ?? "").trim();
+function timeAgo(ts) {
+  const sec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  return `${Math.floor(min / 60)}h ago`;
+}
+
+function shortId(id) {
+  return String(id).slice(0, 8);
+}
+
+function previewText(text, maxChars = 160) {
+  const trimmed = String(text ?? "").trim().replace(/\s+/g, " ");
+  if (!trimmed) return "";
+  if (trimmed.length <= maxChars) return trimmed;
+  return `${trimmed.slice(0, maxChars).trimEnd()}…`;
 }
 
 function escapeHtml(s) {
@@ -308,3 +488,10 @@ function escapeHtml(s) {
 }
 
 showLogPlaceholder();
+syncHistoryHeight();
+void loadHistory().then(() => {
+  const live = runHistory.find((r) => r.live || r.status === "running");
+  if (live && !selectedRunId) void openRun(live.id);
+  startHistoryPoll();
+  syncHistoryHeight();
+});

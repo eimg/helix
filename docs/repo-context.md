@@ -1,6 +1,6 @@
 # Repo context & cold-start problem
 
-**Status:** Design note — not implemented. Revisit in M3+.
+**Status:** Phase A implemented (deterministic bootstrap + context allowlist). Phases B–D still open.
 
 Every Helix run today starts cold: the planner (and often dev) must re-explore the repository from scratch. This doc captures why that happens, the cost, and candidate solutions. Prefer **repo-local artifacts** over cross-run session persistence — consistent with Helix's isolated-session model.
 
@@ -137,7 +137,7 @@ Persist pi sessions to disk and resume planner context next run.
 
 | Phase | Scope | Notes |
 |---|---|---|
-| **A** | Deterministic bootstrap + Helix-owned context file allowlist | Quick win; no new agents |
+| **A** | Deterministic bootstrap + Helix-owned context file allowlist | **Shipped** — `src/context/bootstrap.ts`; config `repoContext`; injected into orchestrator + first specialist wave |
 | **B** | `.helix/repo-memory.md` read/write contract; planner delta updates | Amortize cost across runs |
 | **C** | Freshness: re-index on merge to main, age/diff thresholds, optional `helix index` | Operational |
 | **D** | Semantic index | Only if repos outgrow markdown memory |

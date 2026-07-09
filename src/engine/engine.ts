@@ -24,6 +24,7 @@ import type {
 } from "./types.js";
 import { EventStream } from "./eventStream.js";
 import { DEFAULT_GATE_CONFIG, enforceIterationCap, isBlockingFailure, type GateConfig } from "../orchestrator/gates.js";
+import { prependRepoContext } from "../context/bootstrap.js";
 
 export interface EngineDeps {
   provider: Provider;
@@ -34,6 +35,11 @@ export interface EngineDeps {
   onEvent?: (run: Run, event: RunEvent) => void;
   /** Pre-assign run id (server/API). Default: random UUID. */
   runId?: string;
+  /**
+   * Deterministic repo bootstrap markdown (Phase A). Injected into orchestrator
+   * prompts and prepended to the first specialist wave's tasks.
+   */
+  repoContext?: string;
 }
 
 export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
@@ -60,11 +66,19 @@ export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
   };
 
   try {
-    emit({ ts: Date.now(), type: "run_started", summary: `Run for ${issue.source}${issue.number != null ? ` #${issue.number}` : ""}: ${issue.title}` });
+    emit({
+      ts: Date.now(),
+      type: "run_started",
+      summary: `Run for ${issue.source}${issue.number != null ? ` #${issue.number}` : ""}: ${issue.title}`,
+      details: deps.repoContext
+        ? { repoContextChars: deps.repoContext.length }
+        : undefined,
+    });
     emit({ ts: Date.now(), type: "issue_fetched", summary: issue.url ?? "(inline)", details: { number: issue.number, repo: issue.repo, source: issue.source } });
 
     const gates = deps.gates ?? DEFAULT_GATE_CONFIG;
     let iteration = 0;
+    let injectedBootstrap = false;
 
     while (true) {
       let decision: OrchestratorDecision = await deps.orchestrator.decide({
@@ -72,6 +86,7 @@ export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
         specialists: await listSpecialists(deps.specialistFactory),
         results: run.results,
         iteration,
+        repoContext: deps.repoContext,
       });
       decision = enforceIterationCap(decision, iteration, gates);
       emit({
@@ -82,7 +97,15 @@ export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
       });
 
       if (decision.kind === "run") {
-        const newResults = await runSpecialists(decision.specialists, deps.specialistFactory, emit);
+        const calls =
+          !injectedBootstrap && deps.repoContext
+            ? decision.specialists.map((c) => ({
+                ...c,
+                task: prependRepoContext(c.task, deps.repoContext),
+              }))
+            : decision.specialists;
+        if (!injectedBootstrap && deps.repoContext) injectedBootstrap = true;
+        const newResults = await runSpecialists(calls, deps.specialistFactory, emit);
         run.results.push(...newResults);
         iteration++;
         continue;

@@ -30,6 +30,7 @@ const CONFIG_TEMPLATE = `{
   "provider": { "name": "openrouter", "apiKeyEnv": "OPENROUTER_API_KEY" },
   "inheritPi": false,
   "extensions": { "enabled": false },
+  "repoContext": { "enabled": true },
   "orchestrator": {
     "model": "openrouter/xiaomi/mimo-v2.5-pro",
     "workflow": ["planner", "dev", "verifier"],

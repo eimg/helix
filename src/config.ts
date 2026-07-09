@@ -5,6 +5,7 @@
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import type { RepoContextOptions } from "./context/bootstrap.js";
 
 export interface HelixConfig {
   provider: {
@@ -34,6 +35,11 @@ export interface HelixConfig {
     enabled?: boolean; // default false
     paths?: string[]; // additional dirs beyond .helix/extensions/
   };
+  /**
+   * Phase A: deterministic repo bootstrap injected into orchestrator + first
+   * specialist wave. Enabled by default.
+   */
+  repoContext?: RepoContextOptions;
   triggers?: {
     github?: {
       repo: string;
@@ -54,6 +60,7 @@ const DEFAULTS: Partial<HelixConfig> = {
   orchestrator: { model: "", workflow: ["planner", "dev", "verifier"], maxIterations: 6 },
   inheritPi: false,
   extensions: { enabled: false },
+  repoContext: { enabled: true },
 };
 
 export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixConfig {
@@ -71,6 +78,10 @@ export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixCo
     extensions: {
       enabled: parsed.extensions?.enabled ?? DEFAULTS.extensions!.enabled!,
       paths: parsed.extensions?.paths,
+    },
+    repoContext: {
+      ...DEFAULTS.repoContext,
+      ...parsed.repoContext,
     },
     triggers: parsed.triggers,
     mergeGate: parsed.mergeGate,

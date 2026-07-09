@@ -2,7 +2,9 @@
  * Express host — consumer of the engine API (M2).
  *
  * POST /runs          start a run (inline or GitHub issue number)
+ * GET  /runs          list run summaries (newest first)
  * GET  /runs/:id      run state snapshot
+ * DELETE /runs/:id    delete a finished run (testing cleanup)
  * GET  /runs/:id/events   SSE stream of RunEvents
  * POST /runs/:id/approve | /reject   human merge gate decisions
  *
@@ -23,6 +25,7 @@ import type { PullRequestCreator } from "../deliverable/pr.js";
 import { HELIX_DEFAULT_PORT } from "../config/defaults.js";
 import { ManageService } from "../manage/service.js";
 import type { ManageEvent } from "../manage/types.js";
+import { externalFromHeaders, parseIssueExternal } from "../callbacks/issueTracker.js";
 
 export interface CreateAppOptions {
   ctx: RunContext;
@@ -60,6 +63,7 @@ export function createApp(opts: CreateAppOptions): Express {
     let issue: Issue;
     try {
       issue = await parseRunBody(req.body, githubRepo ?? ctx.config.triggers?.github?.repo);
+      issue = attachExternalRef(issue, req.headers, req.body);
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
       return;
@@ -86,6 +90,15 @@ export function createApp(opts: CreateAppOptions): Express {
     res.status(202).json({ id: runId, status: "running" });
   });
 
+  app.get("/runs", (req: Request, res: Response) => {
+    const limit = parseLimit(req.query.limit, 50);
+    const summaries = ctx.store.listSummaries(limit).map((summary) => ({
+      ...summary,
+      live: activeRuns.has(summary.id),
+    }));
+    res.json(summaries);
+  });
+
   app.get("/runs/:id", (req: Request, res: Response) => {
     const id = String(req.params.id);
     const run = ctx.store.load(id);
@@ -94,6 +107,24 @@ export function createApp(opts: CreateAppOptions): Express {
       return;
     }
     res.json(run);
+  });
+
+  app.delete("/runs/:id", (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    if (activeRuns.has(id)) {
+      res.status(409).json({ error: "Cannot delete a running run" });
+      return;
+    }
+    const run = ctx.store.load(id);
+    if (!run) {
+      res.status(404).json({ error: "Run not found" });
+      return;
+    }
+    if (!ctx.store.delete(id)) {
+      res.status(500).json({ error: "Failed to delete run" });
+      return;
+    }
+    res.status(204).end();
   });
 
   app.get("/runs/:id/events", (req: Request, res: Response) => {
@@ -292,6 +323,7 @@ async function parseRunBody(body: unknown, defaultRepo?: string): Promise<Issue>
       title: b.title,
       body: typeof b.body === "string" ? b.body : "",
       labels: Array.isArray(b.labels) ? b.labels.filter((l): l is string => typeof l === "string") : [],
+      external: parseIssueExternal(b.external),
     });
   }
 
@@ -308,6 +340,26 @@ async function parseRunBody(body: unknown, defaultRepo?: string): Promise<Issue>
   }
 
   throw new Error('Provide { title, body? } for inline runs or { issueNumber, repo? } for GitHub');
+}
+
+function attachExternalRef(
+  issue: Issue,
+  headers: Record<string, string | string[] | undefined>,
+  body: unknown
+): Issue {
+  const fromHeaders = externalFromHeaders(headers);
+  if (fromHeaders) return { ...issue, external: fromHeaders };
+
+  if (body && typeof body === "object" && issue.external) return issue;
+  if (issue.external) return issue;
+
+  return issue;
+}
+
+function parseLimit(value: unknown, fallback: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(Math.floor(n), 200);
 }
 
 function writeRunSse(res: Response, event: RunEvent): void {
@@ -340,8 +392,6 @@ export function startServer(opts: StartServerOptions): ReturnType<Express["liste
   const port = opts.port ?? Number(process.env.PORT ?? HELIX_DEFAULT_PORT);
   const host = opts.host ?? "127.0.0.1";
   return app.listen(port, host, () => {
-    console.log(`Helix server listening on http://${host}:${port}`);
-    console.log(`Run UI:     http://${host}:${port}/`);
-    console.log(`Manage UI:  http://${host}:${port}/manage`);
+    console.log(`Helix  http://${host}:${port}`);
   });
 }

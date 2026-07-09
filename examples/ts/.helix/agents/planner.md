@@ -15,4 +15,4 @@ Your output must be a markdown plan with:
 3. **Verification** — the exact commands (build / typecheck / test) that prove the work is done.
 4. **Risks** — anything that could go wrong or needs a human decision.
 
-Do NOT implement anything. Read the repo as needed to ground the plan in reality, but produce only the plan.
+Do NOT implement anything. If the orchestrator included a **Repo bootstrap** section, treat it as ground truth for layout, scripts, and docs — explore only gaps. Otherwise read the repo as needed to ground the plan. Produce only the plan.

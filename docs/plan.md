@@ -72,7 +72,7 @@ No web UI (server API only); no cost dashboards; no auto-merge without a passing
 
 - **Web UI** — manage runs, agents, skills, triggers, approvals; live event stream consumer. Built on the M2 server API.
 - **Manage (experimental, shipped narrow v1)** — separate `/manage` page + `/manage/*` API; prompt box to create/edit/delete `.helix/agents` and `.helix/skills` with preview + apply. **Web + API only — no CLI yet.** [Details →](./manage.md)
-- **Repo context / cold-start** — amortize planner exploration across runs via bootstrap injection and `.helix/` artifacts. [Design note →](./repo-context.md)
+- **Repo context / cold-start** — Phase A shipped (deterministic bootstrap + context allowlist). Phases B–D still open. [Design note →](./repo-context.md)
 - **Observability** — traces, per-specialist cost/token dashboards, searchable run history. The `RunEvent` stream is the foundation.
 - **More providers** — Anthropic, OpenAI, … (the `Provider` interface is ready).
 - **More triggers** — GitLab, Jira, interval, file.

@@ -9,12 +9,13 @@
  * The automated future (issue-submit/webhook/poll) feeds `Issue` objects in
  * the same way; only the *producer* differs.
  */
-import type { Issue } from "../engine/types.js";
+import type { Issue, IssueExternalRef } from "../engine/types.js";
 
 export interface InlineIssueInput {
   title: string;
   body?: string;
   labels?: string[];
+  external?: IssueExternalRef;
 }
 
 export function inlineIssue(input: InlineIssueInput): Issue {
@@ -23,5 +24,6 @@ export function inlineIssue(input: InlineIssueInput): Issue {
     title: input.title,
     body: input.body ?? "",
     labels: input.labels ?? [],
+    external: input.external,
   };
 }

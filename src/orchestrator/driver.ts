@@ -47,7 +47,8 @@ Rules:
 - kind=run: invoke one or more specialists in parallel. Each "task" must be self-contained (include relevant context from prior results) since specialists cannot see each other.
 - kind=done: only when the work is complete and verified. Include "deliverable".
 - kind=escalate: when blocked, too risky, or needs a human.
-- Never invent specialist names; use only those listed in the available specialists.`;
+- Never invent specialist names; use only those listed in the available specialists.
+- When a Repo bootstrap section is present, treat it as ground truth for layout/scripts/docs. Tell specialists to use it and only explore gaps — do not ask them to rediscover the whole tree.`;
 
 export interface LlmOrchestratorOptions {
   cwd?: string;
@@ -150,7 +151,7 @@ export class LlmOrchestrator implements Orchestrator {
 }
 
 function buildPrompt(input: OrchestratorInput, workflow: Workflow): string {
-  const { issue, specialists, results, iteration } = input;
+  const { issue, specialists, results, iteration, repoContext } = input;
   const specialistList = specialists
     .map((s) => `- ${s.name}: ${s.description}`)
     .join("\n");
@@ -173,11 +174,13 @@ function buildPrompt(input: OrchestratorInput, workflow: Workflow): string {
     `Labels: ${issue.labels.join(", ") || "(none)"}`,
   ].filter(Boolean).join("\n");
 
+  const bootstrapBlock = repoContext ? `\n${repoContext}\n` : "";
+
   return `${issueHeader}
 ${sourceLines}
 
 ${issue.body}
-
+${bootstrapBlock}
 ## Workflow rails
 ${describeWorkflow(workflow)}
 

@@ -97,6 +97,69 @@ test("GET /runs/:id/events returns SSE payload", async () => {
   assert.match(events.text, /run_done/);
 });
 
+test("GET /runs lists persisted runs newest first", async () => {
+  const script: OrchestratorDecision[] = [{ kind: "done", reason: "listed", deliverable: "x" }];
+  const { ctx } = testCtx(script);
+  const app = createApp({ ctx });
+
+  await request(app).post("/runs").send({ title: "First", body: "one" });
+  await new Promise((r) => setTimeout(r, 15));
+  await request(app).post("/runs").send({ title: "Second", body: "two" });
+  await new Promise((r) => setTimeout(r, 120));
+
+  const list = await request(app).get("/runs");
+  assert.equal(list.status, 200);
+  assert.equal(list.body.length, 2);
+  assert.equal(list.body[0].title, "Second");
+});
+
+test("DELETE /runs/:id removes a finished run", async () => {
+  const script: OrchestratorDecision[] = [{ kind: "done", reason: "bye", deliverable: "x" }];
+  const { ctx } = testCtx(script);
+  const app = createApp({ ctx });
+
+  const start = await request(app).post("/runs").send({ title: "Disposable" });
+  const id = start.body.id as string;
+  await new Promise((r) => setTimeout(r, 120));
+
+  const del = await request(app).delete(`/runs/${id}`);
+  assert.equal(del.status, 204);
+  assert.equal(ctx.store.load(id), undefined);
+
+  const list = await request(app).get("/runs");
+  assert.equal(list.body.find((r: { id: string }) => r.id === id), undefined);
+
+  const missing = await request(app).delete(`/runs/${id}`);
+  assert.equal(missing.status, 404);
+});
+
+test("DELETE /runs/:id rejects while run is still active", async () => {
+  const store = new MemoryRunStore();
+  const ctx = createRunContext({
+    helixDir: fixtureDir,
+    store,
+    deliverable: new NoOpDeliverablePipeline(),
+    provider: new FakeProvider(),
+    createOrchestrator: () => ({
+      async decide() {
+        await new Promise((r) => setTimeout(r, 300));
+        return { kind: "done" as const, reason: "ok", deliverable: "x" };
+      },
+    }),
+    createSpecialistFactory: () =>
+      new StubSpecialistFactory(loadSpecialists(resolve(fixtureDir, "agents")), { planner: "p", dev: "d", verifier: "ok" }),
+  });
+  const app = createApp({ ctx });
+
+  const start = await request(app).post("/runs").send({ title: "Still running" });
+  const id = start.body.id as string;
+
+  const del = await request(app).delete(`/runs/${id}`);
+  assert.equal(del.status, 409);
+
+  await new Promise((r) => setTimeout(r, 400));
+});
+
 test("approve and reject pending runs", async () => {
   const store = new MemoryRunStore();
   const pr = new FakePullRequestCreator();
