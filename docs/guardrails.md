@@ -17,8 +17,8 @@ Related: [`plan.md`](./plan.md), [`repo-context.md`](./repo-context.md), [`manag
 | Blocking-failure gate | `engine/engine.ts` | `done` over failed specialist → escalate |
 | Merge gate + approval | `mergeGate.ts`, deliverable pipeline, approve/reject API | Size/risk → auto-merge or `approvalStatus: pending` |
 | `deliverable.pr` (default `false`) | config + `cli.ts` serve wiring | No `gh pr create` unless opted in |
-| `inheritPi` / extensions default off | config, `loaderBuilder.ts` | Less ambient privilege |
-| Session isolation | specialist/orchestrator sessions | No inter-specialist chat; isolated context files when `inheritPi` false |
+| Extensions default off | config, `loaderBuilder.ts` | Less ambient privilege |
+| Session isolation | specialist/orchestrator sessions | No inter-specialist chat; no global pi skills/context files |
 | Agent `tools:` frontmatter | `.helix/agents/*.md` | Declares tools; **not** a hard global policy layer |
 
 ### Escalation today (gap)
@@ -83,7 +83,7 @@ Default assumption for Helix’s current use (local-issues + localhost serve): o
 2. **Fail closed for side effects** — PR, merge, webhooks off unless enabled.
 3. **Same policy for CLI and serve** — one policy object.
 4. **Observable** — emit `gate_blocked` / `policy_denied` (or structured escalation), not silent stalls.
-5. **Layered config** — defaults → `.helix/config.json` → optional per-run override later.
+5. **Layered config** — essentials (`.env` / pi) separate from wiring (`.helix/config.json`) → optional per-run override later.
 
 ### Suggested config sketch (future)
 

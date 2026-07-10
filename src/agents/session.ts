@@ -29,8 +29,11 @@ export interface PiSpecialistFactoryOptions {
   cwd?: string;
   /** `.helix/` dir of the repo. Default <cwd>/.helix. */
   helixDir?: string;
-  /** Inherit global pi config. Default false (sessions are isolated). */
-  inheritPi?: boolean;
+  /**
+   * Default model for specialists that omit frontmatter `model:`.
+   * From HELIX_MODEL / shipped default — never overrides an explicit agent model.
+   */
+  defaultModel?: string;
   /** Repo-local extension config. Default disabled. */
   extensions?: { enabled?: boolean; paths?: string[] };
 }
@@ -41,7 +44,7 @@ export class PiSpecialistSessionFactory implements SpecialistSessionFactory {
   private readonly provider: PiProvider;
   private readonly cwd: string;
   private readonly helixDir: string;
-  private readonly inheritPi: boolean;
+  private readonly defaultModel: string | undefined;
   private readonly extensions: { enabled?: boolean; paths?: string[] } | undefined;
 
   constructor(provider: PiProvider, definitions: SpecialistDefinition[], opts: PiSpecialistFactoryOptions = {}) {
@@ -49,18 +52,22 @@ export class PiSpecialistSessionFactory implements SpecialistSessionFactory {
     this.definitions = definitions;
     this.cwd = opts.cwd ?? process.cwd();
     this.helixDir = opts.helixDir ?? resolve(this.cwd, ".helix");
-    this.inheritPi = opts.inheritPi ?? false;
+    this.defaultModel = opts.defaultModel;
     this.extensions = opts.extensions;
   }
 
   async create(def: SpecialistDefinition): Promise<SpecialistSession> {
-    const model = def.model ? await this.provider.resolveModel(def.model) : undefined;
-    if (!model) throw new Error(`Specialist "${def.name}" has no resolvable model (${def.model ?? "undefined"})`);
+    const modelRef = def.model ?? this.defaultModel;
+    const model = modelRef ? await this.provider.resolveModel(modelRef) : undefined;
+    if (!model) {
+      throw new Error(
+        `Specialist "${def.name}" has no model (set frontmatter model: or HELIX_MODEL / default)`
+      );
+    }
 
     const loader = buildSessionLoader({
       cwd: this.cwd,
       helixDir: this.helixDir,
-      inheritPi: this.inheritPi,
       extensions: this.extensions,
       systemPromptOverride: def.systemPrompt,
     });

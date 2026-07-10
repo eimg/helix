@@ -75,7 +75,6 @@ export interface ManageAuthorOptions {
   cwd?: string;
   helixDir: string;
   modelRef: string;
-  inheritPi?: boolean;
   extensions?: { enabled?: boolean; paths?: string[] };
 }
 

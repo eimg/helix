@@ -1,7 +1,6 @@
 ---
 name: verifier
 description: Independently verifies the dev's work against the issue. Runs gates; reports pass/fail with evidence. Never edits code.
-model: openrouter/xiaomi/mimo-v2.5-pro
 tools: read, bash, grep, find, ls
 ---
 

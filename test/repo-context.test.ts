@@ -64,8 +64,7 @@ test("loadConfig defaults repoContext.enabled to true", () => {
   writeFileSync(
     join(dir, ".helix", "config.json"),
     JSON.stringify({
-      provider: { name: "openrouter" },
-      orchestrator: { model: "openrouter/x", workflow: ["planner"] },
+      orchestrator: { workflow: ["planner"] },
     }),
   );
   const config = loadConfig(join(dir, ".helix"));

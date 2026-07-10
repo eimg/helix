@@ -3,7 +3,7 @@
  *
  * Gathered once per run (no LLM) and injected into the orchestrator prompt and
  * the first specialist wave so planners start grounded without rediscovering
- * the tree via tools. Keeps `inheritPi` / `noContextFiles` isolation intact.
+ * the tree via tools. Keeps session isolation (`noContextFiles`) intact.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";

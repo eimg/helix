@@ -55,6 +55,7 @@ export function createApp(opts: CreateAppOptions): Express {
   const manage = opts.manage ?? new ManageService({
     helixDir: ctx.helixDir,
     config: ctx.config,
+    model: ctx.model,
     provider: ctx.provider,
   });
 

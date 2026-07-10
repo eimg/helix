@@ -15,7 +15,6 @@ export class LlmManageAuthor implements ManageAuthor {
   private readonly provider: PiProvider;
   private readonly cwd: string;
   private readonly helixDir: string;
-  private readonly inheritPi: boolean;
   private readonly extensions: ManageAuthorOptions["extensions"];
   private readonly modelRef: string;
 
@@ -23,7 +22,6 @@ export class LlmManageAuthor implements ManageAuthor {
     this.provider = provider;
     this.cwd = opts.cwd ?? process.cwd();
     this.helixDir = opts.helixDir;
-    this.inheritPi = opts.inheritPi ?? false;
     this.extensions = opts.extensions;
     this.modelRef = opts.modelRef;
   }
@@ -85,7 +83,6 @@ export class LlmManageAuthor implements ManageAuthor {
     const loader = buildSessionLoader({
       cwd: this.cwd,
       helixDir: this.helixDir,
-      inheritPi: this.inheritPi,
       extensions: this.extensions,
       systemPromptOverride: MANAGE_SYSTEM_PROMPT,
     });

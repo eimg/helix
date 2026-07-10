@@ -83,6 +83,7 @@ test("ManageService session produces drafts and apply writes files", async () =>
   const service = new ManageService({
     helixDir: dir,
     config,
+    model: "openrouter/test/model",
     provider: new FakeProvider(),
     store: new MemoryManageStore(),
     createAuthor: () => new FakeManageAuthor(),
@@ -111,6 +112,7 @@ test("ManageService delete skill via apply", async () => {
   const service = new ManageService({
     helixDir: dir,
     config,
+    model: "openrouter/test/model",
     provider: new FakeProvider(),
     store: new MemoryManageStore(),
     createAuthor: () => new FakeManageAuthor(),
@@ -135,6 +137,7 @@ test("manage API: session, events, apply", async () => {
   const manage = new ManageService({
     helixDir: dir,
     config,
+    model: "openrouter/test/model",
     provider: new FakeProvider(),
     createAuthor: () => new FakeManageAuthor(),
   });

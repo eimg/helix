@@ -9,7 +9,7 @@ Living document. Revised as we learn.
 - **M1 — Core engine (shipped).** Manual + inline trigger. Hybrid orchestrator. Live event log. Presets.
 - **M2 — Auto + deliverable (shipped).** Express server + Run UI; GitHub poll; PR creation; merge gate execution.
 - **Beyond M2 (partial).** Manage (experimental); Phase A repo bootstrap; run history/delete; local-issues demo path. Further scale still open.
-- **Tests:** 57 passing (`npm test`).
+- **Tests:** 66 passing (`npm test`).
 
 ---
 
@@ -22,9 +22,9 @@ End-to-end orchestration of a GitHub issue (or inline terminal task) through spe
 | Area | Files |
 |---|---|
 | Engine core | `src/engine/{engine,eventStream,consoleLogger,types}.ts` — `runIssue(issue, deps)` loop; typed `RunEvent` stream; console logger |
-| Config | `src/config.ts` (loader/validator) + `src/config/paths.ts` (`~/.helix/` + `inheritPi` resolution) |
-| Provider | `src/providers/openrouter.ts` — pi `AuthStorage`/`ModelRegistry`, hybrid secrets/models |
-| Specialists | `src/agents/loader.ts` (frontmatter), `session.ts` (in-process pi sessions), `loaderBuilder.ts` (shared isolation logic) |
+| Config | `src/config.ts` (wiring loader) + `src/config/{env,paths,defaults}.ts` (`.env` + pi essentials) |
+| Provider | `src/providers/openrouter.ts` — pi `AuthStorage`/`ModelRegistry`; env then `~/.pi/` |
+| Specialists | `src/agents/loader.ts` (frontmatter), `session.ts` (in-process pi sessions), `loaderBuilder.ts` (always-isolated sessions) |
 | Orchestrator | `src/orchestrator/{workflow,driver,gates,scripted}.ts` — workflow rails + LLM driver (JSON decisions) + deterministic gates |
 | Triggers | `src/triggers/{github,inline}.ts` — `gh issue view` + inline (terminal) path |
 | State | `src/state/runStore.ts` — one JSON per run under `.helix/runs/` |
@@ -36,8 +36,8 @@ End-to-end orchestration of a GitHub issue (or inline terminal task) through spe
 ### Key decisions made during M1 (beyond the original plan)
 
 - **Inline trigger path** — `helix run --title/--stdin` constructs an `Issue` directly, bypassing `Trigger.fetchIssue()`. Proved orchestrator and trigger are independent; automated producers are just other `Issue` sources.
-- **Portability contract** — `inheritPi` toggle (default false) gates all `~/.pi/` access. Helix is npm-installable + self-contained: env var in, runs anywhere. Local `.helix/skills/` always loaded; global pi skills/extensions gated by `inheritPi`.
-- **Session isolation** — specialists + orchestrator set `noExtensions`/`noSkills`/`noContextFiles`/`noThemes`/`noPromptTemplates` when `inheritPi` is false. Built-in tools unaffected.
+- **Two-step essentials** — API key and model come from `.env` (wins) or the operator's global pi install (`~/.pi/agent/`). No Helix-owned `~/.helix/` secrets/models home; `config.json` is wiring only.
+- **Session isolation** — specialists + orchestrator always set `noExtensions`/`noSkills`/`noContextFiles`/`noThemes`/`noPromptTemplates`. Built-in tools unaffected. Auth/models may still resolve from pi.
 - **LLM orchestrator output contract** — single JSON object (`run`/`done`/`escalate`), parsed defensively; unparseable → escalate (never silently mis-route).
 
 ### M1 non-goals (at the time)
@@ -84,6 +84,7 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 | **Repo context Phase A** | Deterministic bootstrap + context allowlist injected into orchestrator + first specialist wave. [→](./repo-context.md) |
 | **Issue-tracker callback** | Best-effort `run.completed` POST to external tracker (POC, no auth) — used with local-issues |
 | **Run history / delete** | `GET /runs`, UI sidebar, `DELETE /runs/:id` for test cleanup |
+| **Config observability** | Config tab + `GET /config/snapshot` — resolved essentials provenance (env / pi / default) + wiring |
 
 ---
 
@@ -96,5 +97,5 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 - **First-class webhook trigger** in Helix core (today: HTTP `POST /runs` + external local-issues)
 - **Subprocess isolation** for untrusted specialists
 - **Manage CLI** (`helix manage`) parity
-- **Settings UI/API** — edit config/secrets without hand-editing files (related to guardrail presets)
-- **pi settings** — explicit `SettingsManager.inMemory(...)` Helix defaults when `inheritPi` is false
+- **Settings UI/API** — edit wiring/secrets without hand-editing files (related to guardrail presets)
+- **pi settings** — explicit `SettingsManager.inMemory(...)` Helix defaults for isolated sessions

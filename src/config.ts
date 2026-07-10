@@ -1,40 +1,25 @@
 /**
  * Loads + validates `.helix/config.json`.
  *
- * v1 schema is intentionally small. We extend it as features land.
+ * Config is **wiring only**: workflow, loops, merge gate, triggers,
+ * deliverable, extensions, repoContext. Essentials (API key, model) come from
+ * `.env` or the operator's global pi install — see `config/env.ts` and
+ * `providers/openrouter.ts`.
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { RepoContextOptions } from "./context/bootstrap.js";
-import {
-  applyEnvModelToConfig,
-  loadProjectEnv,
-  repoRootFromHelixDir,
-} from "./config/env.js";
+import { loadProjectEnv, repoRootFromHelixDir } from "./config/env.js";
 
 export interface HelixConfig {
-  provider: {
-    name: "openrouter";
-    apiKeyEnv?: string; // default OPENROUTER_API_KEY
-    defaultModel?: string;
-  };
   orchestrator: {
-    model: string;
     workflow: string[]; // specialist names, default order
     maxIterations?: number;
     loops?: Record<string, { backTo: string; maxRetries: number }>;
   };
   /**
-   * When true, Helix falls back to the operator's global pi config
-   * (`~/.pi/agent/`) for secrets, model definitions, skills, extensions, and
-   * settings — as a read-only last resort. When false (default), Helix is
-   * fully self-contained: env var / `~/.helix/` only, never touches `~/.pi/`.
-   */
-  inheritPi?: boolean;
-  /**
    * Repo-local extensions (arbitrary in-process code). OFF by default for
-   * safety/portability. Plumbing only for now — enabling later is a config
-   * flip, no refactor.
+   * safety/portability.
    */
   extensions?: {
     enabled?: boolean; // default false
@@ -61,8 +46,7 @@ export interface HelixConfig {
   };
   /**
    * Post-run deliverable side effects. GitHub PR create/merge via `gh` is
-   * **off by default** so local-issues / inline demos do not require GitHub.
-   * Set `deliverable.pr: true` (and usually `triggers.github.repo`) to enable.
+   * **off by default**. Set `deliverable.pr: true` to enable.
    */
   deliverable?: {
     /** Create/merge a GitHub PR after a successful run. Default false. */
@@ -71,8 +55,7 @@ export interface HelixConfig {
 }
 
 const DEFAULTS: Partial<HelixConfig> = {
-  orchestrator: { model: "", workflow: ["planner", "dev", "verifier"], maxIterations: 6 },
-  inheritPi: false,
+  orchestrator: { workflow: ["planner", "dev", "verifier"], maxIterations: 6 },
   extensions: { enabled: false },
   repoContext: { enabled: true },
   deliverable: { pr: false },
@@ -82,16 +65,19 @@ export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixCo
   loadProjectEnv(repoRootFromHelixDir(helixDir));
 
   const raw = readFileSync(resolve(helixDir, "config.json"), "utf-8");
-  const parsed = JSON.parse(raw) as Partial<HelixConfig>;
-  let config: HelixConfig = {
-    provider: parsed.provider ?? { name: "openrouter", apiKeyEnv: "OPENROUTER_API_KEY" },
+  const parsed = JSON.parse(raw) as Partial<HelixConfig> & {
+    // Legacy fields ignored if present (pre-wiring-only configs).
+    provider?: unknown;
+    inheritPi?: unknown;
+    orchestrator?: Partial<HelixConfig["orchestrator"]> & { model?: string };
+  };
+
+  const config: HelixConfig = {
     orchestrator: {
-      model: parsed.orchestrator?.model ?? DEFAULTS.orchestrator!.model!,
       workflow: parsed.orchestrator?.workflow ?? DEFAULTS.orchestrator!.workflow!,
       maxIterations: parsed.orchestrator?.maxIterations ?? DEFAULTS.orchestrator!.maxIterations,
       loops: parsed.orchestrator?.loops,
     },
-    inheritPi: parsed.inheritPi ?? DEFAULTS.inheritPi,
     extensions: {
       enabled: parsed.extensions?.enabled ?? DEFAULTS.extensions!.enabled!,
       paths: parsed.extensions?.paths,
@@ -108,15 +94,9 @@ export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixCo
     mergeGate: parsed.mergeGate,
   };
 
-  config = applyEnvModelToConfig(config);
-
-  if (!config.provider.name) throw new Error("config: provider.name is required");
-  if (!config.orchestrator.model) {
-    throw new Error(
-      "config: orchestrator.model is required (set in .helix/config.json or HELIX_MODEL in .env)"
-    );
+  if (config.orchestrator.workflow.length === 0) {
+    throw new Error("config: orchestrator.workflow must list at least one specialist");
   }
-  if (config.orchestrator.workflow.length === 0) throw new Error("config: orchestrator.workflow must list at least one specialist");
 
   return config;
 }

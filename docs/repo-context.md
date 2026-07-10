@@ -25,7 +25,7 @@ These stack together; fixing one alone helps only partially.
 | Factor | Where | Effect |
 |---|---|---|
 | **Fresh sessions per run** | `PiSpecialistSessionFactory` uses `SessionManager.inMemory()` | No memory from prior runs or prior issues |
-| **Session isolation (`inheritPi: false`)** | `loaderBuilder.ts` sets `noContextFiles: true` | pi does not auto-load `AGENTS.md`, README, or other context files |
+| **Session isolation** | `loaderBuilder.ts` sets `noContextFiles: true` | pi does not auto-load `AGENTS.md`, README, or other context files |
 | **Planner prompt** | `.helix/agents/planner.md` | Explicitly instructs "Read the repo as needed to ground the plan" |
 | **Tool-free orchestrator** | `orchestrator/driver.ts` | Orchestrator cannot pre-read the repo; first repo contact is a specialist |
 | **Handoff = issue + prior results only** | Engine / driver | No injected repo skeleton or accumulated repo knowledge |
@@ -40,7 +40,7 @@ Helix intentionally keeps specialists **isolated** (own session, no inter-specia
 
 - Per-issue independence and auditability
 - Stale assumptions after refactors
-- Portability (`inheritPi: false` default)
+- Portability (essentials in `.env` / pi; sessions always isolated)
 
 **Preferred direction:** inject **deterministic or curated artifacts** before the first specialist tool call, and optionally **accumulate** learnings into version-controlled files under `.helix/` — not resume opaque session state.
 
@@ -63,14 +63,14 @@ Before specialists start, Helix gathers a fixed **repo skeleton** and injects it
 **Pros:** Cheap, fast, predictable.  
 **Cons:** Structural only — does not answer "where is auth implemented?" without further reads.
 
-### 2. Helix-owned context files (without full `inheritPi`)
+### 2. Helix-owned context files (without global pi inheritance)
 
-Load a **curated allowlist** of repo files into specialist sessions regardless of `inheritPi`:
+Load a **curated allowlist** of repo files into specialist sessions (sessions stay isolated from pi globals):
 
 - `AGENTS.md`, `README.md`, `docs/plan.md`
 - Optional `.helix/context/*.md` (operator-maintained)
 
-Distinct from turning on all of pi global inheritance — keeps portability, adds repo bootstrap.
+Distinct from loading all of pi's global skills/context — keeps portability, adds repo bootstrap.
 
 **Pros:** Simple; rewards good repo docs.  
 **Cons:** Token cost every run; useless if docs are missing or stale.
@@ -129,7 +129,7 @@ Persist pi sessions to disk and resume planner context next run.
 
 - **Better planner prompt** — still explores; only efficiency gains
 - **Cheaper/faster model** — lowers cost, not redundancy
-- **`inheritPi: true` alone** — does not give Helix-specific cross-run memory; breaks portable default
+- **Turning on global pi inheritance alone** — does not give Helix-specific cross-run memory; sessions stay intentionally isolated
 
 ---
 

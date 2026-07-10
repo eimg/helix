@@ -24,10 +24,14 @@ test("init: scaffolds .helix/ with config + 3 agents + typescript skill", () => 
   assert.ok(existsSync(join(dir, ".env.example")));
 
   const config = JSON.parse(readFileSync(join(dir, ".helix", "config.json"), "utf-8"));
-  assert.equal(config.provider.name, "openrouter");
-  assert.equal(config.orchestrator.model, "openrouter/xiaomi/mimo-v2.5-pro");
   assert.deepEqual(config.orchestrator.workflow, ["planner", "dev", "verifier"]);
-  assert.equal(config.inheritPi, false);
+  assert.ok(!config.provider);
+  assert.ok(!config.inheritPi);
+  assert.ok(!config.orchestrator.model);
+
+  const envExample = readFileSync(join(dir, ".env.example"), "utf-8");
+  assert.match(envExample, /OPENROUTER_API_KEY/);
+  assert.match(envExample, /HELIX_MODEL=/);
 });
 
 test("init: writes .gitignore with .helix/runs/ and .env", () => {

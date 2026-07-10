@@ -204,7 +204,7 @@ Correlation also works via headers: `X-Issues-Issue-Id`, `X-Issues-Source`. The 
 
 ```
 .helix/
-  config.json       # provider, orchestrator, triggers, mergeGate, repoContext
+  config.json       # workflow wiring, triggers, mergeGate, repoContext
   agents/*.md       # specialists
   skills/*/SKILL.md
   context/*.md      # optional curated notes (Phase A bootstrap)
@@ -213,12 +213,11 @@ Correlation also works via headers: `X-Issues-Issue-Id`, `X-Issues-Source`. The 
 
 Useful knobs:
 
-- **`.env`** — `OPENROUTER_API_KEY`, `HELIX_MODEL` (default: `openrouter/xiaomi/mimo-v2.5-pro`). Loaded from project root; shell exports win over `.env`.
-- **`config.json`** — `provider`, `orchestrator.model`, `workflow`, `mergeGate`, `deliverable.pr`, `inheritPi`, …
-- **`agents/*.md`** — per-specialist `model:` in frontmatter (overridden by `HELIX_MODEL` when set)
+- **`.env`** — essentials: `OPENROUTER_API_KEY`, `HELIX_MODEL` (default: `openrouter/xiaomi/mimo-v2.5-pro`). Loaded from project root; shell exports win. If the API key is unset, Helix falls back to `~/.pi/agent/auth.json`.
+- **`config.json`** — wiring only: `workflow`, `loops`, `mergeGate`, `deliverable.pr`, `triggers`, `repoContext`, `extensions`
+- **`agents/*.md`** — optional per-specialist `model:` in frontmatter (overrides the default for that agent only)
 - `repoContext.enabled` (default `true`) — deterministic repo bootstrap injected into the first specialist wave
 - `deliverable.pr` (default `false`) — opt into GitHub PR create/merge via `gh` after successful runs
-- `inheritPi` (default `false`) — do not read `~/.pi/` unless you opt in
 - `mergeGate` — auto-merge thresholds (only applies when `deliverable.pr` is true)
 
 Architecture: [`AGENTS.md`](./AGENTS.md) · milestones: [`docs/plan.md`](./docs/plan.md) · Manage: [`docs/manage.md`](./docs/manage.md) · cold-start: [`docs/repo-context.md`](./docs/repo-context.md) · guardrails/escalation: [`docs/guardrails.md`](./docs/guardrails.md)

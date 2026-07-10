@@ -6,7 +6,7 @@
  */
 import { resolve } from "node:path";
 import { loadConfig, githubPrEnabled } from "./config.js";
-import { applyEnvModelToSpecialists } from "./config/env.js";
+import { resolveModelRef } from "./config/env.js";
 import { runIssue, type EngineDeps } from "./engine/engine.js";
 import { EventStream } from "./engine/eventStream.js";
 import { attachConsoleLogger } from "./engine/consoleLogger.js";
@@ -141,26 +141,24 @@ async function cmdRun(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const provider = new OpenRouterProvider({
-    apiKeyEnv: config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY",
-    inheritPi: config.inheritPi,
-  });
+  const provider = new OpenRouterProvider();
   if (!provider.hasAuth()) {
-    const keyEnv = config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY";
-    console.error(`No OpenRouter API key found. Set ${keyEnv} in .env or your environment.`);
+    console.error(
+      `No OpenRouter API key found. Set OPENROUTER_API_KEY in .env, or configure openrouter in ~/.pi/agent/auth.json.`
+    );
     process.exit(1);
   }
 
-  const specialists = applyEnvModelToSpecialists(loadSpecialists(resolve(helixDir, "agents")));
+  const specialists = loadSpecialists(resolve(helixDir, "agents"));
   if (specialists.length === 0) {
     console.error(`No specialists found in ${resolve(helixDir, "agents")}.`);
     process.exit(1);
   }
 
   const workflow = loadWorkflow(config);
-  const orchestrator = new LlmOrchestrator(provider, workflow, config.orchestrator.model, {
+  const model = resolveModelRef().value;
+  const orchestrator = new LlmOrchestrator(provider, workflow, model, {
     helixDir,
-    inheritPi: config.inheritPi,
     extensions: config.extensions,
   });
 
@@ -169,7 +167,7 @@ async function cmdRun(args: string[]): Promise<void> {
 
   const factory = new PiSpecialistSessionFactory(provider, specialists, {
     helixDir,
-    inheritPi: config.inheritPi,
+    defaultModel: model,
     extensions: config.extensions,
   });
 
@@ -228,8 +226,9 @@ async function cmdServe(args: string[]): Promise<void> {
   });
 
   if (!ctx.provider.hasAuth()) {
-    const keyEnv = config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY";
-    console.error(`No OpenRouter API key found. Set ${keyEnv} in .env or your environment.`);
+    console.error(
+      `No OpenRouter API key found. Set OPENROUTER_API_KEY in .env, or configure openrouter in ~/.pi/agent/auth.json.`
+    );
     process.exit(1);
   }
 

@@ -1,15 +1,26 @@
 /**
- * Project-local `.env` loading for Helix.
+ * Project-local `.env` loading + model resolution for Helix.
  *
  * Loaded from the repo root (parent of `.helix/`). Values are applied to
  * `process.env` only when not already set — shell exports win.
+ *
+ * Default model: `HELIX_MODEL` in env, else the shipped Helix default.
+ * Used for orchestrator, manage, and any specialist without frontmatter `model:`.
+ * A specialist's own `model:` always wins over the default.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { HelixConfig } from "../config.js";
-import type { SpecialistDefinition } from "../engine/types.js";
+import { HELIX_DEFAULT_MODEL } from "./defaults.js";
 
 export const HELIX_MODEL_ENV = "HELIX_MODEL";
+
+export type ModelSource = "env" | "default";
+
+export interface ResolvedModel {
+  value: string;
+  source: ModelSource;
+  detail: string;
+}
 
 /** Parse a dotenv-style file into key/value pairs. */
 export function parseEnvFile(content: string): Record<string, string> {
@@ -58,19 +69,19 @@ export function loadProjectEnv(repoRoot: string): void {
   }
 }
 
-/** Apply `HELIX_MODEL` to orchestrator config when set. */
-export function applyEnvModelToConfig(config: HelixConfig): HelixConfig {
-  const model = process.env[HELIX_MODEL_ENV]?.trim();
-  if (!model) return config;
+/**
+ * Resolve the active default model (orchestrator, manage, and specialists
+ * without their own frontmatter model).
+ * `HELIX_MODEL` wins; otherwise the shipped Helix default.
+ */
+export function resolveModelRef(): ResolvedModel {
+  const fromEnv = process.env[HELIX_MODEL_ENV]?.trim();
+  if (fromEnv) {
+    return { value: fromEnv, source: "env", detail: HELIX_MODEL_ENV };
+  }
   return {
-    ...config,
-    orchestrator: { ...config.orchestrator, model },
+    value: HELIX_DEFAULT_MODEL,
+    source: "default",
+    detail: "Helix shipped default (set HELIX_MODEL in .env to override)",
   };
-}
-
-/** Apply `HELIX_MODEL` to specialist definitions when set. */
-export function applyEnvModelToSpecialists(specialists: SpecialistDefinition[]): SpecialistDefinition[] {
-  const model = process.env[HELIX_MODEL_ENV]?.trim();
-  if (!model) return specialists;
-  return specialists.map((s) => ({ ...s, model }));
 }

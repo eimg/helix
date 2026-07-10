@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { loadConfig, type HelixConfig } from "../config.js";
-import { applyEnvModelToSpecialists } from "../config/env.js";
+import { resolveModelRef } from "../config/env.js";
 import { runIssue, type EngineDeps } from "../engine/engine.js";
 import { EventStream } from "../engine/eventStream.js";
 import { DEFAULT_GATE_CONFIG } from "../orchestrator/gates.js";
@@ -25,6 +25,8 @@ export interface RunContext {
   helixDir: string;
   cwd: string;
   config: HelixConfig;
+  /** Resolved orchestrator/manage model (from HELIX_MODEL or shipped default). */
+  model: string;
   workflow: Workflow;
   provider: PiProvider;
   specialists: SpecialistDefinition[];
@@ -52,11 +54,9 @@ export function createRunContext(opts: RunContextOptions = {}): RunContext {
   const cwd = opts.cwd ?? resolve(helixDir, "..");
   const config = loadConfig(helixDir);
   const workflow = loadWorkflow(config);
-  const provider = opts.provider ?? new OpenRouterProvider({
-    apiKeyEnv: config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY",
-    inheritPi: config.inheritPi,
-  });
-  const specialists = applyEnvModelToSpecialists(loadSpecialists(resolve(helixDir, "agents")));
+  const model = resolveModelRef().value;
+  const provider = opts.provider ?? new OpenRouterProvider();
+  const specialists = loadSpecialists(resolve(helixDir, "agents"));
   const store = opts.store ?? new FileRunStore(resolve(helixDir, "runs"));
   const deliverable = opts.deliverable ?? new NoOpDeliverablePipeline();
 
@@ -64,6 +64,7 @@ export function createRunContext(opts: RunContextOptions = {}): RunContext {
     helixDir,
     cwd,
     config,
+    model,
     workflow,
     provider,
     specialists,
@@ -91,10 +92,9 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
   const eventStream = new EventStream();
   const orchestrator =
     ctx.createOrchestrator?.(ctx) ??
-    new LlmOrchestrator(ctx.provider, ctx.workflow, ctx.config.orchestrator.model, {
+    new LlmOrchestrator(ctx.provider, ctx.workflow, ctx.model, {
       cwd: ctx.cwd,
       helixDir: ctx.helixDir,
-      inheritPi: ctx.config.inheritPi,
       extensions: ctx.config.extensions,
     });
 
@@ -103,7 +103,7 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
     new PiSpecialistSessionFactory(ctx.provider, ctx.specialists, {
       cwd: ctx.cwd,
       helixDir: ctx.helixDir,
-      inheritPi: ctx.config.inheritPi,
+      defaultModel: ctx.model,
       extensions: ctx.config.extensions,
     });
 

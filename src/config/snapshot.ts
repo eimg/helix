@@ -1,17 +1,16 @@
 /**
  * Read-only observability snapshot of the active Helix runtime config.
  *
- * Surfaces what is actually in effect after multi-level resolution
- * (env → ~/.helix → ~/.pi when inheritPi → repo `.helix/config.json`),
- * without exposing secret values.
+ * Essentials resolve in two steps: `.env` / process env, then the operator's
+ * global pi install. `.helix/config.json` is wiring only (workflow, gates, …).
  */
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { HelixConfig } from "../config.js";
 import { githubPrEnabled } from "../config.js";
-import { HELIX_MODEL_ENV, repoRootFromHelixDir } from "./env.js";
+import { OPENROUTER_API_KEY_ENV } from "./defaults.js";
+import { HELIX_MODEL_ENV, resolveModelRef, repoRootFromHelixDir } from "./env.js";
 import {
-  getHelixHome,
   getPiAgentDir,
   resolveAuthFile,
   resolveModelsFile,
@@ -25,9 +24,8 @@ import { loadManageInventory } from "../manage/inventory.js";
 
 export type ConfigSource =
   | "env"
-  | "config"
+  | "default"
   | "agent"
-  | "helix_home"
   | "pi"
   | "built_in"
   | "none";
@@ -43,7 +41,6 @@ export interface ConfigSnapshot {
   paths: {
     helixDir: string;
     cwd: string;
-    helixHome: string;
     piAgentDir: string;
     envFile: string;
     envFileExists: boolean;
@@ -67,7 +64,6 @@ export interface ConfigSnapshot {
     }>;
   };
   flags: {
-    inheritPi: boolean;
     extensionsEnabled: boolean;
     extensionPaths: string[];
     repoContextEnabled: boolean;
@@ -89,29 +85,28 @@ export interface ConfigSnapshot {
     agentsDir: string;
     skillsDir: string;
   };
-  /** Raw merged config (no secrets). Useful for operators who want the full object. */
+  /** Raw merged wiring config (no secrets). */
   config: HelixConfig;
 }
 
 export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
   const paths = resolvePaths();
-  const apiKeyEnv = ctx.config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY";
-  const inheritPi = ctx.config.inheritPi === true;
   const envFile = resolve(repoRootFromHelixDir(ctx.helixDir), ".env");
   const helixModelEnvSet = Boolean(process.env[HELIX_MODEL_ENV]?.trim());
+  const resolvedModel = resolveModelRef();
 
-  const auth = resolveAuthSource(apiKeyEnv, inheritPi, paths);
-  const modelsFilePath = resolveModelsFile(inheritPi, paths);
+  const auth = resolveAuthSource(paths);
+  const modelsFilePath = resolveModelsFile(paths);
   const modelsFile: ResolvedValue<string | null> = modelsFilePath
     ? {
         value: modelsFilePath,
-        source: modelsFilePath === paths.helixModelsFile ? "helix_home" : "pi",
+        source: "pi",
         detail: modelsFilePath,
       }
     : {
         value: null,
         source: "built_in",
-        detail: inheritPi ? "pi built-in models" : "in-memory / built-in (no models.json)",
+        detail: "pi built-in models (no models.json)",
       };
 
   const inventory = loadManageInventory(ctx.helixDir);
@@ -122,14 +117,13 @@ export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
     paths: {
       helixDir: ctx.helixDir,
       cwd: ctx.cwd,
-      helixHome: getHelixHome(),
       piAgentDir: getPiAgentDir(),
       envFile,
       envFileExists: existsSync(envFile),
     },
     provider: {
-      name: ctx.config.provider.name,
-      apiKeyEnv,
+      name: "openrouter",
+      apiKeyEnv: OPENROUTER_API_KEY_ENV,
       authConfigured: ctx.provider.hasAuth(),
       authSource: auth.source,
       authDetail: auth.detail,
@@ -137,15 +131,14 @@ export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
     },
     models: {
       orchestrator: {
-        value: ctx.config.orchestrator.model,
-        source: helixModelEnvSet ? "env" : "config",
-        detail: helixModelEnvSet ? HELIX_MODEL_ENV : ".helix/config.json",
+        value: ctx.model,
+        source: resolvedModel.source,
+        detail: resolvedModel.detail,
       },
       helixModelEnvSet,
-      specialists: ctx.specialists.map((s) => specialistModelRow(s, helixModelEnvSet, workflowSet)),
+      specialists: ctx.specialists.map((s) => specialistModelRow(s, resolvedModel, workflowSet)),
     },
     flags: {
-      inheritPi,
       extensionsEnabled: ctx.config.extensions?.enabled === true,
       extensionPaths: [
         resolve(ctx.helixDir, "extensions"),
@@ -179,21 +172,9 @@ export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
 
 function specialistModelRow(
   s: SpecialistDefinition,
-  helixModelEnvSet: boolean,
+  defaultResolved: ReturnType<typeof resolveModelRef>,
   workflowSet: Set<string>
 ): ConfigSnapshot["models"]["specialists"][number] {
-  if (helixModelEnvSet) {
-    return {
-      name: s.name,
-      model: {
-        value: s.model ?? null,
-        source: "env",
-        detail: HELIX_MODEL_ENV,
-      },
-      description: s.description,
-      inWorkflow: workflowSet.has(s.name),
-    };
-  }
   if (s.model) {
     return {
       name: s.name,
@@ -209,29 +190,22 @@ function specialistModelRow(
   return {
     name: s.name,
     model: {
-      value: null,
-      source: "none",
-      detail: "no model in agent frontmatter (orchestrator / provider default)",
+      value: defaultResolved.value,
+      source: defaultResolved.source,
+      detail: defaultResolved.detail,
     },
     description: s.description,
     inWorkflow: workflowSet.has(s.name),
   };
 }
 
-function resolveAuthSource(
-  apiKeyEnv: string,
-  inheritPi: boolean,
-  paths: PathResolution
-): { source: ConfigSource; detail?: string } {
-  if (process.env[apiKeyEnv]) {
-    return { source: "env", detail: apiKeyEnv };
+function resolveAuthSource(paths: PathResolution): { source: ConfigSource; detail?: string } {
+  if (process.env[OPENROUTER_API_KEY_ENV]) {
+    return { source: "env", detail: OPENROUTER_API_KEY_ENV };
   }
-  const authFile = resolveAuthFile(inheritPi, paths);
-  if (!authFile) {
-    return { source: "none", detail: "no API key configured" };
+  const authFile = resolveAuthFile(paths);
+  if (authFile) {
+    return { source: "pi", detail: authFile };
   }
-  if (authFile === paths.helixSecretsFile) {
-    return { source: "helix_home", detail: authFile };
-  }
-  return { source: "pi", detail: authFile };
+  return { source: "none", detail: "no API key configured" };
 }

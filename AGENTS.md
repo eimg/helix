@@ -70,7 +70,7 @@ helix/                          # engine + shipped presets
   src/
     cli.ts                      # `helix` entry (init / run / serve)
     config.ts                   # .helix/config.json loader/validator
-    config/paths.ts             # ~/.helix/ + ~/.pi/ resolution (inheritPi)
+    config/paths.ts             # ~/.pi/ resolution for auth/models fallback
     context/                    # Phase A repo bootstrap
     callbacks/                  # issue-tracker completion webhook (POC)
     engine/                     # core loop, event stream, console logger, types
@@ -92,7 +92,7 @@ Consumer projects carry only:
 
 ```
 <consumer-repo>/.helix/
-  config.json                   # provider, triggers, orchestrator workflow + merge gate
+  config.json                   # workflow wiring, triggers, merge gate (not secrets/models)
   agents/*.md                   # specialist definitions
   skills/*/SKILL.md             # skills (always loaded into specialist sessions)
   context/*.md                  # optional curated bootstrap notes
@@ -102,33 +102,31 @@ Consumer projects carry only:
 
 ### Portability & secrets
 
-Helix is npm-installable and self-contained: no pre-existing pi install required, and Helix never *writes* to a fallback source.
+Helix is npm-installable. Essentials resolve in **two steps** only — `.env` wins, then the operator's global pi install. There is no Helix-owned `~/.helix/` secrets/models home. `.helix/config.json` is **wiring only** (workflow, gates, triggers).
 
-**Resource resolution (first wins):**
+**Essentials (first wins):**
 
-| Resource | 1. Env var (portable default) | 2. `~/.helix/` | 3. `~/.pi/agent/` |
-|---|---|---|---|
-| Secrets (API keys) | `.env` (`OPENROUTER_API_KEY`) → `setRuntimeApiKey` | `secrets.json` | `auth.json` — **only if `inheritPi`** |
-| Models (runtime override) | `.env` (`HELIX_MODEL`) | — | — |
-| Model/provider defs | — | `models.json` | `models.json` — **only if `inheritPi`** |
-| Skills | — | `.helix/skills/` (always) | global pi skills — only if `inheritPi` |
-| Extensions | — | `.helix/extensions/` (only if `extensions.enabled`) | global pi extensions — only if `inheritPi` |
+| Resource | 1. Project `.env` / process env | 2. `~/.pi/agent/` |
+|---|---|---|
+| Secrets (API keys) | `OPENROUTER_API_KEY` → runtime override | `auth.json` |
+| Default model | `HELIX_MODEL` (else Helix shipped default) — used by orchestrator and specialists without `model:` | — |
+| Model/provider defs | — | `models.json` (else pi built-ins) |
 
-**`inheritPi` (default `false`)** is one toggle gating ALL access to the operator's global pi config. When false, Helix never reads `~/.pi/` — not for secrets, not for models, not for skills/extensions/settings. When true, pi's global dir is a read-only last-resort fallback, and pi's default skill/extension discovery is enabled.
+**Repo-local (always / config-gated):**
 
-**Repo-local extensions** (`extensions.enabled`, default `false`) are orthogonal to `inheritPi`: they govern whether `.helix/extensions/` code runs in-process, regardless of global pi inheritance.
+| Resource | Behavior |
+|---|---|
+| Skills | `.helix/skills/` always loaded into specialist sessions |
+| Agents | `.helix/agents/` loaded by Helix (not pi) |
+| Extensions | `.helix/extensions/` only if `extensions.enabled` |
 
-Local `.helix/skills/` are **always loaded** into specialist sessions (via pi's `additionalSkillPaths`, honored even with `noSkills`).
-
-Specialist and orchestrator sessions are **isolated by default** when `inheritPi` is false: `noExtensions`, `noSkills`, `noContextFiles`, `noThemes`, `noPromptTemplates` are all set. Built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`) are unaffected — they are tool factories, not extensions.
+Sessions are **always isolated** from global pi skills/extensions/context/themes/prompts (`noSkills`, `noContextFiles`, …). Auth/models may still come from pi; that is separate from session resource inheritance. Built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`) are unaffected.
 
 ## Config model
 
 ```jsonc
-// .helix/config.json
+// .helix/config.json — wiring only
 {
-  "provider": { "name": "openrouter", "apiKeyEnv": "OPENROUTER_API_KEY" },
-  "inheritPi": false,
   "extensions": { "enabled": false },
   "repoContext": { "enabled": true },
   "deliverable": { "pr": false },
@@ -136,7 +134,6 @@ Specialist and orchestrator sessions are **isolated by default** when `inheritPi
     "github": { "repo": "owner/name", "labelFilter": "helix", "mode": "poll", "intervalSec": 60 }
   },
   "orchestrator": {
-    "model": "openrouter/anthropic/claude-sonnet-4",
     "workflow": ["planner", "dev", "verifier"],
     "loops": { "verifier-fail": { "backTo": "dev", "maxRetries": 2 } }
   },
@@ -149,12 +146,19 @@ Specialist and orchestrator sessions are **isolated by default** when `inheritPi
 }
 ```
 
+```bash
+# .env — essentials (copy from .env.example)
+OPENROUTER_API_KEY=
+HELIX_MODEL=openrouter/xiaomi/mimo-v2.5-pro
+```
+
 GitHub PR create/merge runs only when `deliverable.pr` is `true` (and typically `triggers.github.repo` is set). Default is off for local-issues / inline demos.
 
 ## Testing & observability
 
-- **Injectable by design:** the engine takes swappable `Provider`, `Orchestrator`, and `SpecialistSessionFactory`, so a full run is driven with `FakeProvider` + `ScriptedOrchestrator` + `StubSpecialistFactory` — no network. **57 tests** pass.
+- **Injectable by design:** the engine takes swappable `Provider`, `Orchestrator`, and `SpecialistSessionFactory`, so a full run is driven with `FakeProvider` + `ScriptedOrchestrator` + `StubSpecialistFactory` — no network.
 - **Live event stream:** the engine emits structured `RunEvent`s (run_started, issue_fetched, orchestrator_decided, specialist_started/finished, gate_blocked, run_done/escalated/error). `consoleLogger` prints one line per event — the M1 "what's happening now" view and the foundation for further observability.
+- **Config tab:** `GET /config` + `GET /config/snapshot` show resolved essentials provenance (env vs pi vs default) and wiring.
 
 ## Starter presets
 

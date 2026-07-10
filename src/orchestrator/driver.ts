@@ -53,7 +53,6 @@ Rules:
 export interface LlmOrchestratorOptions {
   cwd?: string;
   helixDir?: string;
-  inheritPi?: boolean;
   extensions?: { enabled?: boolean; paths?: string[] };
 }
 
@@ -62,7 +61,6 @@ export class LlmOrchestrator implements Orchestrator {
   private readonly workflow: Workflow;
   private readonly cwd: string;
   private readonly helixDir: string;
-  private readonly inheritPi: boolean;
   private readonly extensions: { enabled?: boolean; paths?: string[] } | undefined;
   private session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
 
@@ -71,7 +69,6 @@ export class LlmOrchestrator implements Orchestrator {
     this.workflow = workflow;
     this.cwd = opts.cwd ?? process.cwd();
     this.helixDir = opts.helixDir ?? resolve(this.cwd, ".helix");
-    this.inheritPi = opts.inheritPi ?? false;
     this.extensions = opts.extensions;
     this._modelRef = modelRef;
   }
@@ -83,7 +80,6 @@ export class LlmOrchestrator implements Orchestrator {
     const loader = buildSessionLoader({
       cwd: this.cwd,
       helixDir: this.helixDir,
-      inheritPi: this.inheritPi,
       extensions: this.extensions,
       systemPromptOverride: SYSTEM_PROMPT,
     });

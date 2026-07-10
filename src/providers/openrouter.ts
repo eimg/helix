@@ -2,24 +2,19 @@
  * OpenRouter LLM provider — the only provider for v1.
  *
  * Wraps pi's AuthStorage + ModelRegistry, pointed at OpenRouter. A model is
- * referenced in Helix config as `provider/modelId`, where modelId may itself
- * contain slashes (OpenRouter ids look like `anthropic/claude-sonnet-4`).
+ * referenced in Helix as `provider/modelId`, where modelId may itself contain
+ * slashes (OpenRouter ids look like `anthropic/claude-sonnet-4`).
  *
- * The same AuthStorage/ModelRegistry instance is shared by the specialist
- * session factory and the LLM orchestrator driver, so every in-process pi
- * session in a run shares one credential/config source.
+ * Essentials resolve in two steps:
+ *   1. env / project `.env` (`OPENROUTER_API_KEY`) — always wins
+ *   2. `~/.pi/agent/auth.json` + `models.json` — operator's global pi install
  *
- * Secret + model resolution is HYBRID, gated by `inheritPi`:
- *   0. project `.env` (loaded into process.env by loadConfig)
- *   1. env var (OPENROUTER_API_KEY)        — runtime override, always wins over files
- *   2. ~/.helix/secrets.json               — Helix-owned
- *   3. ~/.pi/agent/auth.json               — pi fallback, ONLY if inheritPi
- * Model defs resolve the same way (~/.helix/models.json → ~/.pi/... if inheritPi).
- * When inheritPi is false, Helix never touches ~/.pi/ at all.
+ * There is no Helix-owned `~/.helix/` secrets/models home.
  */
 import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { Provider } from "../engine/types.js";
+import { OPENROUTER_API_KEY_ENV } from "../config/defaults.js";
 import { resolveAuthFile, resolveModelsFile, type PathResolution } from "../config/paths.js";
 
 /** A Provider backed by pi's AuthStorage + ModelRegistry. */
@@ -31,10 +26,6 @@ export interface PiProvider extends Provider {
 }
 
 export interface OpenRouterProviderOptions {
-  /** Env var name holding the OpenRouter API key. Default OPENROUTER_API_KEY. */
-  apiKeyEnv?: string;
-  /** Whether to fall back to the operator's global pi config. Default false. */
-  inheritPi?: boolean;
   /** Inject for tests; otherwise resolved from the filesystem. */
   paths?: PathResolution;
 }
@@ -43,33 +34,20 @@ export class OpenRouterProvider implements PiProvider {
   readonly name = "openrouter";
   readonly authStorage: AuthStorage;
   readonly modelRegistry: ModelRegistry;
-  private readonly apiKeyEnv: string;
-  private readonly inheritPi: boolean;
+  private readonly apiKeyEnv = OPENROUTER_API_KEY_ENV;
 
   constructor(opts: OpenRouterProviderOptions = {}) {
-    this.apiKeyEnv = opts.apiKeyEnv ?? "OPENROUTER_API_KEY";
-    this.inheritPi = opts.inheritPi ?? false;
+    const authFile = resolveAuthFile(opts.paths);
+    this.authStorage = authFile ? AuthStorage.create(authFile) : AuthStorage.create();
 
-    const authFile = resolveAuthFile(this.inheritPi, opts.paths);
-    // When inheritPi is false and no ~/.helix/secrets.json exists, use an
-    // in-memory store so we NEVER silently fall back to ~/.pi/agent/auth.json.
-    // The env var (setRuntimeApiKey below) is the only source then.
-    this.authStorage = authFile
-      ? AuthStorage.create(authFile)
-      : this.inheritPi
-        ? AuthStorage.create()
-        : AuthStorage.inMemory();
-
-    const modelsFile = resolveModelsFile(this.inheritPi, opts.paths);
+    const modelsFile = resolveModelsFile(opts.paths);
     this.modelRegistry = modelsFile
       ? ModelRegistry.create(this.authStorage, modelsFile)
-      : this.inheritPi
-        ? ModelRegistry.create(this.authStorage)
-        : ModelRegistry.inMemory(this.authStorage);
+      : ModelRegistry.create(this.authStorage);
 
     const key = process.env[this.apiKeyEnv];
     if (key) {
-      // Runtime override (not persisted). Wins over auth.json + env auto-resolution.
+      // Runtime override (not persisted). Wins over auth.json.
       this.authStorage.setRuntimeApiKey("openrouter", key);
     }
   }
@@ -93,7 +71,7 @@ export class OpenRouterProvider implements PiProvider {
     return m;
   }
 
-  /** True if an OpenRouter API key is available (env or a resolved auth file). */
+  /** True if an OpenRouter API key is available (env or pi auth). */
   hasAuth(): boolean {
     return Boolean(process.env[this.apiKeyEnv]) || this.modelRegistry.getProviderAuthStatus("openrouter").configured;
   }

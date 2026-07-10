@@ -27,13 +27,10 @@ export interface InitOptions {
 const PRESETS = ["typescript", "express", "react", "react-native", "expo"];
 
 const CONFIG_TEMPLATE = `{
-  "provider": { "name": "openrouter", "apiKeyEnv": "OPENROUTER_API_KEY" },
-  "inheritPi": false,
   "extensions": { "enabled": false },
   "repoContext": { "enabled": true },
   "deliverable": { "pr": false },
   "orchestrator": {
-    "model": "openrouter/xiaomi/mimo-v2.5-pro",
     "workflow": ["planner", "dev", "verifier"],
     "maxIterations": 6,
     "loops": { "verifier-fail": { "backTo": "dev", "maxRetries": 2 } }

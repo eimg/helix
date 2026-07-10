@@ -9,36 +9,37 @@ import { loadWorkflow, describeWorkflow } from "../src/orchestrator/workflow.js"
 
 const fixtureDir = resolve(import.meta.dirname, "..", "examples", "ts", ".helix");
 
-test("config: loads and validates the TS fixture config", () => {
+test("config: loads and validates the TS fixture config (wiring only)", () => {
   const config = loadConfig(fixtureDir);
-  assert.equal(config.provider.name, "openrouter");
-  assert.equal(config.orchestrator.model, "openrouter/xiaomi/mimo-v2.5-pro");
   assert.deepEqual(config.orchestrator.workflow, ["planner", "dev", "verifier"]);
   assert.equal(config.orchestrator.loops?.["verifier-fail"]?.backTo, "dev");
   assert.equal(config.triggers?.github?.repo, "acme/widget");
   assert.equal(config.mergeGate?.requireVerifierPass, true);
-  // inheritPi + extensions defaults (explicitly set false in the fixture)
-  assert.equal(config.inheritPi, false);
   assert.equal(config.extensions?.enabled, false);
+  assert.ok(!("provider" in config));
+  assert.ok(!("inheritPi" in config));
+  assert.ok(!("model" in config.orchestrator));
 });
 
-test("config: inheritPi and extensions default to false when absent", () => {
+test("config: extensions default to false when absent; ignores legacy essentials fields", () => {
   const tmp = mkdtempSync(join(tmpdir(), "helix-cfg-"));
   writeFileSync(join(tmp, "config.json"), JSON.stringify({
-    provider: { name: "openrouter" },
+    provider: { name: "openrouter", apiKeyEnv: "OPENROUTER_API_KEY" },
+    inheritPi: true,
     orchestrator: { model: "openrouter/x", workflow: ["dev"] },
   }));
   const config = loadConfig(tmp);
-  assert.equal(config.inheritPi, false);
   assert.equal(config.extensions?.enabled, false);
   assert.equal(config.deliverable?.pr, false);
+  assert.deepEqual(config.orchestrator.workflow, ["dev"]);
+  assert.ok(!("model" in config.orchestrator));
+  assert.ok(!("inheritPi" in config));
 });
 
 test("config: deliverable.pr can be enabled explicitly", () => {
   const tmp = mkdtempSync(join(tmpdir(), "helix-cfg-pr-"));
   writeFileSync(join(tmp, "config.json"), JSON.stringify({
-    provider: { name: "openrouter" },
-    orchestrator: { model: "openrouter/x", workflow: ["dev"] },
+    orchestrator: { workflow: ["dev"] },
     deliverable: { pr: true },
   }));
   const config = loadConfig(tmp);
@@ -52,7 +53,7 @@ test("loader: discovers the three preset specialists with frontmatter + body", (
   assert.deepEqual(names, ["dev", "planner", "verifier"]);
   const planner = defs.find((d) => d.name === "planner")!;
   assert.ok(planner.description.length > 0);
-  assert.equal(planner.model, "openrouter/xiaomi/mimo-v2.5-pro");
+  assert.equal(planner.model, undefined);
   assert.ok(planner.systemPrompt.length > 0);
   assert.ok(planner.tools?.includes("read"));
   assert.equal(planner.source, "project");

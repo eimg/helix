@@ -34,7 +34,7 @@ function renderSnapshot(s) {
     section("Triggers", renderTriggers(s)),
     section("Repo context", renderRepoContext(s)),
     section("Resources", renderResources(s)),
-    section("Raw config", `<pre class="config-raw">${escapeHtml(JSON.stringify(s.config, null, 2))}</pre>`),
+    section("Raw wiring config", `<pre class="config-raw">${escapeHtml(JSON.stringify(s.config, null, 2))}</pre>`),
   ].join("");
 }
 
@@ -67,9 +67,6 @@ function renderModels(s) {
       <span class="config-k">Orchestrator</span>
       <span class="config-v"><code>${escapeHtml(orch.value)}</code> ${sourceBadge(orch.source)}${detailHint(orch.detail)}</span>
     </div>
-    ${s.models.helixModelEnvSet
-      ? `<p class="config-note">HELIX_MODEL is set — overrides orchestrator and all specialist models.</p>`
-      : ""}
   </div>
   <table class="config-table">
     <thead>
@@ -103,16 +100,12 @@ function renderProvider(s) {
 
 function renderFlags(s) {
   return `<div class="config-kv">
-    ${kv("Inherit pi", boolPill(s.flags.inheritPi) + (s.flags.inheritPi
-      ? ` <span class="muted">— falls back to ~/.pi for secrets, models, skills, extensions</span>`
-      : ` <span class="muted">— self-contained; never reads ~/.pi</span>`), "inheritPi")}
     ${kv("Extensions", boolPill(s.flags.extensionsEnabled), "extensions.enabled")}
     ${kv("Repo context", boolPill(s.flags.repoContextEnabled), "repoContext.enabled")}
     ${kv("GitHub PR deliverable", boolPill(s.flags.deliverablePr), "deliverable.pr")}
     ${kv("Helix dir", `<code>${escapeHtml(s.paths.helixDir)}</code>`)}
     ${kv("Repo cwd", `<code>${escapeHtml(s.paths.cwd)}</code>`)}
-    ${kv("Helix home", `<code>${escapeHtml(s.paths.helixHome)}</code>`)}
-    ${kv("pi agent dir", `<code>${escapeHtml(s.paths.piAgentDir)}</code>${s.flags.inheritPi ? "" : ` <span class="muted">(unused)</span>`}`)}
+    ${kv("pi agent dir", `<code>${escapeHtml(s.paths.piAgentDir)}</code> <span class="muted">— auth/models fallback</span>`)}
     ${kv(".env", s.paths.envFileExists
       ? `<code>${escapeHtml(s.paths.envFile)}</code> <span class="pill done">present</span>`
       : `<code>${escapeHtml(s.paths.envFile)}</code> <span class="pill">absent</span>`)}
@@ -201,9 +194,8 @@ function kv(label, valueHtml, key) {
 function sourceBadge(source) {
   const label = {
     env: "env",
-    config: "config",
+    default: "default",
     agent: "agent",
-    helix_home: "~/.helix",
     pi: "pi",
     built_in: "built-in",
     none: "none",

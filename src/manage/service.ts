@@ -14,6 +14,8 @@ import type { ManageAuthor, ManageEvent, ManageSession } from "./types.js";
 export interface ManageServiceOptions {
   helixDir: string;
   config: HelixConfig;
+  /** Resolved model (HELIX_MODEL or shipped default). */
+  model: string;
   provider: PiProvider;
   store?: ManageStore;
   createAuthor?: (sessionId: string) => ManageAuthor;
@@ -38,8 +40,7 @@ export class ManageService {
       (() =>
         new LlmManageAuthor(this.provider, {
           helixDir: this.helixDir,
-          modelRef: opts.config.orchestrator.model,
-          inheritPi: opts.config.inheritPi,
+          modelRef: opts.model,
           extensions: opts.config.extensions,
         }));
   }

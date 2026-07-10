@@ -618,14 +618,10 @@ button.ghost {
 }
 
 .source-config,
-.source-agent {
+.source-agent,
+.source-default {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-}
-
-.source-helix_home {
-  color: var(--green);
-  border-color: color-mix(in srgb, var(--green) 35%, var(--border));
 }
 
 .source-pi {
