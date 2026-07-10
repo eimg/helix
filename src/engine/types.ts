@@ -49,6 +49,16 @@ export interface SpecialistDefinition {
   source: "project";
 }
 
+/** One line in a specialist's live activity log (tool call, assistant text, etc.). */
+export interface SpecialistActivityLine {
+  kind: "tool" | "text";
+  line: string;
+}
+
+export interface SpecialistRunOptions {
+  onActivity?: (line: SpecialistActivityLine) => void;
+}
+
 /** The result of running a specialist on a task. */
 export interface SpecialistResult {
   specialist: string;
@@ -80,6 +90,7 @@ export interface RunEvent {
     | "issue_fetched"
     | "orchestrator_decided"
     | "specialist_started"
+    | "specialist_activity"
     | "specialist_finished"
     | "gate_blocked"
     | "run_done"
@@ -139,7 +150,7 @@ export interface SpecialistSessionFactory {
 /** An isolated specialist agent session. */
 export interface SpecialistSession {
   readonly name: string;
-  run(task: string): Promise<SpecialistResult>;
+  run(task: string, opts?: SpecialistRunOptions): Promise<SpecialistResult>;
   dispose(): void;
 }
 

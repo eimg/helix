@@ -2,6 +2,7 @@
 import type {
   SpecialistDefinition,
   SpecialistResult,
+  SpecialistRunOptions,
   SpecialistSession,
   SpecialistSessionFactory,
 } from "../engine/types.js";
@@ -13,7 +14,7 @@ export class StubSpecialistSession implements SpecialistSession {
     private delayMs = 0,
     private fail = false,
   ) {}
-  async run(task: string): Promise<SpecialistResult> {
+  async run(task: string, _opts?: SpecialistRunOptions): Promise<SpecialistResult> {
     if (this.delayMs > 0) await new Promise((r) => setTimeout(r, this.delayMs));
     return {
       specialist: this.name,

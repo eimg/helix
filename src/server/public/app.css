@@ -217,6 +217,62 @@ button.ghost {
   color: color-mix(in srgb, var(--text) 85%, var(--muted));
 }
 
+.specialist-block {
+  margin: 0.35rem 0;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 40%, var(--panel));
+}
+
+.specialist-block > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.35rem 0.5rem;
+}
+
+.specialist-block > summary::-webkit-details-marker {
+  display: none;
+}
+
+.specialist-block > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 0.9rem;
+  color: var(--muted);
+}
+
+.specialist-block[open] > summary::before {
+  content: "▾";
+}
+
+.specialist-summary .specialist-status {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-left: 0.35rem;
+}
+
+.specialist-summary .specialist-status.ok { color: var(--green); }
+.specialist-summary .specialist-status.fail { color: var(--red); }
+
+.specialist-body {
+  padding: 0 0.65rem 0.55rem 1.15rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.specialist-task {
+  margin: 0.4rem 0 0.25rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.specialist-line {
+  margin: 0.15rem 0;
+  color: color-mix(in srgb, var(--text) 90%, var(--muted));
+}
+
+.specialist-line-tool { color: var(--yellow); }
+.specialist-line-text { color: color-mix(in srgb, var(--text) 85%, var(--muted)); white-space: pre-wrap; }
+
 .event.working {
   padding-left: 1.25rem;
   color: var(--muted);

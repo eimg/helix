@@ -144,6 +144,12 @@ function handleEvent(event: RunEvent): void {
       break;
     }
 
+    case "specialist_activity": {
+      const line = (event.details?.line as string | undefined) ?? event.summary;
+      if (line) indentBlock(line, 6, termWidth());
+      break;
+    }
+
     case "specialist_finished": {
       const name = (event.details?.specialist as string | undefined) ?? event.summary.split(":")[0]?.trim() ?? "specialist";
       const ok = event.details?.ok !== false;

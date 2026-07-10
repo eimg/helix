@@ -58,6 +58,45 @@ test("happy path: planner then dev -> done", async () => {
   assert.ok(events.some((e) => e.type === "orchestrator_decided"));
 });
 
+test("specialist activity: engine forwards onActivity lines as specialist_activity events", async () => {
+  const defs = [def("dev")];
+  const baseFactory = new StubSpecialistFactory(defs, { dev: "done" });
+  const factoryProxy: SpecialistSessionFactory & { definitions: SpecialistDefinition[] } = {
+    definitions: baseFactory.definitions,
+    async create(d) {
+      const base = await baseFactory.create(d);
+      return {
+        name: base.name,
+        async run(task, opts) {
+          opts?.onActivity?.({ kind: "tool", line: "→ bash npm test" });
+          return base.run(task, opts);
+        },
+        dispose: () => base.dispose(),
+      };
+    },
+  };
+  const events: RunEvent[] = [];
+  const run = await runIssue(issue, {
+    provider: new FakeProvider(),
+    orchestrator: new ScriptedOrchestrator([
+      { kind: "run", specialists: [{ specialist: "dev", task: "verify" }], reason: "run dev" },
+      { kind: "done", reason: "ok" },
+    ]),
+    specialistFactory: factoryProxy,
+    onEvent: (_run, e) => events.push(e),
+  });
+
+  assert.equal(run.status, "done");
+  const started = events.find((e) => e.type === "specialist_started");
+  const activity = events.find((e) => e.type === "specialist_activity");
+  const finished = events.find((e) => e.type === "specialist_finished");
+  assert.ok(started);
+  assert.ok(activity);
+  assert.equal(activity?.details?.line, "→ bash npm test");
+  assert.equal(activity?.details?.invocationId, started?.details?.invocationId);
+  assert.equal(finished?.details?.invocationId, started?.details?.invocationId);
+});
+
 test("parallel isolation: two specialists run concurrently with own sessions", async () => {
   const defs = [def("scout-a"), def("scout-b")];
   // Track overlap: a tiny factory wrapper that timestamps start/finish per specialist.

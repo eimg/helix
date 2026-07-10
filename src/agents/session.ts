@@ -17,7 +17,9 @@ import {
 import { resolve } from "node:path";
 import type {
   SpecialistDefinition,
+  SpecialistActivityLine,
   SpecialistResult,
+  SpecialistRunOptions,
   SpecialistSession,
   SpecialistSessionFactory,
 } from "../engine/types.js";
@@ -98,7 +100,15 @@ export class PiSpecialistSession implements SpecialistSession {
     private readonly session: Awaited<ReturnType<typeof createAgentSession>>["session"],
   ) {}
 
-  async run(task: string): Promise<SpecialistResult> {
+  async run(task: string, opts?: SpecialistRunOptions): Promise<SpecialistResult> {
+    const onActivity = opts?.onActivity;
+    const unsubscribe = onActivity
+      ? this.session.subscribe((event) => {
+          const line = mapSessionEvent(event);
+          if (line) onActivity(line);
+        })
+      : undefined;
+
     try {
       await this.session.prompt(task);
     } catch (err) {
@@ -110,6 +120,8 @@ export class PiSpecialistSession implements SpecialistSession {
         output: "",
         error: `session prompt failed: ${message}`,
       };
+    } finally {
+      unsubscribe?.();
     }
 
     const messages = this.session.messages as Message[];
@@ -171,3 +183,71 @@ function aggregateUsage(messages: Message[]): { input: number; output: number; c
 
 // keep the Model/Api imports referenced for type narrowing
 export type { Model, Api };
+
+const MAX_ACTIVITY_LINE = 400;
+
+function mapSessionEvent(event: { type: string; [key: string]: unknown }): SpecialistActivityLine | null {
+  switch (event.type) {
+    case "tool_execution_start": {
+      const toolName = String(event.toolName ?? "tool");
+      const args = formatToolArgs(event.args);
+      return { kind: "tool", line: `→ ${toolName}${args ? ` ${args}` : ""}` };
+    }
+    case "tool_execution_end": {
+      const toolName = String(event.toolName ?? "tool");
+      const isError = event.isError === true;
+      const preview = formatToolResult(event.result);
+      const status = isError ? "failed" : "done";
+      return { kind: "tool", line: `← ${toolName} ${status}${preview ? `: ${preview}` : ""}` };
+    }
+    case "turn_end": {
+      const message = event.message as { role?: string; content?: unknown[] } | undefined;
+      if (!message || message.role !== "assistant") return null;
+      const text = extractAssistantText(message.content);
+      if (!text) return null;
+      return { kind: "text", line: truncateActivity(text) };
+    }
+    default:
+      return null;
+  }
+}
+
+function formatToolArgs(args: unknown): string {
+  if (!args || typeof args !== "object") return "";
+  const record = args as Record<string, unknown>;
+  if (typeof record.command === "string") return truncateActivity(record.command);
+  if (typeof record.path === "string") return truncateActivity(record.path);
+  try {
+    return truncateActivity(JSON.stringify(args));
+  } catch {
+    return "";
+  }
+}
+
+function formatToolResult(result: unknown): string {
+  if (!result || typeof result !== "object") return "";
+  const record = result as { content?: Array<{ type?: string; text?: string }> };
+  const text = (record.content ?? [])
+    .filter((part): part is { type: "text"; text: string } => part.type === "text" && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+  return text ? truncateActivity(text, 200) : "";
+}
+
+function extractAssistantText(content: unknown[] | undefined): string {
+  if (!content) return "";
+  return content
+    .filter((part): part is { type: "text"; text: string } => {
+      return typeof part === "object" && part !== null && (part as { type?: string }).type === "text" && typeof (part as { text?: string }).text === "string";
+    })
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+}
+
+function truncateActivity(text: string, max = MAX_ACTIVITY_LINE): string {
+  const trimmed = text.trim().replace(/\s+/g, " ");
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, max).trimEnd()}…`;
+}
