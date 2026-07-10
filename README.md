@@ -6,6 +6,8 @@ Helix takes a work item and drives it through specialist agents (planner, dev, v
 
 Package: [`@eimg/helix`](https://github.com/eimg/helix) · command: `helix`
 
+![Helix run console](https://i.imgur.com/D1cPcgq.png)
+
 ## Requirements
 
 - Node.js ≥ 20
