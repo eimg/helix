@@ -19,8 +19,11 @@ let userPinnedSelection = false;
 /** @type {Set<string>} */
 const knownRunIds = new Set();
 let runHistory = [];
+/** @type {Map<string, HTMLDetailsElement>} */
+const specialistBlocks = new Map();
 /** @type {Map<string, HTMLElement>} */
 const workingEls = new Map();
+
 /** @type {Set<string>} */
 const activeSpecialists = new Set();
 
@@ -41,6 +44,7 @@ window.addEventListener("resize", syncHistoryHeight);
 
 clearBtn.addEventListener("click", () => {
   logEl.innerHTML = "";
+  specialistBlocks.clear();
   clearAllWorking();
   showLogPlaceholder(selectedRunId ? "Log cleared." : undefined);
 });
@@ -231,6 +235,7 @@ async function openRun(id) {
   renderHistory();
   resultPanel.classList.add("hidden");
   logEl.innerHTML = "";
+  specialistBlocks.clear();
   clearAllWorking();
   setPill("running", "running");
 
@@ -283,8 +288,16 @@ async function fetchRun(id) {
 }
 
 function handleEvent(event) {
-  for (const line of formatEvent(event)) {
-    appendLine(line);
+  if (event.type === "specialist_started") {
+    handleSpecialistStarted(event);
+  } else if (event.type === "specialist_activity") {
+    handleSpecialistActivity(event);
+  } else if (event.type === "specialist_finished") {
+    handleSpecialistFinished(event);
+  } else {
+    for (const line of formatEvent(event)) {
+      appendLine(line);
+    }
   }
 
   switch (event.type) {
@@ -314,6 +327,91 @@ function handleEvent(event) {
       clearAllWorking();
       break;
   }
+}
+
+function specialistKey(event) {
+  const name = event.details?.specialist ?? event.summary;
+  const invocationId = event.details?.invocationId;
+  return invocationId != null ? `${name}:${invocationId}` : name;
+}
+
+function handleSpecialistStarted(event) {
+  const name = event.details?.specialist ?? event.summary;
+  const task = previewText(event.details?.task ?? "", 100);
+  const ts = timeStr(event.ts);
+  const key = specialistKey(event);
+
+  const empty = logEl.querySelector(".log-empty");
+  if (empty) empty.remove();
+
+  const details = document.createElement("details");
+  details.className = "specialist-block";
+  details.dataset.specialistKey = key;
+  details.innerHTML =
+    `<summary class="specialist-summary">` +
+    `<span class="ts">${ts}</span> ` +
+    `<span class="tag tag-start">→ ${escapeHtml(name)}</span> ` +
+    `<span class="specialist-status">running</span>` +
+  `</summary>` +
+    `<div class="specialist-body">` +
+    (task ? `<p class="specialist-task">${escapeHtml(task)}</p>` : "") +
+    `</div>`;
+  logEl.appendChild(details);
+  specialistBlocks.set(key, details);
+  scrollLog();
+}
+
+function handleSpecialistActivity(event) {
+  const key = specialistKey(event);
+  const block = specialistBlocks.get(key);
+  if (!block) return;
+  const body = block.querySelector(".specialist-body");
+  if (!body) return;
+  const kind = event.details?.kind === "text" ? "text" : "tool";
+  const line = document.createElement("p");
+  line.className = `specialist-line specialist-line-${kind}`;
+  line.textContent = String(event.details?.line ?? event.summary);
+  body.appendChild(line);
+  scrollLog();
+}
+
+function handleSpecialistFinished(event) {
+  const name = event.details?.specialist ?? event.summary;
+  const ok = event.details?.ok !== false;
+  const key = specialistKey(event);
+  const block = specialistBlocks.get(key);
+
+  if (block) {
+    const status = block.querySelector(".specialist-status");
+    if (status) {
+      status.className = `specialist-status ${ok ? "ok" : "fail"}`;
+      status.textContent = ok ? "finished" : "failed";
+    }
+    const summaryTag = block.querySelector(".tag-start");
+    if (summaryTag) {
+      summaryTag.className = `tag ${ok ? "tag-ok" : "tag-fail"}`;
+      summaryTag.textContent = `${ok ? "✓" : "✗"} ${name}`;
+    }
+    const output = String(event.details?.output ?? event.details?.error ?? "").trim();
+    if (output) {
+      const body = block.querySelector(".specialist-body");
+      const hasText = body?.querySelector(".specialist-line-text");
+      if (body && !hasText) {
+        const line = document.createElement("p");
+        line.className = "specialist-line specialist-line-text";
+        line.textContent = previewText(output, 800);
+        body.appendChild(line);
+      }
+    }
+  } else {
+    const ts = timeStr(event.ts);
+    const tag = ok ? "tag-ok" : "tag-fail";
+    const icon = ok ? "✓" : "✗";
+    appendLine(
+      `<p class="event"><span class="ts">${ts}</span> <span class="tag ${tag}">${icon} ${escapeHtml(name)}</span> ${ok ? "finished" : "failed"}</p>`
+    );
+  }
+  scrollLog();
 }
 
 function setWorking(key, label) {
@@ -410,25 +508,10 @@ function formatEvent(event) {
       if (d?.reason) lines.push(`<span class="detail">${escapeHtml(previewText(d.reason, 120))}</span>`);
       break;
     }
-    case "specialist_started": {
-      const name = event.details?.specialist ?? event.summary;
-      const task = previewText(event.details?.task ?? "", 100);
-      lines.push(`<p class="event"><span class="ts">${ts}</span> <span class="tag tag-start">→ ${escapeHtml(name)}</span> starting</p>`);
-      if (task) lines.push(`<span class="detail">${escapeHtml(task)}</span>`);
+    case "specialist_started":
+    case "specialist_activity":
+    case "specialist_finished":
       break;
-    }
-    case "specialist_finished": {
-      const name = event.details?.specialist ?? event.summary;
-      const ok = event.details?.ok !== false;
-      const output = event.details?.output ?? "";
-      const error = event.details?.error ?? "";
-      const tag = ok ? "tag-ok" : "tag-fail";
-      const icon = ok ? "✓" : "✗";
-      lines.push(`<p class="event"><span class="ts">${ts}</span> <span class="tag ${tag}">${icon} ${escapeHtml(name)}</span> ${ok ? "finished" : "failed"}</p>`);
-      const body = previewText(ok ? output : error || output, 160);
-      if (body) lines.push(`<span class="detail">${escapeHtml(body)}</span>`);
-      break;
-    }
     case "run_done":
       lines.push(section(`<span class="ts">${ts}</span> <span class="tag tag-done">■ Done</span> ${escapeHtml(event.summary)}`));
       break;

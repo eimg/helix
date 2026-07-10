@@ -197,20 +197,36 @@ async function runSpecialists(
         };
       }
       sessions.push(session);
+      const invocationId = Date.now();
       emit({
         ts: Date.now(),
         type: "specialist_started",
         summary: call.specialist,
-        details: { specialist: call.specialist, task: call.task },
+        details: { specialist: call.specialist, task: call.task, invocationId },
       });
       try {
-        const result = await session.run(call.task);
+        const result = await session.run(call.task, {
+          onActivity: (line) => {
+            emit({
+              ts: Date.now(),
+              type: "specialist_activity",
+              summary: `${call.specialist}: ${line.line.slice(0, 80)}`,
+              details: {
+                specialist: call.specialist,
+                invocationId,
+                kind: line.kind,
+                line: line.line,
+              },
+            });
+          },
+        });
         emit({
           ts: Date.now(),
           type: "specialist_finished",
           summary: `${call.specialist}: ${result.ok ? "ok" : "fail"}`,
           details: {
             specialist: call.specialist,
+            invocationId,
             ok: result.ok,
             output: result.output,
             error: result.error,
@@ -223,7 +239,7 @@ async function runSpecialists(
           ts: Date.now(),
           type: "specialist_finished",
           summary: `${call.specialist}: error`,
-          details: { specialist: call.specialist, ok: false, output: "", error: message },
+          details: { specialist: call.specialist, invocationId, ok: false, output: "", error: message },
         });
         return {
           specialist: call.specialist,
