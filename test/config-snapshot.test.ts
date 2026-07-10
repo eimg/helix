@@ -1,0 +1,113 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import request from "supertest";
+import { resolve } from "node:path";
+import { createApp } from "../src/server/app.js";
+import { createRunContext } from "../src/run/bootstrap.js";
+import { MemoryRunStore } from "../src/state/runStore.js";
+import { FakeProvider } from "../src/providers/fake.js";
+import { StubSpecialistFactory } from "../src/agents/stubSession.js";
+import { ScriptedOrchestrator } from "../src/orchestrator/scripted.js";
+import { buildConfigSnapshot } from "../src/config/snapshot.js";
+import { HELIX_MODEL_ENV } from "../src/config/env.js";
+import type { OrchestratorDecision } from "../src/engine/types.js";
+import { loadSpecialists } from "../src/agents/loader.js";
+import { NoOpDeliverablePipeline } from "../src/deliverable/pipeline.js";
+
+const fixtureDir = resolve("examples/ts/.helix");
+
+function testCtx() {
+  const store = new MemoryRunStore();
+  const specialists = loadSpecialists(resolve(fixtureDir, "agents"));
+  const factory = new StubSpecialistFactory(specialists, { planner: "ok", dev: "ok", verifier: "ok" });
+  const script: OrchestratorDecision[] = [{ kind: "done", reason: "ok" }];
+
+  const ctx = createRunContext({
+    helixDir: fixtureDir,
+    store,
+    provider: new FakeProvider(),
+    deliverable: new NoOpDeliverablePipeline(),
+    createOrchestrator: () => new ScriptedOrchestrator(script),
+    createSpecialistFactory: () => factory,
+  });
+
+  return ctx;
+}
+
+test("buildConfigSnapshot reports resolved models and provenance", () => {
+  const prev = process.env[HELIX_MODEL_ENV];
+  delete process.env[HELIX_MODEL_ENV];
+  try {
+    const ctx = testCtx();
+    const snap = buildConfigSnapshot(ctx);
+
+    assert.equal(snap.paths.helixDir, fixtureDir);
+    assert.equal(snap.provider.name, "openrouter");
+    assert.equal(snap.provider.authConfigured, true); // FakeProvider
+    assert.ok(snap.models.orchestrator.value);
+    assert.equal(snap.models.orchestrator.source, "config");
+    assert.equal(snap.models.helixModelEnvSet, false);
+    assert.ok(snap.models.specialists.length >= 1);
+    assert.ok(snap.workflow.steps.includes("planner"));
+    assert.equal(typeof snap.flags.inheritPi, "boolean");
+    assert.ok(snap.config.orchestrator);
+  } finally {
+    if (prev === undefined) delete process.env[HELIX_MODEL_ENV];
+    else process.env[HELIX_MODEL_ENV] = prev;
+  }
+});
+
+test("buildConfigSnapshot marks HELIX_MODEL override as env source", () => {
+  const prev = process.env[HELIX_MODEL_ENV];
+  process.env[HELIX_MODEL_ENV] = "openrouter/test/override-model";
+  try {
+    const ctx = testCtx();
+    const snap = buildConfigSnapshot(ctx);
+    assert.equal(snap.models.helixModelEnvSet, true);
+    assert.equal(snap.models.orchestrator.source, "env");
+    assert.equal(snap.models.orchestrator.value, "openrouter/test/override-model");
+    for (const sp of snap.models.specialists) {
+      assert.equal(sp.model.source, "env");
+      assert.equal(sp.model.value, "openrouter/test/override-model");
+    }
+  } finally {
+    if (prev === undefined) delete process.env[HELIX_MODEL_ENV];
+    else process.env[HELIX_MODEL_ENV] = prev;
+  }
+});
+
+test("GET /config serves UI and GET /config/snapshot returns JSON", async () => {
+  const ctx = testCtx();
+  const app = createApp({ ctx });
+
+  const page = await request(app).get("/config");
+  assert.equal(page.status, 200);
+  assert.match(page.text, /Helix — Config/);
+  assert.match(page.text, /id="config-root"/);
+
+  const js = await request(app).get("/config.js");
+  assert.equal(js.status, 200);
+  assert.match(js.text, /config\/snapshot/);
+
+  const snap = await request(app).get("/config/snapshot");
+  assert.equal(snap.status, 200);
+  assert.equal(snap.body.paths.helixDir, fixtureDir);
+  assert.ok(snap.body.models.orchestrator.value);
+  assert.ok(Array.isArray(snap.body.models.specialists));
+  assert.ok(snap.body.workflow.steps.length >= 1);
+  // Never leak raw secrets
+  assert.equal(snap.body.provider.apiKeyEnv, "OPENROUTER_API_KEY");
+  assert.equal(typeof snap.body.provider.authConfigured, "boolean");
+  assert.ok(!JSON.stringify(snap.body).includes("sk-"));
+});
+
+test("Run and Manage nav include Config link", async () => {
+  const ctx = testCtx();
+  const app = createApp({ ctx });
+
+  const run = await request(app).get("/");
+  assert.match(run.text, /href="\/config"/);
+
+  const manage = await request(app).get("/manage");
+  assert.match(manage.text, /href="\/config"/);
+});

@@ -478,3 +478,188 @@ button.ghost {
 .deletion-row code {
   color: var(--red);
 }
+
+/* —— Config tab —— */
+
+.config-toolbar {
+  margin: 0;
+}
+
+.config-status {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.config-root {
+  display: grid;
+  gap: 1rem;
+}
+
+.config-section .panel-head {
+  margin-bottom: 0.65rem;
+}
+
+.config-kv {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.config-kv-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 11rem) 1fr;
+  gap: 0.75rem;
+  align-items: baseline;
+  font-size: 0.88rem;
+}
+
+@media (max-width: 640px) {
+  .config-kv-row {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+}
+
+.config-k {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  align-items: flex-start;
+}
+
+.config-key {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: color-mix(in srgb, var(--muted) 75%, transparent);
+}
+
+.config-v {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.config-v code,
+.config-table code,
+.config-list code,
+.config-chip {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+
+.config-chip {
+  display: inline-block;
+  padding: 0.1rem 0.35rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin: 0.1rem 0;
+}
+
+.config-note {
+  margin: 0.65rem 0 0.35rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.config-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+}
+
+.config-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.config-table th {
+  text-align: left;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  padding: 0.35rem 0.5rem 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.config-table td {
+  padding: 0.4rem 0.5rem 0.4rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  vertical-align: top;
+}
+
+.config-table tr:last-child td {
+  border-bottom: none;
+}
+
+.source-badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-family: var(--mono);
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  vertical-align: middle;
+  margin-left: 0.25rem;
+}
+
+.source-env {
+  color: var(--yellow);
+  border-color: color-mix(in srgb, var(--yellow) 40%, var(--border));
+}
+
+.source-config,
+.source-agent {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.source-helix_home {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 35%, var(--border));
+}
+
+.source-pi {
+  color: #c4a5ff;
+  border-color: color-mix(in srgb, #c4a5ff 35%, var(--border));
+}
+
+.source-built_in,
+.source-none {
+  color: var(--muted);
+}
+
+.config-detail {
+  font-size: 0.75rem;
+  font-family: var(--mono);
+}
+
+.config-raw {
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--bg);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  max-height: 420px;
+}
+
+.config-error {
+  color: var(--red);
+}
+
+.muted {
+  color: var(--muted);
+}

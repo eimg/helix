@@ -11,6 +11,10 @@
  * Manage (experimental):
  * POST /manage/sessions, GET /manage/sessions/:id, SSE events, apply, discard
  * GET  /manage/agents | /manage/skills
+ *
+ * Config (observability):
+ * GET  /config            Config tab UI
+ * GET  /config/snapshot   resolved runtime config + provenance
  */
 import express, { type Express, type Request, type Response } from "express";
 import { fileURLToPath } from "node:url";
@@ -23,6 +27,7 @@ import { GitHubTrigger } from "../triggers/github.js";
 import { approveRun, rejectRun } from "../deliverable/pipeline.js";
 import type { PullRequestCreator } from "../deliverable/pr.js";
 import { HELIX_DEFAULT_PORT } from "../config/defaults.js";
+import { buildConfigSnapshot } from "../config/snapshot.js";
 import { ManageService } from "../manage/service.js";
 import type { ManageEvent } from "../manage/types.js";
 import { externalFromHeaders, parseIssueExternal } from "../callbacks/issueTracker.js";
@@ -299,6 +304,10 @@ export function createApp(opts: CreateAppOptions): Express {
     }
   });
 
+  app.get("/config/snapshot", (_req, res) => {
+    res.json(buildConfigSnapshot(ctx));
+  });
+
   app.get("/health", (_req, res) => {
     res.json({ ok: true });
   });
@@ -309,6 +318,9 @@ export function createApp(opts: CreateAppOptions): Express {
   });
   app.get("/manage", (_req, res) => {
     res.sendFile(join(publicDir, "manage.html"));
+  });
+  app.get("/config", (_req, res) => {
+    res.sendFile(join(publicDir, "config.html"));
   });
 
   return app;
