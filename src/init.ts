@@ -47,7 +47,14 @@ const CONFIG_TEMPLATE = `{
 }
 `;
 
-const GITIGNORE_ENTRIES = [".helix/runs/"];
+const GITIGNORE_ENTRIES = [".helix/runs/", ".env"];
+
+const ENV_EXAMPLE = `# Helix — copy to .env and fill in (never commit .env)
+OPENROUTER_API_KEY=
+
+# Default model shipped with helix init (OpenRouter: xiaomi/mimo-v2.5-pro)
+HELIX_MODEL=openrouter/xiaomi/mimo-v2.5-pro
+`;
 
 export function listPresets(): string[] {
   return PRESETS;
@@ -123,9 +130,16 @@ export function init(opts: InitOptions = {}): void {
   // 5. runs/ dir (gitignored, but created so first run doesn't need to mkdir)
   mkdirSync(resolve(helixDir, "runs"), { recursive: true });
 
+  // 6. .env.example (only if missing)
+  const envExamplePath = resolve(cwd, ".env.example");
+  if (!existsSync(envExamplePath)) {
+    writeFileSync(envExamplePath, ENV_EXAMPLE, "utf-8");
+    console.log("✓ wrote .env.example");
+  }
+
   console.log("");
   console.log("Next steps:");
-  console.log("  1. Set your OpenRouter API key:  export OPENROUTER_API_KEY=...");
+  console.log("  1. Copy .env.example → .env and set OPENROUTER_API_KEY + HELIX_MODEL");
   console.log("  2. Edit .helix/agents/*.md to match your project's needs");
   console.log("  3. Run:  helix run --title \"your task\"");
 }

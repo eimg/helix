@@ -108,7 +108,8 @@ Helix is npm-installable and self-contained: no pre-existing pi install required
 
 | Resource | 1. Env var (portable default) | 2. `~/.helix/` | 3. `~/.pi/agent/` |
 |---|---|---|---|
-| Secrets (API keys) | `OPENROUTER_API_KEY` etc. → `setRuntimeApiKey` | `secrets.json` | `auth.json` — **only if `inheritPi`** |
+| Secrets (API keys) | `.env` (`OPENROUTER_API_KEY`) → `setRuntimeApiKey` | `secrets.json` | `auth.json` — **only if `inheritPi`** |
+| Models (runtime override) | `.env` (`HELIX_MODEL`) | — | — |
 | Model/provider defs | — | `models.json` | `models.json` — **only if `inheritPi`** |
 | Skills | — | `.helix/skills/` (always) | global pi skills — only if `inheritPi` |
 | Extensions | — | `.helix/extensions/` (only if `extensions.enabled`) | global pi extensions — only if `inheritPi` |

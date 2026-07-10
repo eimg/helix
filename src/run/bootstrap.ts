@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { loadConfig, type HelixConfig } from "../config.js";
+import { applyEnvModelToSpecialists } from "../config/env.js";
 import { runIssue, type EngineDeps } from "../engine/engine.js";
 import { EventStream } from "../engine/eventStream.js";
 import { DEFAULT_GATE_CONFIG } from "../orchestrator/gates.js";
@@ -55,7 +56,7 @@ export function createRunContext(opts: RunContextOptions = {}): RunContext {
     apiKeyEnv: config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY",
     inheritPi: config.inheritPi,
   });
-  const specialists = loadSpecialists(resolve(helixDir, "agents"));
+  const specialists = applyEnvModelToSpecialists(loadSpecialists(resolve(helixDir, "agents")));
   const store = opts.store ?? new FileRunStore(resolve(helixDir, "runs"));
   const deliverable = opts.deliverable ?? new NoOpDeliverablePipeline();
 

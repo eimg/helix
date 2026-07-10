@@ -33,39 +33,13 @@ helix init --preset typescript   # also: react, express, rn, expo
 
 This creates `.helix/` with specialists, skills, and config.
 
-### 2. Configure provider and models
+### 2. Configure
 
-Before your first run, set the models and API key you want to use. `helix init` ships defaults (including `openrouter/xiaomi/mimo-v2.5-pro`) — change them to your preferred [OpenRouter](https://openrouter.ai/models) models.
-
-**Orchestrator model** — edit `.helix/config.json`:
-
-```jsonc
-{
-  "provider": {
-    "name": "openrouter",
-    "apiKeyEnv": "OPENROUTER_API_KEY"
-  },
-  "orchestrator": {
-    "model": "openrouter/anthropic/claude-sonnet-4",
-    "workflow": ["planner", "dev", "verifier"]
-  }
-}
+```bash
+cp .env.example .env
 ```
 
-**Specialist models** — edit the `model:` field in each `.helix/agents/*.md` frontmatter (planner, dev, verifier can each use a different model).
-
-**API key** — create `~/.helix/secrets.json` (global, not committed to your repo):
-
-```json
-{
-  "openrouter": {
-    "type": "api_key",
-    "key": "sk-or-..."
-  }
-}
-```
-
-`provider.apiKeyEnv` names an env var Helix will also check if you prefer that over the secrets file. See [Config](#config) for other knobs.
+Set your OpenRouter API key and model in `.env`. For `config.json`, specialist models, and other options, see [Config](#config).
 
 ## Quick run
 
@@ -237,7 +211,9 @@ Correlation also works via headers: `X-Issues-Issue-Id`, `X-Issues-Source`. The 
 
 Useful knobs:
 
-- `provider` / `orchestrator.model` — LLM provider and orchestrator model (set explicitly; see [Getting started](#2-configure-provider-and-models))
+- **`.env`** — `OPENROUTER_API_KEY`, `HELIX_MODEL` (default: `openrouter/xiaomi/mimo-v2.5-pro`). Loaded from project root; shell exports win over `.env`.
+- **`config.json`** — `provider`, `orchestrator.model`, `workflow`, `mergeGate`, `deliverable.pr`, `inheritPi`, …
+- **`agents/*.md`** — per-specialist `model:` in frontmatter (overridden by `HELIX_MODEL` when set)
 - `repoContext.enabled` (default `true`) — deterministic repo bootstrap injected into the first specialist wave
 - `deliverable.pr` (default `false`) — opt into GitHub PR create/merge via `gh` after successful runs
 - `inheritPi` (default `false`) — do not read `~/.pi/` unless you opt in

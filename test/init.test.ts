@@ -21,6 +21,7 @@ test("init: scaffolds .helix/ with config + 3 agents + typescript skill", () => 
   assert.ok(existsSync(join(dir, ".helix", "agents", "verifier.md")));
   assert.ok(existsSync(join(dir, ".helix", "skills", "typescript", "SKILL.md")));
   assert.ok(existsSync(join(dir, ".helix", "runs")));
+  assert.ok(existsSync(join(dir, ".env.example")));
 
   const config = JSON.parse(readFileSync(join(dir, ".helix", "config.json"), "utf-8"));
   assert.equal(config.provider.name, "openrouter");
@@ -29,11 +30,12 @@ test("init: scaffolds .helix/ with config + 3 agents + typescript skill", () => 
   assert.equal(config.inheritPi, false);
 });
 
-test("init: writes .gitignore with .helix/runs/", () => {
+test("init: writes .gitignore with .helix/runs/ and .env", () => {
   const dir = withTempCwd();
   init({});
   const gi = readFileSync(join(dir, ".gitignore"), "utf-8");
   assert.match(gi, /\.helix\/runs\//);
+  assert.match(gi, /^\.env$/m);
 });
 
 test("init: refuses to overwrite existing config without --force", () => {

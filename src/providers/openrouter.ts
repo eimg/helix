@@ -10,7 +10,8 @@
  * session in a run shares one credential/config source.
  *
  * Secret + model resolution is HYBRID, gated by `inheritPi`:
- *   1. env var (OPENROUTER_API_KEY)        — runtime override, always wins
+ *   0. project `.env` (loaded into process.env by loadConfig)
+ *   1. env var (OPENROUTER_API_KEY)        — runtime override, always wins over files
  *   2. ~/.helix/secrets.json               — Helix-owned
  *   3. ~/.pi/agent/auth.json               — pi fallback, ONLY if inheritPi
  * Model defs resolve the same way (~/.helix/models.json → ~/.pi/... if inheritPi).

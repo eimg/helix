@@ -6,6 +6,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { RepoContextOptions } from "./context/bootstrap.js";
+import {
+  applyEnvModelToConfig,
+  loadProjectEnv,
+  repoRootFromHelixDir,
+} from "./config/env.js";
 
 export interface HelixConfig {
   provider: {
@@ -74,9 +79,11 @@ const DEFAULTS: Partial<HelixConfig> = {
 };
 
 export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixConfig {
+  loadProjectEnv(repoRootFromHelixDir(helixDir));
+
   const raw = readFileSync(resolve(helixDir, "config.json"), "utf-8");
   const parsed = JSON.parse(raw) as Partial<HelixConfig>;
-  const config: HelixConfig = {
+  let config: HelixConfig = {
     provider: parsed.provider ?? { name: "openrouter", apiKeyEnv: "OPENROUTER_API_KEY" },
     orchestrator: {
       model: parsed.orchestrator?.model ?? DEFAULTS.orchestrator!.model!,
@@ -101,8 +108,14 @@ export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixCo
     mergeGate: parsed.mergeGate,
   };
 
+  config = applyEnvModelToConfig(config);
+
   if (!config.provider.name) throw new Error("config: provider.name is required");
-  if (!config.orchestrator.model) throw new Error("config: orchestrator.model is required (e.g. openrouter/anthropic/claude-sonnet-4)");
+  if (!config.orchestrator.model) {
+    throw new Error(
+      "config: orchestrator.model is required (set in .helix/config.json or HELIX_MODEL in .env)"
+    );
+  }
   if (config.orchestrator.workflow.length === 0) throw new Error("config: orchestrator.workflow must list at least one specialist");
 
   return config;

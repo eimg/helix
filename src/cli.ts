@@ -6,6 +6,7 @@
  */
 import { resolve } from "node:path";
 import { loadConfig, githubPrEnabled } from "./config.js";
+import { applyEnvModelToSpecialists } from "./config/env.js";
 import { runIssue, type EngineDeps } from "./engine/engine.js";
 import { EventStream } from "./engine/eventStream.js";
 import { attachConsoleLogger } from "./engine/consoleLogger.js";
@@ -145,11 +146,12 @@ async function cmdRun(args: string[]): Promise<void> {
     inheritPi: config.inheritPi,
   });
   if (!provider.hasAuth()) {
-    console.error(`No OpenRouter API key found. Set ${config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY"}.`);
+    const keyEnv = config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY";
+    console.error(`No OpenRouter API key found. Set ${keyEnv} in .env or your environment.`);
     process.exit(1);
   }
 
-  const specialists = loadSpecialists(resolve(helixDir, "agents"));
+  const specialists = applyEnvModelToSpecialists(loadSpecialists(resolve(helixDir, "agents")));
   if (specialists.length === 0) {
     console.error(`No specialists found in ${resolve(helixDir, "agents")}.`);
     process.exit(1);
@@ -226,7 +228,8 @@ async function cmdServe(args: string[]): Promise<void> {
   });
 
   if (!ctx.provider.hasAuth()) {
-    console.error(`No OpenRouter API key found. Set ${config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY"}.`);
+    const keyEnv = config.provider.apiKeyEnv ?? "OPENROUTER_API_KEY";
+    console.error(`No OpenRouter API key found. Set ${keyEnv} in .env or your environment.`);
     process.exit(1);
   }
 
