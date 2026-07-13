@@ -88,12 +88,22 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 
 ---
 
+## Strategic direction (exploration → production)
+
+Stack and ownership posture (ports/adapters, coding vs general tracks, pi vs AI SDK, Temporal/OTel later, avoid platform gravity as core) lives in **[`architecture.md`](./architecture.md)**.
+
+Short version: keep Helix’s orchestration brain; default to **in-house light** run/event/checkpoint adapters; stay on **pi** while coding-first; leave ports open for **AI SDK** (especially general packs), **Temporal-class** durability, and **OTel**/LLM-ops exporters when pain is real — without becoming an Eve/ADK app.
+
+---
+
 ## Still open (scale sketch)
 
+- **Architecture / substrate** — ports, two tracks, DIY→third-party swap points. [→](./architecture.md)
 - **Guardrails & escalation** — structured escalation codes, budgets, workspace jail, pause/resume; design only. [→](./guardrails.md)
 - **Repo context B–D** — persistent `.helix/repo-memory.md`, freshness/`helix index`, semantic index
-- **Observability** — cost/token dashboards, searchable history beyond local JSON
-- **More providers** — Anthropic, OpenAI, … (`Provider` interface is ready)
+- **Observability** — cost/token dashboards, searchable history beyond local JSON (domain `RunEvent` first; OTel later per architecture.md)
+- **Durability** — resume after crash / HITL park; shape `DurableRunner` before adopting Temporal
+- **More providers** — Anthropic, OpenAI, … (`Provider` interface is ready); AI SDK as optional future substrate
 - **First-class webhook trigger** in Helix core (today: HTTP `POST /runs` + external local-issues)
 - **Subprocess isolation** for untrusted specialists
 - **Manage CLI** (`helix manage`) parity

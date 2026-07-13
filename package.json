@@ -35,6 +35,7 @@
     "AGENTS.md",
     "LICENSE",
     "docs/plan.md",
+    "docs/architecture.md",
     "docs/manage.md",
     "docs/repo-context.md",
     "docs/guardrails.md"

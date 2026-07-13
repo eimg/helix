@@ -4,7 +4,7 @@
 
 This doc captures considerations and a phased path so future work does not rediscover the problem space. It pairs two topics that should stay aligned: **what must not happen** (guardrails) and **what happens when the loop cannot continue** (escalation).
 
-Related: [`plan.md`](./plan.md), [`repo-context.md`](./repo-context.md), [`manage.md`](./manage.md).
+Related: [`plan.md`](./plan.md), [`architecture.md`](./architecture.md), [`repo-context.md`](./repo-context.md), [`manage.md`](./manage.md).
 
 ---
 

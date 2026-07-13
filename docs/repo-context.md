@@ -160,4 +160,5 @@ Persist pi sessions to disk and resume planner context next run.
 - Isolation contract: `src/agents/loaderBuilder.ts`
 - Orchestrator handoffs: `src/orchestrator/driver.ts`
 - Planner agent: `.helix/agents/planner.md` (and presets)
-- Milestone tracking: [`docs/plan.md`](./plan.md) (M3+)
+- Milestone tracking: [`docs/plan.md`](./plan.md)
+- Architecture / substrate strategy: [`docs/architecture.md`](./architecture.md)
