@@ -83,7 +83,7 @@ helix/                          # engine + shipped presets
     server/                     # Express host + public UI
     manage/                     # experimental agent/skill authoring
     state/                      # run state persistence
-  presets/                      # starter agents + skills (ts/react/express/rn/expo)
+  presets/                      # starter agents + skills (ts/react/express/rn/expo/php/laravel)
   examples/ts/.helix/           # reference consumer fixture
   test/
 ```

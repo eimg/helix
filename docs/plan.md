@@ -29,7 +29,7 @@ End-to-end orchestration of a GitHub issue (or inline terminal task) through spe
 | Triggers | `src/triggers/{github,inline}.ts` — `gh issue view` + inline (terminal) path |
 | State | `src/state/runStore.ts` — one JSON per run under `.helix/runs/` |
 | CLI | `src/cli.ts` — `helix run <n>` (GitHub) / `--title`/`--body`/`--stdin` (inline) |
-| Presets | `presets/agents/{planner,dev,verifier}.md` + `presets/skills/{ts,react,express,rn,expo}/SKILL.md` |
+| Presets | `presets/agents/{planner,dev,verifier}.md` + `presets/skills/{ts,react,express,rn,expo,php,laravel}/SKILL.md` |
 | Fixture | `examples/ts/.helix/` — reference consumer wired to the TS preset |
 | Tests | `test/{gates,m1-happy-path,inline-trigger,paths,presets}.test.ts` + fakes under `src/` |
 
