@@ -172,6 +172,7 @@ Reference specialists + skills for common stacks, under `presets/` (double as te
 | React Native | planner, dev, verifier | `tsc --noEmit`, `npm run lint` |
 | Expo | planner, dev, verifier | `expo lint`, `tsc --noEmit` |
 | PHP | planner, dev, verifier | `php -l`, `vendor/bin/phpunit` |
+| Laravel | planner, dev, verifier | `php artisan test`, `vendor/bin/phpstan analyse` |
 
 ## Milestones
 

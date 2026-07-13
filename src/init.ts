@@ -24,7 +24,7 @@ export interface InitOptions {
   list?: boolean;
 }
 
-const PRESETS = ["typescript", "express", "react", "react-native", "expo", "php"];
+const PRESETS = ["typescript", "express", "react", "react-native", "expo", "php", "laravel"];
 
 const CONFIG_TEMPLATE = `{
   "extensions": { "enabled": false },
