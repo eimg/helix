@@ -68,5 +68,5 @@ test("init: bad preset exits with error", () => {
 
 test("init: listPresets returns all 5 stacks", () => {
   const presets = listPresets();
-  assert.deepEqual(presets.sort(), ["expo", "express", "react", "react-native", "typescript"]);
+  assert.deepEqual(presets.sort(), ["expo", "express", "php", "react", "react-native", "typescript"]);
 });
