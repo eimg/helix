@@ -173,7 +173,11 @@ Reference specialists + skills for common stacks, under `presets/` (double as te
 | Expo | planner, dev, verifier | `expo lint`, `tsc --noEmit` |
 | PHP | planner, dev, verifier | `php -l`, `vendor/bin/phpunit` |
 | Laravel | planner, dev, verifier | `php artisan test`, `vendor/bin/phpstan analyse` |
-| Livewire | planner, dev, verifier | `php artisan test`, `vendor/bin/phpstan analyse` |
+| Laravel Livewire | planner, dev, verifier | `php artisan test`, `vendor/bin/phpstan analyse` |
+| Laravel Inertia | planner, dev, verifier | `npm run build`, `php artisan test` |
+| Laravel Vue | planner, dev, verifier | `npm run build`, `php artisan test` |
+| Laravel React | planner, dev, verifier | `npm run build`, `php artisan test` |
+| Laravel Svelte | planner, dev, verifier | `npm run build`, `php artisan test` |
 
 ## Milestones
 

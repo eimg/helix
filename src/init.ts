@@ -24,7 +24,7 @@ export interface InitOptions {
   list?: boolean;
 }
 
-const PRESETS = ["typescript", "express", "react", "react-native", "expo", "php", "laravel", "livewire"];
+const PRESETS = ["typescript", "express", "react", "react-native", "expo", "php", "laravel", "laravel/livewire", "laravel/inertia", "laravel/vue", "laravel/react", "laravel/svelte"];
 
 const CONFIG_TEMPLATE = `{
   "extensions": { "enabled": false },
