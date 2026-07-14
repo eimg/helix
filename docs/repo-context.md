@@ -2,7 +2,7 @@
 
 **Status:** Phase A plus within-run session reuse and structured handoffs implemented. Cross-run repo-memory phases remain open.
 
-Every Helix run today starts cold: the planner (and often dev) must re-explore the repository from scratch. This doc captures why that happens, the cost, and candidate solutions. Prefer **repo-local artifacts** over cross-run session persistence — consistent with Helix's isolated-session model.
+Every Helix coding-workflow run today starts cold: the planner (and often dev) must re-explore the repository from scratch. This doc captures why that happens, the cost, and candidate solutions. Prefer **repo-local artifacts** over cross-run workflow-session persistence — consistent with Helix's isolated specialist model. A future conversational assistant mode has different semantics and should use durable thread-scoped Pi sessions.
 
 ---
 
@@ -116,12 +116,12 @@ Local embeddings + retrieval for large monorepos. Planner queries instead of bli
 **Pros:** Scales past markdown memory.  
 **Cons:** Highest complexity; embedding and index maintenance cost; retrieval errors.
 
-### 8. Cross-run session persistence (discouraged as default)
+### 8. Cross-run workflow-session persistence (discouraged as default)
 
 Persist pi sessions to disk and resume planner context next run.
 
 **Pros:** True continuity.  
-**Cons:** Fights isolation model; stale context; hard to audit per issue. Consider only for an opt-in "repo steward" role, not default specialists.
+**Cons:** Fights workflow isolation; stale context; hard to audit per issue. Consider only for an opt-in "repo steward" role, not default specialists. This does not prohibit persistent Pi sessions for a conversation/thread product mode, where continuity is the intended behavior rather than leaked workflow state.
 
 ---
 

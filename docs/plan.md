@@ -93,9 +93,9 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 
 ## Strategic direction (exploration → production)
 
-Stack and ownership posture (ports/adapters, coding vs general tracks, pi vs AI SDK, Temporal/OTel later, avoid platform gravity as core) lives in **[`architecture.md`](./architecture.md)**.
+Stack and ownership posture (platform independence, Pi-first runtime profiles, workflow vs conversation modes, Temporal/OTel later, and avoiding platform gravity) lives in **[`architecture.md`](./architecture.md)**.
 
-Short version: keep Helix’s orchestration brain; default to **in-house light** run/event/checkpoint adapters; stay on **pi** while coding-first; leave ports open for **AI SDK** (especially general packs), **Temporal-class** durability, and **OTel**/LLM-ops exporters when pain is real — without becoming an Eve/ADK app.
+Short version: keep Helix’s control plane independent; use **pi as the default harness for coding and general-purpose profiles**; add a persistent single-agent conversation mode instead of forcing ordinary assistant turns through specialist orchestration; and leave ports open for alternate runtimes, **Temporal-class** durability, and **OTel**/LLM-ops exporters only when measured pain justifies them.
 
 ---
 
@@ -106,7 +106,8 @@ Short version: keep Helix’s orchestration brain; default to **in-house light**
 - **Repo context B–D** — persistent `.helix/repo-memory.md`, freshness/`helix index`, semantic index
 - **Observability** — cost/token dashboards and richer searchable SQLite projections (domain `RunEvent` first; OTel later per architecture.md)
 - **Durability** — resume after crash / HITL park; shape `DurableRunner` before adopting Temporal
-- **More providers** — Anthropic, OpenAI, … (`Provider` interface is ready); AI SDK as optional future substrate
+- **General-assistant mode** — persistent Pi thread sessions, profile-specific tools/resources, streamed messages; specialist orchestration remains optional
+- **More providers** — Anthropic, OpenAI, … (`Provider` interface is ready); alternate agent SDKs remain evaluation fallbacks
 - **First-class webhook trigger** in Helix core (today: HTTP `POST /runs` + external local-issues)
 - **Subprocess isolation** for untrusted specialists
 - **Manage CLI** (`helix manage`) parity
