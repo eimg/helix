@@ -35,7 +35,7 @@ The engine already depends on small interfaces (`Provider`, `Orchestrator`, `Spe
 ```
 Helix core (orchestrator, gates, specialist contracts)
         │
-        ├── RunStore (exists)          → File snapshots now → Postgres / workflow projection later
+        ├── RunStore (exists)          → SQLite now → Postgres / workflow projection later
         ├── WorkflowRunner (target)    → In-process now     → Temporal / Inngest / … later
         ├── DomainEventSink (target)   → RunEvent bus now   → UI + OTel / Langfuse exporters later
         ├── DecisionRuntime (target)   → pi now             → pi / AI SDK adapter later
@@ -60,8 +60,8 @@ Helix core (orchestrator, gates, specialist contracts)
 |---|---|---|
 | Agent runtimes | **pi** for decisions + coding specialists | Split adapters; keep pi for coding and evaluate **AI SDK** for general packs |
 | Tools | pi/native runtime tools | One policy-aware registry with native and MCP client adapters |
-| Observability | Typed `RunEvent` + run JSON + console | Domain-event exporter plus runtime-native OTel/LLM-ops spans |
-| Durability | Incremental file snapshots (not replay checkpoints) | Explicit step/checkpoint runner behind `WorkflowRunner` |
+| Observability | Durable `RunEvent` + live-only SSE deltas + console | Domain-event exporter plus runtime-native OTel/LLM-ops spans |
+| Durability | Incremental SQLite run/events/results (not replay checkpoints) | Explicit step/checkpoint runner behind `WorkflowRunner` |
 | AI SDK in mainline | **No** — premature dual runtime | Yes when leaving coding-only or cutting a portable spine |
 | OTel / Temporal in mainline | **No** — shape seams first | Yes when in-process + JSON checkpoint is insufficient |
 
@@ -118,17 +118,18 @@ Worth a future pass; out of scope for this doc’s decisions:
 Existing seams are a useful start:
 
 - Engine takes injectable `Provider`, `Orchestrator`, `SpecialistSessionFactory`
-- `RunStore` persists mutable run snapshots; `EventStream` / `RunEvent` seed UI and observability integrations
+- `RunStore` persists normalized SQLite run state and completed full responses; high-volume orchestrator/specialist token deltas remain ephemeral
+- Specialist Pi sessions are retained per named lane for a run, while compact `RunKnowledgeEntry` handoffs cross specialist boundaries
 - `SpecialistSessionFactory` is the closest current specialist-runtime boundary
 - Merge approve/reject is an early HITL surface (post-run today; park/resume later)
 
 Gaps vs this strategy (intentional for exploration):
 
 - `RunContext`, the default orchestrator, and Manage still depend on `PiProvider`; runtime portability is aspirational
-- `startRun` is one in-process promise; file saves are snapshots, not replay-safe workflow checkpoints
+- `startRun` is one in-process promise; SQLite records are durable state, not replay-safe workflow checkpoints
 - No resume after process death, stable effect/invocation IDs, or idempotency contract
 - `RunEvent` has no schema version, sequence/event ID, or causation metadata yet
-- No domain-event/observability port beyond events/files
+- No domain-event/observability port beyond the event stream and SQLite store
 - No unified tool registry/policy boundary for native and future MCP tools
 
 ---

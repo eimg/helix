@@ -34,11 +34,12 @@ test("init: scaffolds .helix/ with config + 3 agents + typescript skill", () => 
   assert.match(envExample, /HELIX_MODEL=/);
 });
 
-test("init: writes .gitignore with .helix/runs/ and .env", () => {
+test("init: writes .gitignore with SQLite, legacy runs, and .env", () => {
   const dir = withTempCwd();
   init({});
   const gi = readFileSync(join(dir, ".gitignore"), "utf-8");
   assert.match(gi, /\.helix\/runs\//);
+  assert.match(gi, /\.helix\/runs\.db\*/);
   assert.match(gi, /^\.env$/m);
 });
 

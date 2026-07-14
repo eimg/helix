@@ -1,6 +1,6 @@
 # Repo context & cold-start problem
 
-**Status:** Phase A implemented (deterministic bootstrap + context allowlist). Phases B–D still open.
+**Status:** Phase A plus within-run session reuse and structured handoffs implemented. Cross-run repo-memory phases remain open.
 
 Every Helix run today starts cold: the planner (and often dev) must re-explore the repository from scratch. This doc captures why that happens, the cost, and candidate solutions. Prefer **repo-local artifacts** over cross-run session persistence — consistent with Helix's isolated-session model.
 
@@ -24,13 +24,13 @@ These stack together; fixing one alone helps only partially.
 
 | Factor | Where | Effect |
 |---|---|---|
-| **Fresh sessions per run** | `PiSpecialistSessionFactory` uses `SessionManager.inMemory()` | No memory from prior runs or prior issues |
+| **Fresh sessions per run** | `PiSpecialistSessionFactory` uses `SessionManager.inMemory()` | No memory from prior runs or prior issues; within a run, named specialist lanes are now retained |
 | **Session isolation** | `loaderBuilder.ts` sets `noContextFiles: true` | pi does not auto-load `AGENTS.md`, README, or other context files |
 | **Planner prompt** | `.helix/agents/planner.md` | Explicitly instructs "Read the repo as needed to ground the plan" |
 | **Tool-free orchestrator** | `orchestrator/driver.ts` | Orchestrator cannot pre-read the repo; first repo contact is a specialist |
-| **Handoff = issue + prior results only** | Engine / driver | No injected repo skeleton or accumulated repo knowledge |
+| **Bounded handoffs** | Engine / `runKnowledge.ts` | Compact summaries, relevant paths, and reported commands cross specialist boundaries without raw transcript replay |
 
-Within a single run, the orchestrator passes planner output to dev, but **between runs** nothing persists except run JSON under `.helix/runs/` (issue, events, deliverable — not a reusable repo map).
+Within a run, Helix now retains each specialist's Pi session and injects compact structured knowledge into other specialists. **Between runs**, SQLite persists run history but not a reusable repository map, so repo-level cold start remains.
 
 ---
 
@@ -137,7 +137,8 @@ Persist pi sessions to disk and resume planner context next run.
 
 | Phase | Scope | Notes |
 |---|---|---|
-| **A** | Deterministic bootstrap + Helix-owned context file allowlist | **Shipped** — `src/context/bootstrap.ts`; config `repoContext`; injected into orchestrator + first specialist wave |
+| **A** | Deterministic bootstrap + Helix-owned context file allowlist | **Shipped** — `src/context/bootstrap.ts`; config `repoContext`; injected into the initial orchestrator turn and every cold specialist session |
+| **A.1** | Run-scoped specialist lanes + structured handoffs | **Shipped** — session pool in `engine.ts`; bounded `RunKnowledgeEntry` handoffs in `context/runKnowledge.ts` |
 | **B** | `.helix/repo-memory.md` read/write contract; planner delta updates | Amortize cost across runs |
 | **C** | Freshness: re-index on merge to main, age/diff thresholds, optional `helix index` | Operational |
 | **D** | Semantic index | Only if repos outgrow markdown memory |
@@ -148,7 +149,7 @@ Persist pi sessions to disk and resume planner context next run.
 
 - Who writes repo memory — planner only, dedicated indexer specialist, or deterministic + LLM merge?
 - Config surface: `config.json` keys for bootstrap depth, context allowlist, memory path, invalidation policy?
-- Should bootstrap run once per **run** (orchestrator injects) or once per **specialist** invocation?
+- How should bootstrap freshness be keyed when a long run changes manifests or repo structure substantially?
 - Token budget cap for injected context vs. "explore yourself" fallback?
 - Git-aware delta: inject changed files vs `main` for incremental issues?
 

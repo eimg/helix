@@ -21,11 +21,23 @@ const knownRunIds = new Set();
 let runHistory = [];
 /** @type {Map<string, HTMLDetailsElement>} */
 const specialistBlocks = new Map();
+/** @type {Map<string, HTMLDetailsElement>} */
+const orchestratorBlocks = new Map();
 /** @type {Map<string, HTMLElement>} */
 const workingEls = new Map();
+/** @type {Map<string, { el: HTMLElement, pending: string }>} */
+const outputBuffers = new Map();
+/** @type {Map<string, { el: HTMLElement, count: number }>} */
+const quietToolRows = new Map();
+let outputFlushFrame = null;
+let followLog = true;
 
 /** @type {Set<string>} */
 const activeSpecialists = new Set();
+
+logEl.addEventListener("scroll", () => {
+  followLog = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 80;
+});
 
 function syncHistoryHeight() {
   if (!formPanel || !historyPanel) return;
@@ -45,6 +57,9 @@ window.addEventListener("resize", syncHistoryHeight);
 clearBtn.addEventListener("click", () => {
   logEl.innerHTML = "";
   specialistBlocks.clear();
+  orchestratorBlocks.clear();
+  outputBuffers.clear();
+  quietToolRows.clear();
   clearAllWorking();
   showLogPlaceholder(selectedRunId ? "Log cleared." : undefined);
 });
@@ -236,6 +251,10 @@ async function openRun(id) {
   resultPanel.classList.add("hidden");
   logEl.innerHTML = "";
   specialistBlocks.clear();
+  orchestratorBlocks.clear();
+  outputBuffers.clear();
+  quietToolRows.clear();
+  followLog = true;
   clearAllWorking();
   setPill("running", "running");
 
@@ -257,7 +276,7 @@ function streamRun(id) {
     const source = new EventSource(`/runs/${id}/events`);
     activeSource = source;
 
-    source.onmessage = (msg) => {
+    const receive = (msg) => {
       let event;
       try {
         event = JSON.parse(msg.data);
@@ -272,6 +291,8 @@ function streamRun(id) {
         resolve();
       }
     };
+    source.onmessage = receive;
+    source.addEventListener("live", receive);
 
     source.onerror = () => {
       source.close();
@@ -288,8 +309,18 @@ async function fetchRun(id) {
 }
 
 function handleEvent(event) {
-  if (event.type === "specialist_started") {
+  if (event.type === "orchestrator_started") {
+    handleOrchestratorStarted(event);
+  } else if (event.type === "orchestrator_output_delta") {
+    handleOrchestratorOutputDelta(event);
+  } else if (event.type === "orchestrator_finished") {
+    handleOrchestratorFinished(event);
+  } else if (event.type === "orchestrator_decided") {
+    handleOrchestratorDecided(event);
+  } else if (event.type === "specialist_started") {
     handleSpecialistStarted(event);
+  } else if (event.type === "specialist_output_delta") {
+    handleSpecialistOutputDelta(event);
   } else if (event.type === "specialist_activity") {
     handleSpecialistActivity(event);
   } else if (event.type === "specialist_finished") {
@@ -301,12 +332,6 @@ function handleEvent(event) {
   }
 
   switch (event.type) {
-    case "run_started":
-      setWorking("orchestrator", "Orchestrator");
-      break;
-    case "orchestrator_decided":
-      clearWorking("orchestrator");
-      break;
     case "specialist_started": {
       const name = event.details?.specialist ?? event.summary;
       activeSpecialists.add(name);
@@ -317,7 +342,6 @@ function handleEvent(event) {
       const name = event.details?.specialist ?? event.summary;
       activeSpecialists.delete(name);
       clearWorking(name);
-      if (activeSpecialists.size === 0) setWorking("orchestrator", "Orchestrator");
       break;
     }
     case "run_done":
@@ -327,6 +351,36 @@ function handleEvent(event) {
       clearAllWorking();
       break;
   }
+}
+
+function orchestratorKey(event) {
+  const invocationId = event.details?.invocationId;
+  return invocationId != null ? `orchestrator:${invocationId}` : `orchestrator:${event.details?.iteration ?? "current"}`;
+}
+
+function handleOrchestratorStarted(event) {
+  const key = orchestratorKey(event);
+  const iteration = Number(event.details?.iteration ?? 0);
+  const empty = logEl.querySelector(".log-empty");
+  if (empty) empty.remove();
+
+  const details = document.createElement("details");
+  details.className = "orchestrator-block";
+  details.dataset.orchestratorKey = key;
+  details.innerHTML =
+    `<summary class="orchestrator-summary">` +
+    `<span class="ts">${timeStr(event.ts)}</span> ` +
+    `<span class="tag tag-orch">↳ Orchestrator · turn ${iteration + 1}</span> ` +
+    `<span class="orchestrator-status">streaming</span>` +
+    `</summary>` +
+    `<div class="orchestrator-body">` +
+    `<pre class="orchestrator-output" aria-live="polite"></pre>` +
+    `</div>`;
+  logEl.appendChild(details);
+  orchestratorBlocks.set(key, details);
+  const output = details.querySelector(".orchestrator-output");
+  if (output) outputBuffers.set(key, { el: output, pending: "" });
+  scrollLog();
 }
 
 function specialistKey(event) {
@@ -355,9 +409,74 @@ function handleSpecialistStarted(event) {
   `</summary>` +
     `<div class="specialist-body">` +
     (task ? `<p class="specialist-task">${escapeHtml(task)}</p>` : "") +
+    `<pre class="specialist-output" aria-live="polite"></pre>` +
     `</div>`;
   logEl.appendChild(details);
   specialistBlocks.set(key, details);
+  const output = details.querySelector(".specialist-output");
+  if (output) outputBuffers.set(key, { el: output, pending: "" });
+  scrollLog();
+}
+
+function handleSpecialistOutputDelta(event) {
+  const key = specialistKey(event);
+  const buffer = outputBuffers.get(key);
+  const delta = event.details?.delta;
+  if (!buffer || typeof delta !== "string" || !delta) return;
+  buffer.pending += delta;
+  if (outputFlushFrame != null) return;
+  outputFlushFrame = requestAnimationFrame(flushOutputBuffers);
+}
+
+function handleOrchestratorOutputDelta(event) {
+  const buffer = outputBuffers.get(orchestratorKey(event));
+  const delta = event.details?.delta;
+  if (!buffer || typeof delta !== "string" || !delta) return;
+  buffer.pending += delta;
+  if (outputFlushFrame != null) return;
+  outputFlushFrame = requestAnimationFrame(flushOutputBuffers);
+}
+
+function handleOrchestratorFinished(event) {
+  const key = orchestratorKey(event);
+  const block = orchestratorBlocks.get(key);
+  if (!block) return;
+  flushOutputBuffers();
+  const status = block.querySelector(".orchestrator-status");
+  const ok = event.details?.ok !== false;
+  if (status) {
+    status.className = `orchestrator-status ${ok ? "ok" : "fail"}`;
+    status.textContent = ok ? "finished" : "failed";
+  }
+  const output = String(event.details?.output ?? event.details?.error ?? "");
+  const buffer = outputBuffers.get(key);
+  if (buffer && output) buffer.el.textContent = output;
+  outputBuffers.delete(key);
+  scrollLog();
+}
+
+function handleOrchestratorDecided(event) {
+  const key = orchestratorKey(event);
+  const block = orchestratorBlocks.get(key);
+  const decision = event.details?.decision;
+  if (!block) {
+    appendLine(formatOrchestratorDecision(timeStr(event.ts), event.details?.iteration, decision, event.summary));
+    return;
+  }
+  const summary = block.querySelector(".orchestrator-summary");
+  if (summary && decision) {
+    const status = summary.querySelector(".orchestrator-status");
+    if (status) status.textContent = formatDecisionHead(decision);
+  }
+}
+
+function flushOutputBuffers() {
+  outputFlushFrame = null;
+  for (const buffer of outputBuffers.values()) {
+    if (!buffer.pending) continue;
+    buffer.el.textContent += buffer.pending;
+    buffer.pending = "";
+  }
   scrollLog();
 }
 
@@ -367,7 +486,27 @@ function handleSpecialistActivity(event) {
   if (!block) return;
   const body = block.querySelector(".specialist-body");
   if (!body) return;
-  const kind = event.details?.kind === "text" ? "text" : "tool";
+  const toolName = String(event.details?.toolName ?? "");
+  const phase = event.details?.phase;
+  const isError = event.details?.isError === true;
+  if (["read", "grep", "find", "ls"].includes(toolName) && !isError) {
+    if (phase === "end") return;
+    const aggregateKey = `${key}:${toolName}`;
+    const existing = quietToolRows.get(aggregateKey);
+    if (existing) {
+      existing.count++;
+      existing.el.textContent = `→ ${toolName} × ${existing.count}`;
+    } else {
+      const line = document.createElement("p");
+      line.className = "specialist-line specialist-line-tool";
+      line.textContent = `→ ${toolName}`;
+      body.appendChild(line);
+      quietToolRows.set(aggregateKey, { el: line, count: 1 });
+    }
+    scrollLog();
+    return;
+  }
+  const kind = "tool";
   const line = document.createElement("p");
   line.className = `specialist-line specialist-line-${kind}`;
   line.textContent = String(event.details?.line ?? event.summary);
@@ -382,6 +521,7 @@ function handleSpecialistFinished(event) {
   const block = specialistBlocks.get(key);
 
   if (block) {
+    flushOutputBuffers();
     const status = block.querySelector(".specialist-status");
     if (status) {
       status.className = `specialist-status ${ok ? "ok" : "fail"}`;
@@ -394,14 +534,12 @@ function handleSpecialistFinished(event) {
     }
     const output = String(event.details?.output ?? event.details?.error ?? "").trim();
     if (output) {
-      const body = block.querySelector(".specialist-body");
-      const hasText = body?.querySelector(".specialist-line-text");
-      if (body && !hasText) {
-        const line = document.createElement("p");
-        line.className = "specialist-line specialist-line-text";
-        line.textContent = previewText(output, 800);
-        body.appendChild(line);
-      }
+      const buffer = outputBuffers.get(key);
+      if (buffer) buffer.el.textContent = output;
+    }
+    outputBuffers.delete(key);
+    for (const aggregateKey of quietToolRows.keys()) {
+      if (aggregateKey.startsWith(`${key}:`)) quietToolRows.delete(aggregateKey);
     }
   } else {
     const ts = timeStr(event.ts);
@@ -419,7 +557,7 @@ function setWorking(key, label) {
   const empty = logEl.querySelector(".log-empty");
   if (empty) empty.remove();
 
-  const el = document.createElement("p");
+  const el = document.createElement("div");
   el.className = "event working";
   el.dataset.worker = key;
   el.innerHTML =
@@ -433,6 +571,7 @@ function setWorking(key, label) {
 function clearWorking(key) {
   const el = workingEls.get(key);
   if (el) {
+    flushOutputBuffers();
     el.remove();
     workingEls.delete(key);
   }
@@ -444,7 +583,10 @@ function clearAllWorking() {
 }
 
 function scrollLog() {
-  logEl.scrollTop = logEl.scrollHeight;
+  if (!followLog) return;
+  requestAnimationFrame(() => {
+    logEl.scrollTop = logEl.scrollHeight;
+  });
 }
 
 function appendLine(html) {
@@ -502,15 +644,16 @@ function formatEvent(event) {
     case "orchestrator_decided": {
       const d = event.details?.decision;
       const iter = event.details?.iteration;
-      const iterLabel = iter != null ? ` · turn ${iter + 1}` : "";
-      const head = d ? formatDecisionHead(d) : escapeHtml(event.summary);
-      lines.push(section(`<span class="ts">${ts}</span> <span class="tag tag-orch">↳ Orchestrator${iterLabel}</span> ${escapeHtml(head)}`));
-      if (d?.reason) lines.push(`<span class="detail">${escapeHtml(previewText(d.reason, 120))}</span>`);
+      lines.push(formatOrchestratorDecision(ts, iter, d, event.summary));
       break;
     }
     case "specialist_started":
     case "specialist_activity":
+    case "specialist_output_delta":
     case "specialist_finished":
+    case "orchestrator_started":
+    case "orchestrator_output_delta":
+    case "orchestrator_finished":
       break;
     case "run_done":
       lines.push(section(`<span class="ts">${ts}</span> <span class="tag tag-done">■ Done</span> ${escapeHtml(event.summary)}`));
@@ -532,6 +675,32 @@ function formatEvent(event) {
 
 function section(inner) {
   return `<p class="event section">${inner}</p>`;
+}
+
+function formatOrchestratorDecision(ts, iteration, decision, fallbackSummary) {
+  const iterLabel = iteration != null ? ` · turn ${iteration + 1}` : "";
+  const head = decision ? formatDecisionHead(decision) : fallbackSummary;
+  const body = [];
+
+  if (decision?.reason) {
+    body.push(`<div class="orchestrator-field"><strong>Reason</strong><pre>${escapeHtml(decision.reason)}</pre></div>`);
+  }
+  for (const call of decision?.specialists ?? []) {
+    body.push(
+      `<div class="orchestrator-field">` +
+      `<strong>Handoff · ${escapeHtml(call.specialist)}</strong>` +
+      `<pre>${escapeHtml(call.task)}</pre>` +
+      `</div>`
+    );
+  }
+  if (decision?.deliverable) {
+    body.push(`<div class="orchestrator-field"><strong>Deliverable</strong><pre>${escapeHtml(decision.deliverable)}</pre></div>`);
+  }
+
+  return `<details class="orchestrator-block">` +
+    `<summary><span class="ts">${ts}</span> <span class="tag tag-orch">↳ Orchestrator${iterLabel}</span> ${escapeHtml(head)}</summary>` +
+    `<div class="orchestrator-body">${body.join("")}</div>` +
+    `</details>`;
 }
 
 function formatDecisionHead(d) {

@@ -44,7 +44,7 @@ const CONFIG_TEMPLATE = `{
 }
 `;
 
-const GITIGNORE_ENTRIES = [".helix/runs/", ".env"];
+const GITIGNORE_ENTRIES = [".helix/runs/", ".helix/runs.db*", ".env"];
 
 const ENV_EXAMPLE = `# Helix — copy to .env and fill in (never commit .env)
 OPENROUTER_API_KEY=
@@ -109,7 +109,7 @@ export function init(opts: InitOptions = {}): void {
     console.log(`⚠ no skill for preset "${preset}" (skipped)`);
   }
 
-  // 4. .gitignore — append runs/ if not already present
+  // 4. .gitignore — append SQLite and legacy run paths if not already present
   const gitignorePath = resolve(cwd, ".gitignore");
   let gitignore = "";
   try {
@@ -124,7 +124,7 @@ export function init(opts: InitOptions = {}): void {
     console.log(`✓ updated .gitignore (${missing.join(", ")})`);
   }
 
-  // 5. runs/ dir (gitignored, but created so first run doesn't need to mkdir)
+  // 5. Legacy runs/ dir (also used as a one-time SQLite import source)
   mkdirSync(resolve(helixDir, "runs"), { recursive: true });
 
   // 6. .env.example (only if missing)

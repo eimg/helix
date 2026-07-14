@@ -6,8 +6,8 @@
  * both identically via `SpecialistSessionFactory`; tests use the stub, the CLI
  * uses this one.
  *
- * One process, one session per specialist invocation, parallel via Promise.all
- * in the engine — no subprocesses (per AGENTS.md v1 decision).
+ * One process, one session per specialist lane and Helix run. The engine keeps
+ * lanes alive across invocations, then disposes them when the run finishes.
  */
 import type { Api, Model, Message, AssistantMessage } from "@earendil-works/pi-ai";
 import {
@@ -188,24 +188,22 @@ const MAX_ACTIVITY_LINE = 400;
 
 function mapSessionEvent(event: { type: string; [key: string]: unknown }): SpecialistActivityLine | null {
   switch (event.type) {
+    case "message_update": {
+      const update = event.assistantMessageEvent as { type?: string; delta?: unknown } | undefined;
+      if (update?.type !== "text_delta" || typeof update.delta !== "string" || !update.delta) return null;
+      return { kind: "text_delta", line: update.delta };
+    }
     case "tool_execution_start": {
       const toolName = String(event.toolName ?? "tool");
       const args = formatToolArgs(event.args);
-      return { kind: "tool", line: `→ ${toolName}${args ? ` ${args}` : ""}` };
+      return { kind: "tool", toolName, phase: "start", line: `→ ${toolName}${args ? ` ${args}` : ""}` };
     }
     case "tool_execution_end": {
       const toolName = String(event.toolName ?? "tool");
       const isError = event.isError === true;
       const preview = formatToolResult(event.result);
       const status = isError ? "failed" : "done";
-      return { kind: "tool", line: `← ${toolName} ${status}${preview ? `: ${preview}` : ""}` };
-    }
-    case "turn_end": {
-      const message = event.message as { role?: string; content?: unknown[] } | undefined;
-      if (!message || message.role !== "assistant") return null;
-      const text = extractAssistantText(message.content);
-      if (!text) return null;
-      return { kind: "text", line: truncateActivity(text) };
+      return { kind: "tool", toolName, phase: "end", isError, line: `← ${toolName} ${status}${preview ? `: ${preview}` : ""}` };
     }
     default:
       return null;
@@ -233,17 +231,6 @@ function formatToolResult(result: unknown): string {
     .join("\n")
     .trim();
   return text ? truncateActivity(text, 200) : "";
-}
-
-function extractAssistantText(content: unknown[] | undefined): string {
-  if (!content) return "";
-  return content
-    .filter((part): part is { type: "text"; text: string } => {
-      return typeof part === "object" && part !== null && (part as { type?: string }).type === "text" && typeof (part as { text?: string }).text === "string";
-    })
-    .map((part) => part.text)
-    .join("\n")
-    .trim();
 }
 
 function truncateActivity(text: string, max = MAX_ACTIVITY_LINE): string {

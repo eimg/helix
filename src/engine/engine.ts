@@ -16,6 +16,7 @@ import type {
   Provider,
   Run,
   RunEvent,
+  RunKnowledgeEntry,
   SpecialistCall,
   SpecialistDefinition,
   SpecialistResult,
@@ -25,6 +26,7 @@ import type {
 import { EventStream } from "./eventStream.js";
 import { DEFAULT_GATE_CONFIG, enforceIterationCap, isBlockingFailure, type GateConfig } from "../orchestrator/gates.js";
 import { prependRepoContext } from "../context/bootstrap.js";
+import { formatRunKnowledge, knowledgeFromResult } from "../context/runKnowledge.js";
 
 export interface EngineDeps {
   provider: Provider;
@@ -37,7 +39,7 @@ export interface EngineDeps {
   runId?: string;
   /**
    * Deterministic repo bootstrap markdown (Phase A). Injected into orchestrator
-   * prompts and prepended to the first specialist wave's tasks.
+   * initial prompt and prepended once to every cold specialist session.
    */
   repoContext?: string;
 }
@@ -57,13 +59,15 @@ export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
     status: "running",
     events: [],
     results: [],
+    knowledge: [],
   };
 
-  const emit = (event: RunEvent) => {
-    run.events.push(event);
+  const emit = (event: RunEvent, durable = true) => {
+    if (durable) run.events.push(event);
     events.emit(event);
-    deps.onEvent?.(run, event);
+    if (durable) deps.onEvent?.(run, event);
   };
+  const sessions = new RunSessionPool(deps.specialistFactory);
 
   try {
     emit({
@@ -78,35 +82,74 @@ export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
 
     const gates = deps.gates ?? DEFAULT_GATE_CONFIG;
     let iteration = 0;
-    let injectedBootstrap = false;
 
     while (true) {
-      let decision: OrchestratorDecision = await deps.orchestrator.decide({
-        issue,
-        specialists: await listSpecialists(deps.specialistFactory),
-        results: run.results,
-        iteration,
-        repoContext: deps.repoContext,
+      const invocationId = randomUUID();
+      let orchestratorOutput = "";
+      emit({
+        ts: Date.now(),
+        type: "orchestrator_started",
+        summary: `Orchestrator turn ${iteration + 1}`,
+        details: { iteration, invocationId },
+      });
+      let decision: OrchestratorDecision;
+      try {
+        decision = await deps.orchestrator.decide(
+          {
+            issue,
+            specialists: await listSpecialists(deps.specialistFactory),
+            results: run.results,
+            iteration,
+            repoContext: deps.repoContext,
+          },
+          {
+            onTextDelta: (delta) => {
+              orchestratorOutput += delta;
+              emit({
+                ts: Date.now(),
+                type: "orchestrator_output_delta",
+                summary: "Orchestrator response",
+                details: { iteration, invocationId, delta },
+              }, false);
+            },
+          },
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        emit({
+          ts: Date.now(),
+          type: "orchestrator_finished",
+          summary: `Orchestrator turn ${iteration + 1}: error`,
+          details: { iteration, invocationId, ok: false, output: orchestratorOutput, error: message },
+        });
+        throw err;
+      }
+      const fullOutput = orchestratorOutput || JSON.stringify(decision, null, 2);
+      emit({
+        ts: Date.now(),
+        type: "orchestrator_finished",
+        summary: `Orchestrator turn ${iteration + 1}: finished`,
+        details: { iteration, invocationId, ok: true, output: fullOutput, decision },
       });
       decision = enforceIterationCap(decision, iteration, gates);
       emit({
         ts: Date.now(),
         type: "orchestrator_decided",
         summary: describeDecision(decision),
-        details: { iteration, decision },
+        details: { iteration, invocationId, decision },
       });
 
       if (decision.kind === "run") {
-        const calls =
-          !injectedBootstrap && deps.repoContext
-            ? decision.specialists.map((c) => ({
-                ...c,
-                task: prependRepoContext(c.task, deps.repoContext),
-              }))
-            : decision.specialists;
-        if (!injectedBootstrap && deps.repoContext) injectedBootstrap = true;
-        const newResults = await runSpecialists(calls, deps.specialistFactory, emit);
+        const newResults = await runSpecialists(
+          decision.specialists,
+          deps.specialistFactory,
+          sessions,
+          run.knowledge ?? [],
+          deps.repoContext,
+          emit,
+        );
         run.results.push(...newResults);
+        run.knowledge?.push(...newResults.map(knowledgeFromResult));
         iteration++;
         continue;
       }
@@ -143,6 +186,7 @@ export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
     const message = err instanceof Error ? err.message : String(err);
     emit({ ts: Date.now(), type: "run_error", summary: message });
   } finally {
+    await sessions.dispose();
     run.finishedAt = Date.now();
   }
 
@@ -165,9 +209,11 @@ function definitionsOf(factory: SpecialistSessionFactory): SpecialistDefinition[
 async function runSpecialists(
   calls: SpecialistCall[],
   factory: SpecialistSessionFactory,
-  emit: (e: RunEvent) => void,
+  sessions: RunSessionPool,
+  knowledge: RunKnowledgeEntry[],
+  repoContext: string | undefined,
+  emit: (e: RunEvent, durable?: boolean) => void,
 ): Promise<SpecialistResult[]> {
-  const sessions: SpecialistSession[] = [];
   // allSettled: one specialist throwing must not abandon its siblings or kill
   // the run. A rejection becomes an ok:false result; the run continues and the
   // orchestrator gets to react to the failure.
@@ -183,82 +229,87 @@ async function runSpecialists(
           error: `Unknown specialist: ${call.specialist}`,
         };
       }
-      let session: SpecialistSession;
       try {
-        session = await factory.create(def);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return {
-          specialist: call.specialist,
-          task: call.task,
-          ok: false,
-          output: "",
-          error: `failed to create session: ${message}`,
-        };
-      }
-      sessions.push(session);
-      const invocationId = Date.now();
-      emit({
-        ts: Date.now(),
-        type: "specialist_started",
-        summary: call.specialist,
-        details: { specialist: call.specialist, task: call.task, invocationId },
-      });
-      try {
-        const result = await session.run(call.task, {
-          onActivity: (line) => {
+        return await sessions.use(call.specialist, def, async (session, cold) => {
+          const invocationId = randomUUID();
+          const task = prepareSpecialistTask(call.task, cold ? repoContext : undefined, knowledge);
+          emit({
+            ts: Date.now(),
+            type: "specialist_started",
+            summary: call.specialist,
+            details: { specialist: call.specialist, task: call.task, invocationId, coldSession: cold },
+          });
+          try {
+            const result = await session.run(task, {
+              onActivity: (line) => {
+                if (line.kind === "text_delta") {
+                  emit({
+                    ts: Date.now(),
+                    type: "specialist_output_delta",
+                    summary: call.specialist,
+                    details: { specialist: call.specialist, invocationId, delta: line.line },
+                  }, false);
+                  return;
+                }
+                emit({
+                  ts: Date.now(),
+                  type: "specialist_activity",
+                  summary: `${call.specialist}: ${line.line.slice(0, 80)}`,
+                  details: {
+                    specialist: call.specialist,
+                    invocationId,
+                    kind: line.kind,
+                    line: line.line,
+                    toolName: line.toolName,
+                    phase: line.phase,
+                    isError: line.isError,
+                  },
+                });
+              },
+            });
+            result.task = call.task;
             emit({
               ts: Date.now(),
-              type: "specialist_activity",
-              summary: `${call.specialist}: ${line.line.slice(0, 80)}`,
+              type: "specialist_finished",
+              summary: `${call.specialist}: ${result.ok ? "ok" : "fail"}`,
               details: {
                 specialist: call.specialist,
                 invocationId,
-                kind: line.kind,
-                line: line.line,
+                ok: result.ok,
+                output: result.output,
+                error: result.error,
               },
             });
-          },
+            return result;
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            emit({
+              ts: Date.now(),
+              type: "specialist_finished",
+              summary: `${call.specialist}: error`,
+              details: { specialist: call.specialist, invocationId, ok: false, output: "", error: message },
+            });
+            return {
+              specialist: call.specialist,
+              task: call.task,
+              ok: false,
+              output: "",
+              error: `session threw: ${message}`,
+            };
+          }
         });
-        emit({
-          ts: Date.now(),
-          type: "specialist_finished",
-          summary: `${call.specialist}: ${result.ok ? "ok" : "fail"}`,
-          details: {
-            specialist: call.specialist,
-            invocationId,
-            ok: result.ok,
-            output: result.output,
-            error: result.error,
-          },
-        });
-        return result;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        emit({
-          ts: Date.now(),
-          type: "specialist_finished",
-          summary: `${call.specialist}: error`,
-          details: { specialist: call.specialist, invocationId, ok: false, output: "", error: message },
-        });
         return {
           specialist: call.specialist,
           task: call.task,
           ok: false,
           output: "",
-          error: `session threw: ${message}`,
+          error: `failed to create or acquire session: ${message}`,
         };
       }
     }),
   );
-  // dispose all sessions that were created, regardless of outcome
-  for (const session of sessions) {
-    try {
-      session.dispose();
-    } catch {
-      // ignore
-    }
-  }
   return settled.map((s, i) =>
     s.status === "fulfilled"
       ? s.value
@@ -270,6 +321,70 @@ async function runSpecialists(
           error: `unhandled: ${s.reason instanceof Error ? s.reason.message : String(s.reason)}`,
         },
   );
+}
+
+class RunSessionPool {
+  private readonly sessions = new Map<string, Promise<SpecialistSession>>();
+  private readonly tails = new Map<string, Promise<void>>();
+
+  constructor(private readonly factory: SpecialistSessionFactory) {}
+
+  async use<T>(
+    name: string,
+    def: SpecialistDefinition,
+    fn: (session: SpecialistSession, cold: boolean) => Promise<T>,
+  ): Promise<T> {
+    const previous = this.tails.get(name) ?? Promise.resolve();
+    let release = (): void => undefined;
+    const current = new Promise<void>((resolve) => { release = resolve; });
+    const tail = previous.then(() => current);
+    this.tails.set(name, tail);
+    await previous;
+
+    const cold = !this.sessions.has(name);
+    let sessionPromise = this.sessions.get(name);
+    if (!sessionPromise) {
+      sessionPromise = this.factory.create(def);
+      this.sessions.set(name, sessionPromise);
+    }
+
+    try {
+      return await fn(await sessionPromise, cold);
+    } catch (err) {
+      if (cold) this.sessions.delete(name);
+      throw err;
+    } finally {
+      release();
+      if (this.tails.get(name) === tail) this.tails.delete(name);
+    }
+  }
+
+  async dispose(): Promise<void> {
+    const sessions = await Promise.allSettled(this.sessions.values());
+    for (const settled of sessions) {
+      if (settled.status !== "fulfilled") continue;
+      try {
+        settled.value.dispose();
+      } catch {
+        // disposal must not mask the run result
+      }
+    }
+    this.sessions.clear();
+    this.tails.clear();
+  }
+}
+
+function prepareSpecialistTask(
+  task: string,
+  repoContext: string | undefined,
+  knowledge: RunKnowledgeEntry[],
+): string {
+  let prepared = repoContext ? prependRepoContext(task, repoContext) : task;
+  const handoff = formatRunKnowledge(knowledge);
+  if (handoff) {
+    prepared = `## Shared run knowledge\n${handoff}\n\n## Current task\n${prepared}`;
+  }
+  return prepared;
 }
 
 function describeDecision(d: OrchestratorDecision): string {

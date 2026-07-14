@@ -63,7 +63,7 @@ cat task.md | helix run --stdin
 helix run 42
 ```
 
-The CLI runs to completion and prints events to the terminal. Run state is persisted under `.helix/runs/`.
+The CLI runs to completion and prints events to the terminal. Run state is persisted in `.helix/runs.db` (legacy `.helix/runs/*.json` files are imported once when the database is empty).
 
 ### HTTP API
 
@@ -152,7 +152,7 @@ See the [local-issues README](https://github.com/eimg/local-issues#helix-integra
 - Prefer **inline** or **local-issues** over GitHub poll until you understand merge-gate behavior.
 - **GitHub PR create/merge is off by default** (`deliverable.pr: false`). The local-issues demo does not need `gh`. Enable later with `"deliverable": { "pr": true }` plus `triggers.github.repo`.
 - `mergeGate.autoMerge` only matters when PR deliverables are enabled.
-- Run history **delete (×)** permanently removes `.helix/runs/<id>.json` (handy while testing).
+- Run history **delete (×)** permanently removes the run from `.helix/runs.db` (handy while testing).
 
 ## Server & web UI
 
@@ -208,7 +208,8 @@ Correlation also works via headers: `X-Issues-Issue-Id`, `X-Issues-Source`. The 
   agents/*.md       # specialists
   skills/*/SKILL.md
   context/*.md      # optional curated notes (Phase A bootstrap)
-  runs/             # persisted runs (gitignored)
+  runs.db           # SQLite run state (gitignored)
+  runs/             # legacy JSON import source (gitignored)
 ```
 
 Useful knobs:
@@ -216,7 +217,7 @@ Useful knobs:
 - **`.env`** — essentials: `OPENROUTER_API_KEY`, `HELIX_MODEL` (default: `openrouter/xiaomi/mimo-v2.5-pro`). Loaded from project root; shell exports win. If the API key is unset, Helix falls back to `~/.pi/agent/auth.json`.
 - **`config.json`** — wiring only: `workflow`, `loops`, `mergeGate`, `deliverable.pr`, `triggers`, `repoContext`, `extensions`
 - **`agents/*.md`** — optional per-specialist `model:` in frontmatter (overrides the default for that agent only)
-- `repoContext.enabled` (default `true`) — deterministic repo bootstrap injected into the first specialist wave
+- `repoContext.enabled` (default `true`) — deterministic repo bootstrap injected once into every cold specialist session
 - `deliverable.pr` (default `false`) — opt into GitHub PR create/merge via `gh` after successful runs
 - `mergeGate` — auto-merge thresholds (only applies when `deliverable.pr` is true)
 

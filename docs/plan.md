@@ -24,10 +24,10 @@ End-to-end orchestration of a GitHub issue (or inline terminal task) through spe
 | Engine core | `src/engine/{engine,eventStream,consoleLogger,types}.ts` — `runIssue(issue, deps)` loop; typed `RunEvent` stream; console logger |
 | Config | `src/config.ts` (wiring loader) + `src/config/{env,paths,defaults}.ts` (`.env` + pi essentials) |
 | Provider | `src/providers/openrouter.ts` — pi `AuthStorage`/`ModelRegistry`; env then `~/.pi/` |
-| Specialists | `src/agents/loader.ts` (frontmatter), `session.ts` (in-process pi sessions), `loaderBuilder.ts` (always-isolated sessions) |
+| Specialists | `src/agents/loader.ts` (frontmatter), `session.ts` (in-process pi sessions), `loaderBuilder.ts` (isolated, run-scoped specialist lanes) |
 | Orchestrator | `src/orchestrator/{workflow,driver,gates,scripted}.ts` — workflow rails + LLM driver (JSON decisions) + deterministic gates |
 | Triggers | `src/triggers/{github,inline}.ts` — `gh issue view` + inline (terminal) path |
-| State | `src/state/runStore.ts` — one JSON per run under `.helix/runs/` |
+| State | `src/state/runStore.ts` — SQLite by default (`.helix/runs.db`), normalized incremental events/results, legacy JSON import |
 | CLI | `src/cli.ts` — `helix run <n>` (GitHub) / `--title`/`--body`/`--stdin` (inline) |
 | Presets | `presets/agents/{planner,dev,verifier}.md` + `presets/skills/{ts,react,express,rn,expo}/SKILL.md` |
 | Fixture | `examples/ts/.helix/` — reference consumer wired to the TS preset |
@@ -81,7 +81,10 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 | Item | Status |
 |---|---|
 | **Manage** | Experimental web UI + HTTP API for authoring `.helix/agents` and `.helix/skills`. No CLI yet. [→](./manage.md) |
-| **Repo context Phase A** | Deterministic bootstrap + context allowlist injected into orchestrator + first specialist wave. [→](./repo-context.md) |
+| **Repo context Phase A** | Deterministic bootstrap + context allowlist injected into the initial orchestrator turn and every cold specialist session. [→](./repo-context.md) |
+| **Within-run context reuse** | One Pi session per specialist lane per run + bounded structured handoffs (`RunKnowledgeEntry`) |
+| **Web-native streaming** | Orchestrator and specialist responses share started → live buffered deltas → durable full finished output; token deltas stay ephemeral |
+| **SQLite run state** | `.helix/runs.db` default with WAL; legacy `.helix/runs/*.json` imported when the database is empty |
 | **Issue-tracker callback** | Best-effort `run.completed` POST to external tracker (POC, no auth) — used with local-issues |
 | **Run history / delete** | `GET /runs`, UI sidebar, `DELETE /runs/:id` for test cleanup |
 | **Config observability** | Config tab + `GET /config/snapshot` — resolved essentials provenance (env / pi / default) + wiring |
@@ -101,7 +104,7 @@ Short version: keep Helix’s orchestration brain; default to **in-house light**
 - **Architecture / substrate** — ports, two tracks, DIY→third-party swap points. [→](./architecture.md)
 - **Guardrails & escalation** — structured escalation codes, budgets, workspace jail, pause/resume; design only. [→](./guardrails.md)
 - **Repo context B–D** — persistent `.helix/repo-memory.md`, freshness/`helix index`, semantic index
-- **Observability** — cost/token dashboards, searchable history beyond local JSON (domain `RunEvent` first; OTel later per architecture.md)
+- **Observability** — cost/token dashboards and richer searchable SQLite projections (domain `RunEvent` first; OTel later per architecture.md)
 - **Durability** — resume after crash / HITL park; shape `DurableRunner` before adopting Temporal
 - **More providers** — Anthropic, OpenAI, … (`Provider` interface is ready); AI SDK as optional future substrate
 - **First-class webhook trigger** in Helix core (today: HTTP `POST /runs` + external local-issues)

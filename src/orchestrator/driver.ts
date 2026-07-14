@@ -24,6 +24,7 @@ import type {
   Orchestrator,
   OrchestratorDecision,
   OrchestratorInput,
+  OrchestratorRunOptions,
   SpecialistCall,
   SpecialistDefinition,
 } from "../engine/types.js";
@@ -44,7 +45,7 @@ Reply with ONE JSON object and nothing else. Schema:
 }
 
 Rules:
-- kind=run: invoke one or more specialists in parallel. Each "task" must be self-contained (include relevant context from prior results) since specialists cannot see each other.
+- kind=run: invoke one or more specialists in parallel. Keep each task focused. Helix injects compact shared run knowledge, and a specialist retains its own session for the current run.
 - kind=done: only when the work is complete and verified. Include "deliverable".
 - kind=escalate: when blocked, too risky, or needs a human.
 - Never invent specialist names; use only those listed in the available specialists.
@@ -63,6 +64,7 @@ export class LlmOrchestrator implements Orchestrator {
   private readonly helixDir: string;
   private readonly extensions: { enabled?: boolean; paths?: string[] } | undefined;
   private session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
+  private reportedResults = 0;
 
   constructor(provider: PiProvider, workflow: Workflow, modelRef: string, opts: LlmOrchestratorOptions = {}) {
     this.provider = provider;
@@ -98,15 +100,31 @@ export class LlmOrchestrator implements Orchestrator {
     return session;
   }
 
-  async decide(input: OrchestratorInput): Promise<OrchestratorDecision> {
+  async decide(input: OrchestratorInput, opts?: OrchestratorRunOptions): Promise<OrchestratorDecision> {
     const session = await this.ensureSession();
-    const prompt = buildPrompt(input, this.workflow);
+    const prompt = buildPrompt({
+      ...input,
+      // The orchestrator session retains earlier turns, so repeat only work
+      // completed since its previous decision.
+      results: input.results.slice(this.reportedResults),
+      repoContext: input.iteration === 0 ? input.repoContext : undefined,
+    }, this.workflow);
+    this.reportedResults = input.results.length;
 
     let promptError: string | undefined;
+    const unsubscribe = opts?.onTextDelta
+      ? session.subscribe((event) => {
+          if (event.type !== "message_update") return;
+          const update = event.assistantMessageEvent;
+          if (update.type === "text_delta" && update.delta) opts.onTextDelta?.(update.delta);
+        })
+      : undefined;
     try {
       await session.prompt(prompt);
     } catch (err) {
       promptError = err instanceof Error ? err.message : String(err);
+    } finally {
+      unsubscribe?.();
     }
 
     const messages = session.messages as Message[];
@@ -183,11 +201,11 @@ ${describeWorkflow(workflow)}
 ## Available specialists
 ${specialistList}
 
-## Results so far (iteration ${iteration})
+## Newly completed results (iteration ${iteration})
 ${resultsBlock}
 
 ## Your decision
-Reply with ONE JSON object per the schema. If you invoke specialists, each task must be a complete, self-contained handoff prompt.`;
+Reply with ONE JSON object per the schema. If you invoke specialists, keep each task focused on the next work; Helix supplies shared run knowledge separately.`;
 }
 
 interface RawDecision {

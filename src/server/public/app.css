@@ -217,31 +217,36 @@ button.ghost {
   color: color-mix(in srgb, var(--text) 85%, var(--muted));
 }
 
-.specialist-block {
+.specialist-block,
+.orchestrator-block {
   margin: 0.35rem 0;
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg) 40%, var(--panel));
 }
 
-.specialist-block > summary {
+.specialist-block > summary,
+.orchestrator-block > summary {
   cursor: pointer;
   list-style: none;
   padding: 0.35rem 0.5rem;
 }
 
-.specialist-block > summary::-webkit-details-marker {
+.specialist-block > summary::-webkit-details-marker,
+.orchestrator-block > summary::-webkit-details-marker {
   display: none;
 }
 
-.specialist-block > summary::before {
+.specialist-block > summary::before,
+.orchestrator-block > summary::before {
   content: "▸";
   display: inline-block;
   width: 0.9rem;
   color: var(--muted);
 }
 
-.specialist-block[open] > summary::before {
+.specialist-block[open] > summary::before,
+.orchestrator-block[open] > summary::before {
   content: "▾";
 }
 
@@ -251,12 +256,59 @@ button.ghost {
   margin-left: 0.35rem;
 }
 
+.orchestrator-summary .orchestrator-status {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-left: 0.35rem;
+}
+
+.orchestrator-summary .orchestrator-status.ok { color: var(--green); }
+.orchestrator-summary .orchestrator-status.fail { color: var(--red); }
+
 .specialist-summary .specialist-status.ok { color: var(--green); }
 .specialist-summary .specialist-status.fail { color: var(--red); }
 
 .specialist-body {
   padding: 0 0.65rem 0.55rem 1.15rem;
   border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.orchestrator-body {
+  padding: 0.25rem 0.65rem 0.55rem 1.15rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.orchestrator-field {
+  margin-top: 0.4rem;
+}
+
+.orchestrator-field strong {
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.orchestrator-field pre {
+  margin: 0.2rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font: inherit;
+}
+
+.specialist-output,
+.orchestrator-output {
+  margin: 0.45rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font: inherit;
+}
+
+.specialist-output:empty,
+.orchestrator-output:empty {
+  display: none;
 }
 
 .specialist-task {
@@ -282,6 +334,7 @@ button.ghost {
   color: var(--accent);
   font-weight: 600;
 }
+
 
 .working-pulse {
   display: inline-block;

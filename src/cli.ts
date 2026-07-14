@@ -17,7 +17,7 @@ import { loadWorkflow } from "./orchestrator/workflow.js";
 import { LlmOrchestrator } from "./orchestrator/driver.js";
 import { GitHubTrigger } from "./triggers/github.js";
 import { inlineIssue } from "./triggers/inline.js";
-import { FileRunStore } from "./state/runStore.js";
+import { SqliteRunStore } from "./state/runStore.js";
 import { DEFAULT_GATE_CONFIG } from "./orchestrator/gates.js";
 import { init } from "./init.js";
 import type { Issue, Run } from "./engine/types.js";
@@ -194,7 +194,7 @@ async function cmdRun(args: string[]): Promise<void> {
     orchestrator.dispose();
   }
 
-  const store = new FileRunStore(resolve(helixDir, "runs"));
+  const store = new SqliteRunStore(resolve(helixDir, "runs.db"), resolve(helixDir, "runs"));
   run.runFile = store.save(run);
   printSummary(run);
 }

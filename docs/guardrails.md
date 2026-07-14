@@ -75,7 +75,7 @@ Default assumption for Helix’s current use (local-issues + localhost serve): o
 ### 5. Trust boundaries (serve)
 
 - Who can `POST /runs`, Manage apply, DELETE runs, future Settings.
-- Bind host from config; secrets never in run JSON / UI / logs.
+- Bind host from config; secrets never in durable run state / UI / logs.
 
 ### Design principles
 

@@ -58,6 +58,13 @@ test("GET / serves web UI", async () => {
   const js = await request(app).get("/app.js");
   assert.equal(js.status, 200);
   assert.match(js.text, /streamRun/);
+  assert.match(js.text, /orchestrator_output_delta/);
+  assert.match(js.text, /handleOrchestratorStarted/);
+  assert.match(js.text, /handleOrchestratorFinished/);
+  assert.doesNotMatch(js.text, /details\.open = true/);
+  assert.match(js.text, /formatOrchestratorDecision/);
+  assert.doesNotMatch(js.text, /previewText\(d\.reason/);
+  assert.match(String(js.headers["cache-control"]), /no-store/);
 });
 
 test("POST /runs starts inline run and GET returns final state", async () => {
@@ -94,6 +101,35 @@ test("GET /runs/:id/events returns SSE payload", async () => {
   const events = await request(app).get(`/runs/${id}/events`);
   assert.equal(events.status, 200);
   assert.match(events.text, /run_started/);
+  assert.match(events.text, /run_done/);
+});
+
+test("live response deltas use named SSE events", async () => {
+  const store = new MemoryRunStore();
+  const ctx = createRunContext({
+    helixDir: fixtureDir,
+    store,
+    provider: new FakeProvider(),
+    deliverable: new NoOpDeliverablePipeline(),
+    createOrchestrator: () => ({
+      async decide(_input, opts) {
+        opts?.onTextDelta?.('{"kind":"done"}');
+        // Emitted immediately: verifies the host subscribes before startRun.
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+        return { kind: "done" as const, reason: "streamed" };
+      },
+    }),
+    createSpecialistFactory: () => new StubSpecialistFactory([], {}),
+  });
+  const app = createApp({ ctx });
+
+  const start = await request(app).post("/runs").send({ title: "Named SSE" });
+  const events = await request(app).get(`/runs/${start.body.id}/events`);
+
+  assert.equal(events.status, 200);
+  assert.match(events.text, /event: live/);
+  assert.match(events.text, /orchestrator_output_delta/);
+  assert.match(events.text, /\\\"kind\\\":\\\"done\\\"/);
   assert.match(events.text, /run_done/);
 });
 

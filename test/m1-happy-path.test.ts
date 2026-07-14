@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runIssue } from "../src/engine/engine.js";
+import { EventStream, runIssue } from "../src/engine/engine.js";
 import type { Issue, OrchestratorDecision, SpecialistDefinition, SpecialistSessionFactory, RunEvent } from "../src/engine/types.js";
 import { FakeProvider } from "../src/providers/fake.js";
 import { StubSpecialistFactory } from "../src/agents/stubSession.js";
@@ -95,6 +95,109 @@ test("specialist activity: engine forwards onActivity lines as specialist_activi
   assert.equal(activity?.details?.line, "→ bash npm test");
   assert.equal(activity?.details?.invocationId, started?.details?.invocationId);
   assert.equal(finished?.details?.invocationId, started?.details?.invocationId);
+});
+
+test("specialist text deltas are live-only and not persisted in run events", async () => {
+  const defs = [def("dev")];
+  const baseFactory = new StubSpecialistFactory(defs, { dev: "full final output" });
+  const factoryProxy: SpecialistSessionFactory & { definitions: SpecialistDefinition[] } = {
+    definitions: defs,
+    async create(d) {
+      const base = await baseFactory.create(d);
+      return {
+        name: base.name,
+        async run(task, opts) {
+          opts?.onActivity?.({ kind: "text_delta", line: "live " });
+          opts?.onActivity?.({ kind: "text_delta", line: "text" });
+          return base.run(task, opts);
+        },
+        dispose: () => base.dispose(),
+      };
+    },
+  };
+  const stream = new EventStream();
+  const live: RunEvent[] = [];
+  stream.subscribe((event) => live.push(event));
+  const run = await runIssue(issue, {
+    provider: new FakeProvider(),
+    orchestrator: new ScriptedOrchestrator([
+      { kind: "run", specialists: [{ specialist: "dev", task: "write" }], reason: "run" },
+      { kind: "done", reason: "ok" },
+    ]),
+    specialistFactory: factoryProxy,
+    eventStream: stream,
+  });
+
+  assert.equal(live.filter((event) => event.type === "specialist_output_delta").length, 2);
+  assert.equal(run.events.some((event) => event.type === "specialist_output_delta"), false);
+  assert.equal(run.results[0].output, "full final output");
+});
+
+test("orchestrator response deltas are live-only and not persisted", async () => {
+  const stream = new EventStream();
+  const live: RunEvent[] = [];
+  stream.subscribe((event) => live.push(event));
+  const run = await runIssue(issue, {
+    provider: new FakeProvider(),
+    orchestrator: {
+      async decide(_input, opts) {
+        opts?.onTextDelta?.('{"kind":');
+        opts?.onTextDelta?.('"done"}');
+        return { kind: "done", reason: "complete" };
+      },
+    },
+    specialistFactory: new StubSpecialistFactory([], {}),
+    eventStream: stream,
+  });
+
+  assert.equal(live.filter((event) => event.type === "orchestrator_output_delta").length, 2);
+  assert.equal(run.events.some((event) => event.type === "orchestrator_output_delta"), false);
+  const orchestratorStarted = run.events.find((event) => event.type === "orchestrator_started");
+  const orchestratorFinished = run.events.find((event) => event.type === "orchestrator_finished");
+  assert.ok(orchestratorStarted);
+  assert.ok(orchestratorFinished);
+  assert.equal(orchestratorFinished.details?.output, '{"kind":"done"}');
+  assert.equal(orchestratorFinished.details?.invocationId, orchestratorStarted.details?.invocationId);
+  assert.equal(run.status, "done");
+});
+
+test("specialist session is reused within a run and disposed once", async () => {
+  const defs = [def("dev")];
+  let creates = 0;
+  let disposes = 0;
+  const tasks: string[] = [];
+  const factory: SpecialistSessionFactory & { definitions: SpecialistDefinition[] } = {
+    definitions: defs,
+    async create() {
+      creates++;
+      return {
+        name: "dev",
+        async run(task) {
+          tasks.push(task);
+          return { specialist: "dev", task, ok: true, output: `turn ${tasks.length}` };
+        },
+        dispose() { disposes++; },
+      };
+    },
+  };
+  const run = await runIssue(issue, {
+    provider: new FakeProvider(),
+    orchestrator: new ScriptedOrchestrator([
+      { kind: "run", specialists: [{ specialist: "dev", task: "first" }], reason: "start" },
+      { kind: "run", specialists: [{ specialist: "dev", task: "second" }], reason: "continue" },
+      { kind: "done", reason: "ok" },
+    ]),
+    specialistFactory: factory,
+    repoContext: "## Repo bootstrap\nknown layout",
+  });
+
+  assert.equal(run.status, "done");
+  assert.equal(creates, 1);
+  assert.equal(disposes, 1);
+  assert.match(tasks[0], /Repo bootstrap/);
+  assert.doesNotMatch(tasks[1], /Repo bootstrap/);
+  assert.match(tasks[1], /Shared run knowledge/);
+  assert.deepEqual(run.results.map((result) => result.task), ["first", "second"]);
 });
 
 test("parallel isolation: two specialists run concurrently with own sessions", async () => {

@@ -38,7 +38,7 @@ test("notifyIssueTracker POSTs run.completed to tracker", async () => {
         calls.push({
           url: String(url),
           body: JSON.parse(String(init?.body)),
-          event: String(init?.headers?.["X-Helix-Event"]),
+          event: String(new Headers(init?.headers).get("X-Helix-Event")),
         });
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       },

@@ -52,10 +52,12 @@
     "@earendil-works/pi-agent-core": "^0.80.3",
     "@earendil-works/pi-ai": "^0.80.3",
     "@earendil-works/pi-coding-agent": "^0.80.3",
+    "better-sqlite3": "^12.11.1",
     "express": "^5.2.1",
     "typebox": "1.1.38"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.6",
     "@types/node": "^20",
     "@types/supertest": "^7.2.0",

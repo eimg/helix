@@ -71,7 +71,7 @@ test("loadConfig defaults repoContext.enabled to true", () => {
   assert.equal(config.repoContext?.enabled, true);
 });
 
-test("engine injects repoContext into first specialist wave only", async () => {
+test("engine injects repoContext into every cold specialist session", async () => {
   const defs: SpecialistDefinition[] = [
     {
       name: "planner",
@@ -88,10 +88,25 @@ test("engine injects repoContext into first specialist wave only", async () => {
       source: "project",
     },
   ];
-  const factory = new StubSpecialistFactory(defs, {
+  const baseFactory = new StubSpecialistFactory(defs, {
     planner: "PLAN",
     dev: "DONE",
   });
+  const received: Record<string, string[]> = {};
+  const factory = {
+    definitions: defs,
+    async create(def: SpecialistDefinition) {
+      const session = await baseFactory.create(def);
+      return {
+        name: session.name,
+        async run(task: string) {
+          (received[def.name] ??= []).push(task);
+          return session.run(task);
+        },
+        dispose: () => session.dispose(),
+      };
+    },
+  };
   const script: OrchestratorDecision[] = [
     { kind: "run", specialists: [{ specialist: "planner", task: "plan it" }], reason: "plan" },
     { kind: "run", specialists: [{ specialist: "dev", task: "build it" }], reason: "dev" },
@@ -114,8 +129,12 @@ test("engine injects repoContext into first specialist wave only", async () => {
   });
 
   assert.equal(run.status, "done");
-  assert.match(run.results[0].task, /Repo bootstrap/);
-  assert.match(run.results[0].task, /plan it/);
+  assert.match(received.planner[0], /Repo bootstrap/);
+  assert.match(received.planner[0], /plan it/);
+  assert.match(received.dev[0], /Repo bootstrap/);
+  assert.match(received.dev[0], /Shared run knowledge/);
+  assert.match(received.dev[0], /PLAN/);
+  assert.equal(run.results[0].task, "plan it");
   assert.equal(run.results[1].task, "build it");
   assert.equal(events[0].type, "run_started");
   assert.equal((events[0].details as { repoContextChars?: number })?.repoContextChars, bootstrap.length);

@@ -2,7 +2,7 @@
  * Phase A repo context: deterministic bootstrap + curated file allowlist.
  *
  * Gathered once per run (no LLM) and injected into the orchestrator prompt and
- * the first specialist wave so planners start grounded without rediscovering
+ * every cold specialist session so agents start grounded without rediscovering
  * the tree via tools. Keeps session isolation (`noContextFiles`) intact.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";

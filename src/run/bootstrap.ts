@@ -15,7 +15,7 @@ import { loadSpecialists, findHelixDir } from "../agents/loader.js";
 import { PiSpecialistSessionFactory } from "../agents/session.js";
 import type { Issue, Run, RunEvent, SpecialistDefinition, Orchestrator, SpecialistSessionFactory } from "../engine/types.js";
 import type { RunStore } from "../state/runStore.js";
-import { FileRunStore } from "../state/runStore.js";
+import { SqliteRunStore } from "../state/runStore.js";
 import type { DeliverablePipeline } from "../deliverable/pipeline.js";
 import { NoOpDeliverablePipeline } from "../deliverable/pipeline.js";
 import { notifyIssueTracker } from "../callbacks/issueTracker.js";
@@ -57,7 +57,10 @@ export function createRunContext(opts: RunContextOptions = {}): RunContext {
   const model = resolveModelRef().value;
   const provider = opts.provider ?? new OpenRouterProvider();
   const specialists = loadSpecialists(resolve(helixDir, "agents"));
-  const store = opts.store ?? new FileRunStore(resolve(helixDir, "runs"));
+  const store = opts.store ?? new SqliteRunStore(
+    resolve(helixDir, "runs.db"),
+    resolve(helixDir, "runs"),
+  );
   const deliverable = opts.deliverable ?? new NoOpDeliverablePipeline();
 
   return {
@@ -85,11 +88,14 @@ export interface ActiveRun {
 export interface StartRunOptions {
   onEvent?: (run: Run, event: RunEvent) => void;
   skipDeliverable?: boolean;
+  /** Allow hosts to subscribe before execution starts, avoiding early-delta loss. */
+  eventStream?: EventStream;
+  runId?: string;
 }
 
 export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = {}): ActiveRun {
-  const runId = randomUUID();
-  const eventStream = new EventStream();
+  const runId = opts.runId ?? randomUUID();
+  const eventStream = opts.eventStream ?? new EventStream();
   const orchestrator =
     ctx.createOrchestrator?.(ctx) ??
     new LlmOrchestrator(ctx.provider, ctx.workflow, ctx.model, {

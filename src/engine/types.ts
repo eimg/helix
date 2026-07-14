@@ -51,8 +51,11 @@ export interface SpecialistDefinition {
 
 /** One line in a specialist's live activity log (tool call, assistant text, etc.). */
 export interface SpecialistActivityLine {
-  kind: "tool" | "text";
+  kind: "tool" | "text_delta";
   line: string;
+  toolName?: string;
+  phase?: "start" | "end";
+  isError?: boolean;
 }
 
 export interface SpecialistRunOptions {
@@ -68,6 +71,15 @@ export interface SpecialistResult {
   output: string;
   usage?: { input: number; output: number; cost: number; turns: number };
   error?: string;
+}
+
+/** Compact, runtime-neutral handoff shared between otherwise isolated specialists. */
+export interface RunKnowledgeEntry {
+  specialist: string;
+  ok: boolean;
+  summary: string;
+  relevantPaths: string[];
+  verifiedCommands: string[];
 }
 
 /** What the orchestrator asks the engine to do next. */
@@ -88,9 +100,13 @@ export interface RunEvent {
   type:
     | "run_started"
     | "issue_fetched"
+    | "orchestrator_started"
+    | "orchestrator_output_delta"
+    | "orchestrator_finished"
     | "orchestrator_decided"
     | "specialist_started"
     | "specialist_activity"
+    | "specialist_output_delta"
     | "specialist_finished"
     | "gate_blocked"
     | "run_done"
@@ -100,7 +116,7 @@ export interface RunEvent {
   details?: Record<string, unknown>;
 }
 
-/** A full run record, persisted to `.helix/runs/<run-id>.json`. */
+/** A full run record, persisted by the configured RunStore. */
 export type ApprovalStatus = "none" | "pending" | "approved" | "rejected";
 
 export interface MergeGateResult {
@@ -126,6 +142,8 @@ export interface Run {
   status: "running" | "done" | "escalated" | "error";
   events: RunEvent[];
   results: SpecialistResult[];
+  /** Compact cross-specialist handoffs; raw Pi conversations remain session-owned. */
+  knowledge?: RunKnowledgeEntry[];
   finalDecision?: OrchestratorDecision;
   runFile?: string;
   /** Human approval gate (M2). */
@@ -156,7 +174,12 @@ export interface SpecialistSession {
 
 /** Hybrid orchestrator: given issue + state, decide next. */
 export interface Orchestrator {
-  decide(input: OrchestratorInput): Promise<OrchestratorDecision>;
+  decide(input: OrchestratorInput, opts?: OrchestratorRunOptions): Promise<OrchestratorDecision>;
+}
+
+export interface OrchestratorRunOptions {
+  /** Streams only visible assistant response text, never hidden reasoning. */
+  onTextDelta?: (delta: string) => void;
 }
 
 export interface OrchestratorInput {
@@ -167,7 +190,7 @@ export interface OrchestratorInput {
   iteration: number;
   /**
    * Deterministic repo bootstrap (tree, manifests, allowlisted docs).
-   * Injected by the engine on the first specialist wave; also shown to the orchestrator.
+   * Shown to the orchestrator initially and injected into every cold specialist session.
    */
   repoContext?: string;
 }

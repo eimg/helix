@@ -7,5 +7,6 @@ dist/
 .env.*
 !.env.example
 .helix/runs/
+.helix/runs.db*
 .helix/secrets.*
 coverage/

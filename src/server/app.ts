@@ -18,10 +18,12 @@
  */
 import express, { type Express, type Request, type Response } from "express";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { RunContext } from "../run/bootstrap.js";
 import { startRun } from "../run/bootstrap.js";
 import type { Issue, RunEvent } from "../engine/types.js";
+import { EventStream } from "../engine/eventStream.js";
 import { inlineIssue } from "../triggers/inline.js";
 import { GitHubTrigger } from "../triggers/github.js";
 import { approveRun, rejectRun } from "../deliverable/pipeline.js";
@@ -42,6 +44,8 @@ export interface CreateAppOptions {
 interface ActiveRunEntry {
   eventStream: import("../engine/eventStream.js").EventStream;
   sseClients: Set<Response>;
+  /** Latest accumulated live text per active invocation for late SSE attachment. */
+  liveSnapshots: Map<string, RunEvent>;
 }
 
 interface ActiveManageEntry {
@@ -75,13 +79,21 @@ export function createApp(opts: CreateAppOptions): Express {
       return;
     }
 
-    const { runId, eventStream, promise } = startRun(ctx, issue, { skipDeliverable: false });
-
-    const entry: ActiveRunEntry = { eventStream, sseClients: new Set() };
+    const runId = randomUUID();
+    const eventStream = new EventStream();
+    const entry: ActiveRunEntry = { eventStream, sseClients: new Set(), liveSnapshots: new Map() };
     activeRuns.set(runId, entry);
 
     const unsubscribe = eventStream.subscribe((event) => {
+      updateLiveSnapshot(entry, event);
       broadcastRunSse(entry, event);
+      if (isTerminalRunEvent(event)) closeRunSseClients(entry);
+    });
+
+    const { promise } = startRun(ctx, issue, {
+      skipDeliverable: false,
+      runId,
+      eventStream,
     });
 
     promise
@@ -152,6 +164,7 @@ export function createApp(opts: CreateAppOptions): Express {
 
     const entry = activeRuns.get(runId);
     if (entry && run.status === "running") {
+      for (const event of entry.liveSnapshots.values()) writeRunSse(res, event);
       entry.sseClients.add(res);
       req.on("close", () => entry.sseClients.delete(res));
       return;
@@ -313,7 +326,13 @@ export function createApp(opts: CreateAppOptions): Express {
     res.json({ ok: true });
   });
 
-  app.use(express.static(publicDir));
+  app.use(express.static(publicDir, {
+    setHeaders(res) {
+      // The SSE protocol and its browser client evolve together. Avoid leaving
+      // an older app.js active against a newer event stream after restart.
+      res.setHeader("Cache-Control", "no-store");
+    },
+  }));
   app.get("/", (_req, res) => {
     res.sendFile(join(publicDir, "index.html"));
   });
@@ -376,6 +395,11 @@ function parseLimit(value: unknown, fallback: number): number {
 }
 
 function writeRunSse(res: Response, event: RunEvent): void {
+  if (event.type === "orchestrator_output_delta" || event.type === "specialist_output_delta") {
+    // Named live events are ignored by older clients instead of falling
+    // through their generic durable-event renderer once per token.
+    res.write("event: live\n");
+  }
   res.write(`data: ${JSON.stringify(event)}\n\n`);
 }
 
@@ -383,6 +407,35 @@ function broadcastRunSse(entry: ActiveRunEntry, event: RunEvent): void {
   for (const client of entry.sseClients) {
     writeRunSse(client, event);
   }
+}
+
+function updateLiveSnapshot(entry: ActiveRunEntry, event: RunEvent): void {
+  const invocationId = event.details?.invocationId;
+  if (typeof invocationId !== "string") return;
+  const isDelta = event.type === "orchestrator_output_delta" || event.type === "specialist_output_delta";
+  const key = `${event.type.startsWith("orchestrator") ? "orchestrator" : "specialist"}:${invocationId}`;
+  if (isDelta) {
+    const previous = entry.liveSnapshots.get(key);
+    const previousDelta = typeof previous?.details?.delta === "string" ? previous.details.delta : "";
+    const delta = typeof event.details?.delta === "string" ? event.details.delta : "";
+    entry.liveSnapshots.set(key, {
+      ...event,
+      details: { ...event.details, delta: previousDelta + delta },
+    });
+    return;
+  }
+  if (event.type === "orchestrator_finished" || event.type === "specialist_finished") {
+    entry.liveSnapshots.delete(key);
+  }
+}
+
+function isTerminalRunEvent(event: RunEvent): boolean {
+  return event.type === "run_done" || event.type === "run_escalated" || event.type === "run_error";
+}
+
+function closeRunSseClients(entry: ActiveRunEntry): void {
+  for (const client of entry.sseClients) client.end();
+  entry.sseClients.clear();
 }
 
 function writeManageSse(res: Response, event: ManageEvent): void {
