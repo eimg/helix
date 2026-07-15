@@ -31,18 +31,12 @@ production observation
 
 The loops may reuse Pi-backed runtime adapters, specialist-session construction, event streaming, persistence patterns, and policy interfaces. They should not share an opaque session or collapse their domain state into the coding-run model.
 
-### Project inception is a gateway, not a recurring loop
-
-For a new project, issue-driven implementation begins only after a human-led inception step establishes the problem, intended users, goals, non-goals, success criteria, and foundational constraints. Helix may clarify, challenge, prototype uncertain choices, and organize the resulting charter, but humans own and approve the initial intent and major decisions.
-
-After approval, a one-time bootstrap workflow may create the repository foundation, baseline knowledge, verified development commands, and initial backlog. Those issues then enter the normal implementation loop. This keeps the important first step human-crafted without excluding initialization and its decisions from the lifecycle's durable context.
-
 ## Lifecycle loops
 
 | Loop | Durable work object | Primary trigger | Output / handoff | Direction |
 |---|---|---|---|---|
 | Knowledge and discovery | Opportunity or hypothesis | Scheduled scan plus knowledge changes | Brief, RFC, prototype, experiment, proposed issues | Planned |
-| Planning | Milestone or backlog proposal | Team cadence plus accepted proposals | Prioritized issues with acceptance criteria | Planned |
+| Planning | Milestone or implementation plan | Team cadence, accepted proposal, or new-project request | Prioritized issues or a bootstrap-ready plan | Planned |
 | Implementation | Issue | Create, reopen, or command comment | Verified repository change delivered as a new PR | Partially shipped |
 | PR control | Pull request at a head SHA | PR, CI, and review events plus scheduled reconciliation | Review, fixes, evidence, merge decision | Planned |
 | Release readiness | Release candidate | Merged changes, milestone, or release schedule | Changelog, risk analysis, rollout and rollback plan | Planned |
@@ -101,7 +95,15 @@ interface KnowledgeProposal {
 
 Planning converts accepted opportunities and operational needs into a small, ordered backlog. It should clarify scope, dependencies, acceptance criteria, expected value, and risks. It proposes priorities; product authority remains human unless an explicit policy delegates a narrow class of maintenance work.
 
-Planning should create normal issue objects so implementation begins through the same observable issue-triggered path rather than an internal shortcut.
+For an existing project, an accepted plan creates normal issue objects so implementation begins through the same observable issue-triggered path rather than an internal shortcut. For a new project, the same planning loop iterates with the human until it produces a bootstrap-ready plan covering intent, goals and non-goals, success criteria, architecture, repository structure, verified-command expectations, deployment assumptions, and an initial backlog.
+
+The human accepts a specific plan version before bootstrap. Bootstrap is a one-time executor, not another control loop: it creates and validates the repository foundation, baseline knowledge, tooling, and initial issues from the accepted plan. If execution exposes a foundational conflict, it returns evidence to planning for revision instead of silently redesigning the project.
+
+```text
+planning loop
+  ├─ existing project → accepted plan → issues
+  └─ new project → accepted bootstrap plan → bootstrap executor → issues
+```
 
 ### Implementation
 
