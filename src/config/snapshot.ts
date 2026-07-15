@@ -72,7 +72,6 @@ export interface ConfigSnapshot {
   workflow: {
     steps: string[];
     maxIterations: number;
-    loops: Record<string, { backTo: string; maxRetries: number }>;
   };
   mergeGate: HelixConfig["mergeGate"];
   triggers: HelixConfig["triggers"];
@@ -150,7 +149,6 @@ export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
     workflow: {
       steps: workflowSteps,
       maxIterations: ctx.workflow.maxIterations,
-      loops: ctx.config.orchestrator.loops ?? {},
     },
     mergeGate: ctx.config.mergeGate,
     triggers: ctx.config.triggers,

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync, existsSync, cpSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import request from "supertest";
@@ -16,6 +16,7 @@ import { createRunContext } from "../src/run/bootstrap.js";
 import { MemoryRunStore } from "../src/state/runStore.js";
 import { FakeProvider } from "../src/providers/fake.js";
 import { loadConfig } from "../src/config.js";
+import { StubSpecialistFactory } from "../src/agents/stubSession.js";
 
 const fixtureDir = join(process.cwd(), "examples/ts/.helix");
 
@@ -170,6 +171,81 @@ test("manage API: session, events, apply", async () => {
   const applied = await request(app).post(`/manage/sessions/${id}/apply`).send({ force: false });
   assert.equal(applied.status, 200);
   assert.equal(applied.body.status, "applied");
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("manage workflow API reorders available agents and preserves other config", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "helix-manage-workflow-"));
+  const helixDir = join(dir, ".helix");
+  cpSync(fixtureDir, helixDir, { recursive: true });
+  const ctx = createRunContext({ helixDir, store: new MemoryRunStore(), provider: new FakeProvider() });
+  const app = createApp({ ctx });
+
+  const before = await request(app).get("/manage/workflow");
+  assert.equal(before.status, 200);
+  assert.deepEqual(before.body.steps, ["planner", "dev", "verifier"]);
+
+  const saved = await request(app).put("/manage/workflow").send({ steps: ["dev", "verifier", "planner"] });
+  assert.equal(saved.status, 200);
+  assert.deepEqual(saved.body.steps, ["dev", "verifier", "planner"]);
+
+  const config = JSON.parse(readFileSync(join(helixDir, "config.json"), "utf-8"));
+  assert.deepEqual(config.orchestrator.workflow, ["dev", "verifier", "planner"]);
+  assert.equal(config.orchestrator.maxIterations, 6);
+  assert.equal(config.repoContext.enabled, true);
+
+  const snapshot = await request(app).get("/config/snapshot");
+  assert.deepEqual(snapshot.body.workflow.steps, ["dev", "verifier", "planner"]);
+
+  const duplicate = await request(app).put("/manage/workflow").send({ steps: ["dev", "dev"] });
+  assert.equal(duplicate.status, 400);
+  assert.match(duplicate.body.error, /duplicate agent/);
+
+  const unknown = await request(app).put("/manage/workflow").send({ steps: ["missing"] });
+  assert.equal(unknown.status, 400);
+  assert.match(unknown.body.error, /Unknown workflow agent/);
+
+  const empty = await request(app).put("/manage/workflow").send({ steps: [] });
+  assert.equal(empty.status, 400);
+  assert.match(empty.body.error, /at least one agent/);
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("new runs reload workflow and agents saved while the server is running", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "helix-manage-reload-"));
+  const helixDir = join(dir, ".helix");
+  cpSync(fixtureDir, helixDir, { recursive: true });
+  let observedSteps: string[] = [];
+  let observedAgents: string[] = [];
+  const ctx = createRunContext({
+    helixDir,
+    store: new MemoryRunStore(),
+    provider: new FakeProvider(),
+    createOrchestrator: (current) => {
+      observedSteps = [...current.workflow.steps];
+      return {
+        async decide(input) {
+          observedAgents = input.specialists.map((specialist) => specialist.name);
+          return { kind: "done" as const, reason: "ok" };
+        },
+      };
+    },
+    createSpecialistFactory: (current) => new StubSpecialistFactory(current.specialists, {}),
+  });
+  const app = createApp({ ctx });
+
+  writeFileSync(join(helixDir, "agents", "reviewer.md"), "---\nname: reviewer\ndescription: Reviews changes\n---\n\nReview carefully.\n");
+  const saved = await request(app).put("/manage/workflow").send({ steps: ["planner", "reviewer", "dev", "verifier"] });
+  assert.equal(saved.status, 200);
+
+  const started = await request(app).post("/runs").send({ title: "Reload resources" });
+  assert.equal(started.status, 202);
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 80));
+
+  assert.deepEqual(observedSteps, ["planner", "reviewer", "dev", "verifier"]);
+  assert.ok(observedAgents.includes("reviewer"));
 
   rmSync(dir, { recursive: true, force: true });
 });

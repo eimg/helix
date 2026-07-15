@@ -114,24 +114,10 @@ function renderFlags(s) {
 
 function renderWorkflow(s) {
   const steps = s.workflow.steps.map((step) => `<code class="config-chip">${escapeHtml(step)}</code>`).join(" → ");
-  const loops = Object.entries(s.workflow.loops ?? {});
-  const loopRows = loops.length
-    ? loops
-        .map(
-          ([name, loop]) =>
-            `<tr><td><code>${escapeHtml(name)}</code></td><td>→ <code>${escapeHtml(loop.backTo)}</code></td><td>max ${loop.maxRetries}</td></tr>`
-        )
-        .join("")
-    : `<tr><td colspan="3" class="muted">No loops configured</td></tr>`;
-
   return `<div class="config-kv">
     ${kv("Sequence", steps || `<span class="muted">empty</span>`)}
     ${kv("Max iterations", String(s.workflow.maxIterations))}
-  </div>
-  <table class="config-table">
-    <thead><tr><th>Loop</th><th>Back to</th><th>Retries</th></tr></thead>
-    <tbody>${loopRows}</tbody>
-  </table>`;
+  </div>`;
 }
 
 function renderGate(s) {

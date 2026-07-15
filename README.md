@@ -141,9 +141,12 @@ npm run dev
 |---------|-------|
 | Webhook URL | `http://127.0.0.1:8319/runs` |
 | Label filter | `trigger` (default) or any label you prefer |
+| Continuation comment command | `/helix` (default) |
 | Webhooks enabled | on |
 
 **Create an issue** in local-issues with the filter label (e.g. `trigger`). The tracker POSTs to Helix; a run starts and appears in the Helix run console. When the run finishes, Helix sends a `run.completed` callback — local-issues closes the issue and adds a Helix comment.
+
+To request more work after completion, reopen the issue or add a comment beginning with `/helix`. local-issues sends that external event to the completed run; Helix creates a linked child run with fresh specialist sessions and bounded context from the original issue and parent outcome. This is workflow continuation, not a manual chat prompt.
 
 See the [local-issues README](https://github.com/eimg/local-issues#helix-integration) for webhook payload details and API reference.
 
@@ -164,7 +167,7 @@ helix serve
 | Surface | URL | Notes |
 |--------|-----|--------|
 | Run console | `/` | Form, live log, run history, delete finished runs |
-| Manage | `/manage` | Experimental agent/skill authoring (web/API only) |
+| Manage | `/manage` | Experimental agent/skill authoring and default-workflow ordering (web/API only) |
 | API | `/runs`, `/runs/:id/events`, … | JSON + SSE |
 
 Default port **8319** (phone-keypad mnemonic for HELIX). Override with `--port` or `PORT`.
@@ -172,6 +175,7 @@ Default port **8319** (phone-keypad mnemonic for HELIX). Override with `--port` 
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/runs` | Start a run (inline or GitHub issue) |
+| `POST` | `/runs/:id/continuations` | Start an externally triggered child run |
 | `GET` | `/runs` | List run summaries (`?limit=`) |
 | `GET` | `/runs/:id` | Run state snapshot |
 | `DELETE` | `/runs/:id` | Delete a finished run |
@@ -198,6 +202,20 @@ Accepts inline issues from local-issues and other producers:
 
 Correlation also works via headers: `X-Issues-Issue-Id`, `X-Issues-Source`. The `external` block (or headers) enables completion callbacks to local-issues.
 
+### `POST /runs/:id/continuations`
+
+Accepts a terminal parent run plus an idempotent external event:
+
+```json
+{
+  "instruction": "Also cover the regression case",
+  "externalEventId": "comment:42",
+  "trigger": "issue.comment"
+}
+```
+
+The parent must be `done` or `escalated`. Helix returns the existing child for a repeated `externalEventId`, and rejects a second child while one for the same parent is still running. A continuation is a new auditable workflow run; it does not resume an opaque Pi conversation.
+
 ## Config
 
 `helix init` creates project-local `.helix/`:
@@ -215,7 +233,8 @@ Correlation also works via headers: `X-Issues-Issue-Id`, `X-Issues-Source`. The 
 Useful knobs:
 
 - **`.env`** — essentials: `OPENROUTER_API_KEY`, `HELIX_MODEL` (default: `openrouter/xiaomi/mimo-v2.5-pro`). Loaded from project root; shell exports win. If the API key is unset, Helix falls back to `~/.pi/agent/auth.json`.
-- **`config.json`** — wiring only: `workflow`, `loops`, `mergeGate`, `deliverable.pr`, `triggers`, `repoContext`, `extensions`
+- **`config.json`** — wiring only: `workflow`, `maxIterations`, `mergeGate`, `deliverable.pr`, `triggers`, `repoContext`, `extensions`
+- The Manage tab can add, remove, and reorder agents in the default workflow. New runs reload saved workflow and agent definitions without restarting the server.
 - **`agents/*.md`** — optional per-specialist `model:` in frontmatter (overrides the default for that agent only)
 - `repoContext.enabled` (default `true`) — deterministic repo bootstrap injected once into every cold specialist session
 - `deliverable.pr` (default `false`) — opt into GitHub PR create/merge via `gh` after successful runs

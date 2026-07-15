@@ -11,13 +11,67 @@ const discardBtn = document.getElementById("discard");
 const forceEl = document.getElementById("force-overwrite");
 const clearBtn = document.getElementById("clear-log");
 const inventoryEl = document.getElementById("inventory");
+const workflowForm = document.getElementById("workflow-form");
+const workflowListEl = document.getElementById("workflow-list");
+const workflowAgentEl = document.getElementById("workflow-agent");
+const addWorkflowAgentBtn = document.getElementById("add-workflow-agent");
+const saveWorkflowBtn = document.getElementById("save-workflow");
+const workflowStatusEl = document.getElementById("workflow-status");
 
 let sessionId = null;
 let activeSource = null;
 let currentDrafts = null;
 let currentDeletions = null;
+let availableAgents = [];
+let workflowSteps = [];
+let savedWorkflowSteps = [];
 
 loadInventory();
+
+workflowListEl.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-workflow-action]");
+  if (!button) return;
+  const index = Number(button.dataset.index);
+  if (!Number.isInteger(index) || index < 0 || index >= workflowSteps.length) return;
+  const action = button.dataset.workflowAction;
+  if (action === "remove") workflowSteps.splice(index, 1);
+  if (action === "up" && index > 0) [workflowSteps[index - 1], workflowSteps[index]] = [workflowSteps[index], workflowSteps[index - 1]];
+  if (action === "down" && index < workflowSteps.length - 1) [workflowSteps[index + 1], workflowSteps[index]] = [workflowSteps[index], workflowSteps[index + 1]];
+  workflowStatusEl.textContent = "Unsaved changes";
+  renderWorkflow();
+});
+
+addWorkflowAgentBtn.addEventListener("click", () => {
+  const agent = workflowAgentEl.value;
+  if (!agent || workflowSteps.includes(agent)) return;
+  workflowSteps.push(agent);
+  workflowStatusEl.textContent = "Unsaved changes";
+  renderWorkflow();
+});
+
+workflowForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (workflowSteps.length === 0) return;
+  setWorkflowBusy(true);
+  workflowStatusEl.textContent = "Saving…";
+  try {
+    const res = await fetch("/manage/workflow", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ steps: workflowSteps }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    workflowSteps = [...data.steps];
+    savedWorkflowSteps = [...data.steps];
+    workflowStatusEl.textContent = "Saved";
+    renderWorkflow();
+  } catch (err) {
+    workflowStatusEl.textContent = err instanceof Error ? err.message : String(err);
+  } finally {
+    setWorkflowBusy(false);
+  }
+});
 
 clearBtn.addEventListener("click", () => {
   logEl.innerHTML = "";
@@ -86,10 +140,16 @@ discardBtn.addEventListener("click", async () => {
 
 async function loadInventory() {
   try {
-    const [agents, skills] = await Promise.all([
+    const [agents, skills, workflow] = await Promise.all([
       fetch("/manage/agents").then((r) => r.json()),
       fetch("/manage/skills").then((r) => r.json()),
+      fetch("/manage/workflow").then((r) => r.json()),
     ]);
+    availableAgents = Array.isArray(agents) ? agents : [];
+    workflowSteps = Array.isArray(workflow.steps) ? [...workflow.steps] : [];
+    savedWorkflowSteps = [...workflowSteps];
+    workflowStatusEl.textContent = "";
+    renderWorkflow();
     const agentText =
       agents.length === 0
         ? "No agents"
@@ -101,6 +161,48 @@ async function loadInventory() {
     inventoryEl.innerHTML = `<div class="inventory-grid"><div><h3>Agents</h3><ul>${agentText}</ul></div><div><h3>Skills</h3><ul>${skillText}</ul></div></div>`;
   } catch {
     inventoryEl.innerHTML = `<p class="muted">Could not load inventory</p>`;
+    workflowListEl.innerHTML = `<p class="muted">Could not load workflow</p>`;
+  }
+}
+
+function renderWorkflow() {
+  const descriptions = new Map(availableAgents.map((agent) => [agent.name, agent.description]));
+  workflowListEl.innerHTML = workflowSteps.length
+    ? workflowSteps.map((name, index) => `<div class="workflow-row">
+        <span class="workflow-number">${index + 1}</span>
+        <div class="workflow-agent-copy">
+          <strong>${escapeHtml(name)}</strong>
+          <span>${escapeHtml(descriptions.get(name) || "Agent definition not found")}</span>
+        </div>
+        <div class="workflow-row-actions">
+          <button type="button" class="ghost" data-workflow-action="up" data-index="${index}" aria-label="Move ${escapeHtml(name)} up" ${index === 0 ? "disabled" : ""}>↑</button>
+          <button type="button" class="ghost" data-workflow-action="down" data-index="${index}" aria-label="Move ${escapeHtml(name)} down" ${index === workflowSteps.length - 1 ? "disabled" : ""}>↓</button>
+          <button type="button" class="ghost workflow-remove" data-workflow-action="remove" data-index="${index}" aria-label="Remove ${escapeHtml(name)}">Remove</button>
+        </div>
+      </div>`).join("")
+    : `<p class="workflow-empty">Add at least one agent to save the workflow.</p>`;
+
+  const remaining = availableAgents.filter((agent) => !workflowSteps.includes(agent.name));
+  workflowAgentEl.innerHTML = remaining.length
+    ? remaining.map((agent) => `<option value="${escapeHtml(agent.name)}">${escapeHtml(agent.name)}</option>`).join("")
+    : `<option value="">All agents are included</option>`;
+  workflowAgentEl.disabled = remaining.length === 0;
+  addWorkflowAgentBtn.disabled = remaining.length === 0;
+  saveWorkflowBtn.disabled = workflowSteps.length === 0 || sameWorkflow(workflowSteps, savedWorkflowSteps);
+}
+
+function sameWorkflow(left, right) {
+  return left.length === right.length && left.every((step, index) => step === right[index]);
+}
+
+function setWorkflowBusy(busy) {
+  workflowAgentEl.disabled = busy || availableAgents.every((agent) => workflowSteps.includes(agent.name));
+  addWorkflowAgentBtn.disabled = busy || workflowAgentEl.disabled;
+  saveWorkflowBtn.disabled = busy || workflowSteps.length === 0 || sameWorkflow(workflowSteps, savedWorkflowSteps);
+  for (const button of workflowListEl.querySelectorAll("button[data-workflow-action]")) {
+    const index = Number(button.dataset.index);
+    const action = button.dataset.workflowAction;
+    button.disabled = busy || (action === "up" && index === 0) || (action === "down" && index === workflowSteps.length - 1);
   }
 }
 

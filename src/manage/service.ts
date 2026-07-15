@@ -2,7 +2,7 @@
  * Manage sessions — prompt-driven agent/skill authoring (separate from issue runs).
  */
 import { randomUUID } from "node:crypto";
-import type { HelixConfig } from "../config.js";
+import { loadConfig, type HelixConfig } from "../config.js";
 import type { PiProvider } from "../providers/openrouter.js";
 import { applyChanges } from "./delete.js";
 import { LlmManageAuthor } from "./author.js";
@@ -24,7 +24,7 @@ export interface ManageServiceOptions {
 export class ManageService {
   private readonly helixDir: string;
   private readonly provider: PiProvider;
-  private readonly workflowAgents: string[];
+  private readonly initialWorkflowAgents: string[];
   private readonly store: ManageStore;
   private readonly createAuthor: (sessionId: string) => ManageAuthor;
   private readonly authors = new Map<string, ManageAuthor>();
@@ -33,7 +33,7 @@ export class ManageService {
   constructor(opts: ManageServiceOptions) {
     this.helixDir = opts.helixDir;
     this.provider = opts.provider;
-    this.workflowAgents = opts.config.orchestrator.workflow;
+    this.initialWorkflowAgents = [...opts.config.orchestrator.workflow];
     this.store = opts.store ?? new MemoryManageStore();
     this.createAuthor =
       opts.createAuthor ??
@@ -92,7 +92,7 @@ export class ManageService {
       this.helixDir,
       session.drafts,
       session.deletions,
-      this.workflowAgents,
+      this.currentWorkflowAgents(),
       force,
     );
     if (!result.ok) {
@@ -234,5 +234,13 @@ export class ManageService {
 
   private pushEvent(session: ManageSession, event: ManageEvent): void {
     session.events.push(event);
+  }
+
+  private currentWorkflowAgents(): string[] {
+    try {
+      return loadConfig(this.helixDir).orchestrator.workflow;
+    } catch {
+      return this.initialWorkflowAgents;
+    }
   }
 }

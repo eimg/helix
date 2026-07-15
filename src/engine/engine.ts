@@ -17,6 +17,7 @@ import type {
   Run,
   RunEvent,
   RunKnowledgeEntry,
+  RunContinuation,
   SpecialistCall,
   SpecialistDefinition,
   SpecialistResult,
@@ -42,6 +43,9 @@ export interface EngineDeps {
    * initial prompt and prepended once to every cold specialist session.
    */
   repoContext?: string;
+  parentRunId?: string;
+  rootRunId?: string;
+  continuation?: RunContinuation;
 }
 
 export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
@@ -54,6 +58,9 @@ export async function runIssue(issue: Issue, deps: EngineDeps): Promise<Run> {
 
   const run: Run = {
     id: deps.runId ?? randomUUID(),
+    parentRunId: deps.parentRunId,
+    rootRunId: deps.rootRunId,
+    continuation: deps.continuation,
     issue,
     startedAt: Date.now(),
     status: "running",

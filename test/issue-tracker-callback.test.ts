@@ -20,6 +20,8 @@ test("notifyIssueTracker POSTs run.completed to tracker", async () => {
   await notifyIssueTracker(
     {
       id: "run-abc",
+      parentRunId: "run-parent",
+      rootRunId: "run-root",
       issue: {
         source: "inline",
         title: "Fix login",
@@ -50,7 +52,14 @@ test("notifyIssueTracker POSTs run.completed to tracker", async () => {
   assert.equal(calls[0].event, "run.completed");
   assert.deepEqual(calls[0].body, {
     event: "run.completed",
-    run: { id: "run-abc", status: "done", startedAt: 1000, finishedAt: 2000 },
+    run: {
+      id: "run-abc",
+      status: "done",
+      startedAt: 1000,
+      finishedAt: 2000,
+      parentRunId: "run-parent",
+      rootRunId: "run-root",
+    },
     issue: { id: 7, title: "Fix login" },
   });
 });

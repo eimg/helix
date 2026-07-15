@@ -96,6 +96,32 @@ Coding workflows and general assistants need different interaction semantics, bu
 
 **Conclusion:** use Pi as the default harness for both modes. General-purpose work should not be forced through the coding orchestrator: most assistant turns should remain in one persistent Pi session, while isolated specialists are an optional execution strategy. Different prompts, tools, resources, memory policies, and session lifetimes define packs. AI SDK or another runtime remains an evaluation fallback, not the planned general-purpose destination.
 
+Issue reopen and command-comment events are **workflow continuations**, not assistant conversation turns. The host creates a linked child run with fresh run-scoped Pi sessions, explicit parent/root IDs, an idempotent external event ID, and bounded context from the original issue plus parent outcome. This preserves isolation and auditability while letting external issue trackers request more work.
+
+## Pull-request lifecycle boundary
+
+Helix implementation workflows and pull-request management are related but distinct control planes.
+
+An issue-driven Helix run owns the path from work item to deliverable:
+
+```text
+issue event → isolated implementation run → verification → commit/push → new PR → stop
+```
+
+The intended default is that every successful implementation run which changes the repository delivers those changes through a **new pull request**. Direct edits on the current checkout remain acceptable for the local demo stage, but production-oriented PR delivery requires a run-scoped branch or worktree plus deterministic commit and push steps. Helix may attach verification evidence and readiness metadata; it should not decide that its own work must merge.
+
+An independent **PR-control module** owns a pull request after it exists, including pull requests created outside Helix:
+
+```text
+PR event → inspect head SHA and CI/reviews → review or fix → report → merge decision
+```
+
+The PR-control module has its own trigger, state, policy, and agent workflow. It consumes PR open/update events, CI or review changes, and explicit PR comment commands. It may review, run verification, post checks/comments, request changes, or—when authorized—push fixes to the existing PR branch. It merges only when its policy and human-approval requirements allow it. Review-only or policy runs do not create another PR.
+
+Keep this boundary logically independent even if both modules initially live in this repository and reuse Pi runtime adapters, specialist-session construction, event streaming, SQLite patterns, and policy interfaces. The PR work item must carry repository, PR number, base branch, head branch, head SHA, author, trigger, and idempotent external event ID as first-class data. Ignore self-authored bot events and deduplicate by repository + PR + head SHA + event identity to prevent feedback loops.
+
+The current `DefaultDeliverablePipeline` is therefore provisional: it combines PR creation, merge-gate evaluation, approval, and optional immediate merge. Until the independent PR-control path exists, `deliverable.pr` remains opt-in and direct auto-merge is a demo capability rather than the target ownership model.
+
 ### What Pi owns and what Helix owns
 
 | Pi harness | Helix host/control plane |

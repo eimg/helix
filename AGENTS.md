@@ -21,6 +21,7 @@ Read only the relevant detailed docs, but read `architecture.md` before changing
 - **Independent core:** Helix must remain runnable locally and headlessly. Do not make a hosted control plane, React/Next.js, Google Cloud, or another vendor topology the source of truth.
 - **Own the control plane, not the agent loop:** Helix owns product modes, orchestration, gates, policy, identity/channel mapping, memory strategy, durable jobs, and presentation. Pi owns provider/model execution, tool continuation, sessions, transcripts, compaction, skills, extensions, and resource loading.
 - **Two product modes:** coding workflow runs are goal-oriented and may use isolated specialists; assistant conversations are long-lived Pi threads and should use specialists only when decomposition is genuinely useful.
+- **Separate PR lifecycle:** implementation workflows should eventually deliver a new PR and stop. Independent PR-control owns review, fixes, policy, and merge decisions for Helix-created or external PRs; the current combined deliverable/auto-merge pipeline is provisional.
 - **Explicit safety:** prompt instructions are not hard guardrails. Enforce consequential restrictions at engine, session/tool, deliverable, or host boundaries.
 
 ## Current runtime invariants

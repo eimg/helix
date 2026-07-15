@@ -1,6 +1,6 @@
 # Repo context & cold-start problem
 
-**Status:** Phase A plus within-run session reuse and structured handoffs implemented. Cross-run repo-memory phases remain open.
+**Status:** Phase A plus within-run session reuse, structured handoffs, and bounded linked-run continuation context implemented. Cross-run repo-memory phases remain open.
 
 Every Helix coding-workflow run today starts cold: the planner (and often dev) must re-explore the repository from scratch. This doc captures why that happens, the cost, and candidate solutions. Prefer **repo-local artifacts** over cross-run workflow-session persistence — consistent with Helix's isolated specialist model. A future conversational assistant mode has different semantics and should use durable thread-scoped Pi sessions.
 
@@ -31,6 +31,8 @@ These stack together; fixing one alone helps only partially.
 | **Bounded handoffs** | Engine / `runKnowledge.ts` | Compact summaries, relevant paths, and reported commands cross specialist boundaries without raw transcript replay |
 
 Within a run, Helix now retains each specialist's Pi session and injects compact structured knowledge into other specialists. **Between runs**, SQLite persists run history but not a reusable repository map, so repo-level cold start remains.
+
+An externally triggered issue continuation is deliberately narrower than repo memory: its fresh child run receives the original issue, parent outcome, and bounded parent knowledge/results. It does not resume specialist sessions and does not make unrelated future issues inherit that context.
 
 ---
 

@@ -13,7 +13,7 @@ import { LlmOrchestrator } from "../orchestrator/driver.js";
 import { OpenRouterProvider, type PiProvider } from "../providers/openrouter.js";
 import { loadSpecialists, findHelixDir } from "../agents/loader.js";
 import { PiSpecialistSessionFactory } from "../agents/session.js";
-import type { Issue, Run, RunEvent, SpecialistDefinition, Orchestrator, SpecialistSessionFactory } from "../engine/types.js";
+import type { Issue, Run, RunContinuation, RunEvent, SpecialistDefinition, Orchestrator, SpecialistSessionFactory } from "../engine/types.js";
 import type { RunStore } from "../state/runStore.js";
 import { SqliteRunStore } from "../state/runStore.js";
 import type { DeliverablePipeline } from "../deliverable/pipeline.js";
@@ -79,6 +79,13 @@ export function createRunContext(opts: RunContextOptions = {}): RunContext {
   };
 }
 
+/** Refresh repo-local wiring and agent definitions before a new run starts. */
+export function refreshRunContextResources(ctx: RunContext): void {
+  ctx.config = loadConfig(ctx.helixDir);
+  ctx.workflow = loadWorkflow(ctx.config);
+  ctx.specialists = loadSpecialists(resolve(ctx.helixDir, "agents"));
+}
+
 export interface ActiveRun {
   runId: string;
   eventStream: EventStream;
@@ -91,37 +98,49 @@ export interface StartRunOptions {
   /** Allow hosts to subscribe before execution starts, avoiding early-delta loss. */
   eventStream?: EventStream;
   runId?: string;
+  parentRunId?: string;
+  rootRunId?: string;
+  continuation?: RunContinuation;
 }
 
 export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = {}): ActiveRun {
+  refreshRunContextResources(ctx);
+  // Capture one immutable resource view for this run. Later Manage saves affect
+  // only future runs, including deliverable finalization.
+  const config = ctx.config;
+  const workflow = ctx.workflow;
+  const specialists = ctx.specialists;
   const runId = opts.runId ?? randomUUID();
   const eventStream = opts.eventStream ?? new EventStream();
   const orchestrator =
     ctx.createOrchestrator?.(ctx) ??
-    new LlmOrchestrator(ctx.provider, ctx.workflow, ctx.model, {
+    new LlmOrchestrator(ctx.provider, workflow, ctx.model, {
       cwd: ctx.cwd,
       helixDir: ctx.helixDir,
-      extensions: ctx.config.extensions,
+      extensions: config.extensions,
     });
 
   const factory =
     ctx.createSpecialistFactory?.(ctx) ??
-    new PiSpecialistSessionFactory(ctx.provider, ctx.specialists, {
+    new PiSpecialistSessionFactory(ctx.provider, specialists, {
       cwd: ctx.cwd,
       helixDir: ctx.helixDir,
       defaultModel: ctx.model,
-      extensions: ctx.config.extensions,
+      extensions: config.extensions,
     });
 
-  const repoContext = buildRepoBootstrap(ctx.cwd, ctx.config.repoContext);
+  const repoContext = buildRepoBootstrap(ctx.cwd, config.repoContext);
 
   const deps: EngineDeps = {
     provider: ctx.provider,
     orchestrator,
     specialistFactory: factory,
-    gates: { ...DEFAULT_GATE_CONFIG, maxIterations: ctx.workflow.maxIterations },
+    gates: { ...DEFAULT_GATE_CONFIG, maxIterations: workflow.maxIterations },
     eventStream,
     runId,
+    parentRunId: opts.parentRunId,
+    rootRunId: opts.rootRunId,
+    continuation: opts.continuation,
     repoContext,
     onEvent: (run, event) => {
       opts.onEvent?.(run, event);
@@ -140,7 +159,7 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
     }
 
     if (!opts.skipDeliverable && run.status === "done") {
-      run = await ctx.deliverable.finalize(run, ctx.workflow.mergeGate);
+      run = await ctx.deliverable.finalize(run, workflow.mergeGate);
     }
 
     run.runFile = ctx.store.save(run);

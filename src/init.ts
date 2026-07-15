@@ -32,8 +32,7 @@ const CONFIG_TEMPLATE = `{
   "deliverable": { "pr": false },
   "orchestrator": {
     "workflow": ["planner", "dev", "verifier"],
-    "maxIterations": 6,
-    "loops": { "verifier-fail": { "backTo": "dev", "maxRetries": 2 } }
+    "maxIterations": 6
   },
   "mergeGate": {
     "autoMerge": true,
