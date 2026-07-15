@@ -2,6 +2,7 @@
  * Express host — consumer of the engine API (M2).
  *
  * POST /runs          start a run (inline or GitHub issue number)
+ * POST /runs/:id/continuations   start an externally triggered linked child run
  * GET  /runs          list run summaries (newest first)
  * GET  /runs/:id      run state snapshot
  * DELETE /runs/:id    delete a finished run (testing cleanup)
@@ -10,7 +11,8 @@
  *
  * Manage (experimental):
  * POST /manage/sessions, GET /manage/sessions/:id, SSE events, apply, discard
- * GET  /manage/agents | /manage/skills
+ * GET  /manage/agents | /manage/skills | /manage/workflow
+ * PUT  /manage/workflow   update the ordered default workflow
  *
  * Config (observability):
  * GET  /config            Config tab UI
@@ -21,8 +23,8 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { RunContext } from "../run/bootstrap.js";
-import { startRun } from "../run/bootstrap.js";
-import type { Issue, RunEvent } from "../engine/types.js";
+import { refreshRunContextResources, startRun } from "../run/bootstrap.js";
+import type { Issue, Run, RunContinuation, RunEvent } from "../engine/types.js";
 import { EventStream } from "../engine/eventStream.js";
 import { inlineIssue } from "../triggers/inline.js";
 import { GitHubTrigger } from "../triggers/github.js";
@@ -33,6 +35,9 @@ import { buildConfigSnapshot } from "../config/snapshot.js";
 import { ManageService } from "../manage/service.js";
 import type { ManageEvent } from "../manage/types.js";
 import { externalFromHeaders, parseIssueExternal } from "../callbacks/issueTracker.js";
+import { loadManagedWorkflow, saveManagedWorkflow } from "../manage/workflow.js";
+import { buildContinuationIssue } from "../run/continuation.js";
+import type { RunStore } from "../state/runStore.js";
 
 export interface CreateAppOptions {
   ctx: RunContext;
@@ -69,16 +74,10 @@ export function createApp(opts: CreateAppOptions): Express {
   const activeRuns = new Map<string, ActiveRunEntry>();
   const activeManage = new Map<string, ActiveManageEntry>();
 
-  app.post("/runs", async (req: Request, res: Response) => {
-    let issue: Issue;
-    try {
-      issue = await parseRunBody(req.body, githubRepo ?? ctx.config.triggers?.github?.repo);
-      issue = attachExternalRef(issue, req.headers, req.body);
-    } catch (err) {
-      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-      return;
-    }
-
+  const launchRun = (
+    issue: Issue,
+    lineage: { parentRunId?: string; rootRunId?: string; continuation?: RunContinuation } = {},
+  ): string => {
     const runId = randomUUID();
     const eventStream = new EventStream();
     const entry: ActiveRunEntry = { eventStream, sseClients: new Set(), liveSnapshots: new Map() };
@@ -94,6 +93,7 @@ export function createApp(opts: CreateAppOptions): Express {
       skipDeliverable: false,
       runId,
       eventStream,
+      ...lineage,
     });
 
     promise
@@ -104,8 +104,74 @@ export function createApp(opts: CreateAppOptions): Express {
       .catch(() => {
         /* persisted via onEvent */
       });
+    return runId;
+  };
+
+  app.post("/runs", async (req: Request, res: Response) => {
+    let issue: Issue;
+    try {
+      issue = await parseRunBody(req.body, githubRepo ?? ctx.config.triggers?.github?.repo);
+      issue = attachExternalRef(issue, req.headers, req.body);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
+
+    const runId = launchRun(issue);
 
     res.status(202).json({ id: runId, status: "running" });
+  });
+
+  app.post("/runs/:id/continuations", (req: Request, res: Response) => {
+    const parentId = String(req.params.id);
+    const body = req.body as Record<string, unknown>;
+    const instruction = typeof body?.instruction === "string" ? body.instruction.trim() : "";
+    const externalEventId = typeof body?.externalEventId === "string" ? body.externalEventId.trim() : "";
+    const trigger = typeof body?.trigger === "string" ? body.trigger.trim() : "";
+    if (!instruction) {
+      res.status(400).json({ error: "instruction is required" });
+      return;
+    }
+    if (!externalEventId || externalEventId.length > 200) {
+      res.status(400).json({ error: "externalEventId is required and must be 200 characters or fewer" });
+      return;
+    }
+    if (!trigger || trigger.length > 100) {
+      res.status(400).json({ error: "trigger is required and must be 100 characters or fewer" });
+      return;
+    }
+
+    const existing = findContinuationByEvent(ctx.store, externalEventId, parentId);
+    if (existing) {
+      res.status(200).json({ id: existing.id, status: existing.status, duplicate: true });
+      return;
+    }
+
+    const parent = ctx.store.load(parentId);
+    if (!parent) {
+      res.status(404).json({ error: "Parent run not found" });
+      return;
+    }
+    if (parent.status !== "done" && parent.status !== "escalated") {
+      res.status(409).json({ error: `Parent run is ${parent.status}; continuations require a terminal run` });
+      return;
+    }
+    const activeChild = findActiveContinuationChild(ctx.store, parentId);
+    if (activeChild) {
+      res.status(409).json({ error: `Continuation ${activeChild.id} is already running`, id: activeChild.id });
+      return;
+    }
+
+    const rootId = parent.rootRunId ?? parent.id;
+    const root = ctx.store.load(rootId) ?? parent;
+    const continuation: RunContinuation = { instruction, externalEventId, trigger };
+    try {
+      const issue = buildContinuationIssue(parent, root, instruction);
+      const runId = launchRun(issue, { parentRunId: parent.id, rootRunId: rootId, continuation });
+      res.status(202).json({ id: runId, status: "running", parentRunId: parent.id, rootRunId: rootId });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    }
   });
 
   app.get("/runs", (req: Request, res: Response) => {
@@ -217,6 +283,24 @@ export function createApp(opts: CreateAppOptions): Express {
     res.json(manage.getInventory().skills);
   });
 
+  app.get("/manage/workflow", (_req, res) => {
+    try {
+      res.json(loadManagedWorkflow(ctx.helixDir));
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.put("/manage/workflow", (req: Request, res: Response) => {
+    try {
+      const workflow = saveManagedWorkflow(ctx.helixDir, (req.body as { steps?: unknown })?.steps);
+      refreshRunContextResources(ctx);
+      res.json(workflow);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   app.post("/manage/sessions", (req: Request, res: Response) => {
     const body = req.body as { prompt?: string };
     if (!body?.prompt || typeof body.prompt !== "string" || !body.prompt.trim()) {
@@ -319,6 +403,7 @@ export function createApp(opts: CreateAppOptions): Express {
   });
 
   app.get("/config/snapshot", (_req, res) => {
+    refreshRunContextResources(ctx);
     res.json(buildConfigSnapshot(ctx));
   });
 
@@ -392,6 +477,29 @@ function parseLimit(value: unknown, fallback: number): number {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return fallback;
   return Math.min(Math.floor(n), 200);
+}
+
+function findContinuationByEvent(
+  store: RunStore,
+  externalEventId: string,
+  parentRunId: string,
+): Run | undefined {
+  for (const summary of store.listSummaries()) {
+    const run = store.load(summary.id);
+    if (run?.parentRunId === parentRunId && run.continuation?.externalEventId === externalEventId) {
+      return run;
+    }
+  }
+  return undefined;
+}
+
+function findActiveContinuationChild(store: RunStore, parentRunId: string): Run | undefined {
+  for (const summary of store.listSummaries()) {
+    if (summary.status !== "running") continue;
+    const run = store.load(summary.id);
+    if (run?.parentRunId === parentRunId) return run;
+  }
+  return undefined;
 }
 
 function writeRunSse(res: Response, event: RunEvent): void {

@@ -15,12 +15,29 @@
         <a href="/config" class="nav-link">Config</a>
       </nav>
       <h1>Manage</h1>
-      <p class="subtitle">Create and edit agents &amp; skills — experimental</p>
+      <p class="subtitle">Create agents and skills, then arrange how they work together</p>
     </header>
+
+    <section class="panel workflow-panel" id="workflow-panel">
+      <div class="panel-head">
+        <h2>Workflow</h2>
+        <span id="workflow-status" class="muted" role="status"></span>
+      </div>
+      <p class="workflow-help">Agents run in this default order. The orchestrator may adapt the sequence when the task benefits.</p>
+      <div id="workflow-list" class="workflow-list"></div>
+      <form id="workflow-form" class="workflow-form">
+        <label>
+          <span>Add agent</span>
+          <select id="workflow-agent"></select>
+        </label>
+        <button id="add-workflow-agent" type="button" class="ghost">Add</button>
+        <button id="save-workflow" type="submit" disabled>Save workflow</button>
+      </form>
+    </section>
 
     <section class="panel inventory-panel" id="inventory-panel">
       <div class="panel-head">
-        <h2>Current config</h2>
+        <h2>Resources</h2>
       </div>
       <div id="inventory" class="inventory"></div>
     </section>

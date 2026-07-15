@@ -89,6 +89,124 @@ test("POST /runs starts inline run and GET returns final state", async () => {
   assert.equal(got.body.issue.title, "Test");
 });
 
+test("POST /runs/:id/continuations starts a linked fresh run and deduplicates events", async () => {
+  const script: OrchestratorDecision[] = [{ kind: "done", reason: "continued", deliverable: "ok" }];
+  const { ctx, store } = testCtx(script);
+  store.save({
+    id: "root-run",
+    issue: { source: "inline", title: "Original issue", body: "Original acceptance criteria", labels: ["bug"] },
+    startedAt: 100,
+    finishedAt: 200,
+    status: "done",
+    events: [],
+    results: [],
+    finalDecision: { kind: "done", reason: "initial work complete", deliverable: "first result" },
+  });
+  store.save({
+    id: "parent-run",
+    rootRunId: "root-run",
+    parentRunId: "root-run",
+    continuation: { instruction: "first follow-up", externalEventId: "comment:1", trigger: "issue.comment" },
+    issue: { source: "inline", title: "Original issue", body: "prior continuation", labels: ["bug"] },
+    startedAt: 300,
+    finishedAt: 400,
+    status: "done",
+    events: [],
+    results: [],
+    finalDecision: { kind: "done", reason: "parent complete", deliverable: "parent result" },
+  });
+
+  const app = createApp({ ctx });
+  const started = await request(app).post("/runs/parent-run/continuations").send({
+    instruction: "Also cover the regression case",
+    externalEventId: "comment:2",
+    trigger: "issue.comment",
+  });
+  assert.equal(started.status, 202);
+  assert.equal(started.body.parentRunId, "parent-run");
+  assert.equal(started.body.rootRunId, "root-run");
+
+  await new Promise((r) => setTimeout(r, 100));
+  const child = store.load(started.body.id as string);
+  assert.equal(child?.status, "done");
+  assert.equal(child?.parentRunId, "parent-run");
+  assert.equal(child?.rootRunId, "root-run");
+  assert.deepEqual(child?.continuation, {
+    instruction: "Also cover the regression case",
+    externalEventId: "comment:2",
+    trigger: "issue.comment",
+  });
+  assert.match(child?.issue.body ?? "", /Original acceptance criteria/);
+  assert.match(child?.issue.body ?? "", /parent result/);
+
+  const duplicate = await request(app).post("/runs/parent-run/continuations").send({
+    instruction: "This retry body is ignored",
+    externalEventId: "comment:2",
+    trigger: "issue.comment",
+  });
+  assert.equal(duplicate.status, 200);
+  assert.equal(duplicate.body.id, started.body.id);
+  assert.equal(duplicate.body.duplicate, true);
+});
+
+test("continuations require a terminal parent and allow only one active child", async () => {
+  const store = new MemoryRunStore();
+  const ctx = createRunContext({
+    helixDir: fixtureDir,
+    store,
+    provider: new FakeProvider(),
+    deliverable: new NoOpDeliverablePipeline(),
+    createOrchestrator: () => ({
+      async decide() {
+        await new Promise((r) => setTimeout(r, 250));
+        return { kind: "done" as const, reason: "eventually" };
+      },
+    }),
+    createSpecialistFactory: () => new StubSpecialistFactory([], {}),
+  });
+  store.save({
+    id: "running-parent",
+    issue: { source: "inline", title: "Busy", body: "", labels: [] },
+    startedAt: 1,
+    status: "running",
+    events: [],
+    results: [],
+  });
+  store.save({
+    id: "done-parent",
+    issue: { source: "inline", title: "Ready", body: "", labels: [] },
+    startedAt: 1,
+    finishedAt: 2,
+    status: "done",
+    events: [],
+    results: [],
+  });
+
+  const app = createApp({ ctx });
+  const nonterminal = await request(app).post("/runs/running-parent/continuations").send({
+    instruction: "try",
+    externalEventId: "reopen:1",
+    trigger: "issue.reopened",
+  });
+  assert.equal(nonterminal.status, 409);
+
+  const first = await request(app).post("/runs/done-parent/continuations").send({
+    instruction: "first",
+    externalEventId: "comment:10",
+    trigger: "issue.comment",
+  });
+  assert.equal(first.status, 202);
+  const second = await request(app).post("/runs/done-parent/continuations").send({
+    instruction: "second",
+    externalEventId: "comment:11",
+    trigger: "issue.comment",
+  });
+  assert.equal(second.status, 409);
+  assert.equal(second.body.id, first.body.id);
+
+  await new Promise((r) => setTimeout(r, 300));
+});
+
 test("GET /runs/:id/events returns SSE payload", async () => {
   const script: OrchestratorDecision[] = [{ kind: "done", reason: "quick", deliverable: "x" }];
   const { ctx } = testCtx(script);

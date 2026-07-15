@@ -15,6 +15,8 @@ export interface RunCompletedPayload {
     status: "done";
     startedAt: number;
     finishedAt?: number;
+    parentRunId?: string;
+    rootRunId?: string;
   };
   issue: {
     id: number;
@@ -42,6 +44,8 @@ export async function notifyIssueTracker(
       status: "done",
       startedAt: run.startedAt,
       finishedAt: run.finishedAt,
+      parentRunId: run.parentRunId,
+      rootRunId: run.rootRunId,
     },
     issue: {
       id: external.issueId,

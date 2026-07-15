@@ -136,6 +136,12 @@ export interface PullRequestInfo {
 
 export interface Run {
   id: string;
+  /** Linked-run lineage. Absent for an initial run. */
+  parentRunId?: string;
+  /** First run in this issue lineage. Set on continuation runs. */
+  rootRunId?: string;
+  /** External event that requested this continuation. */
+  continuation?: RunContinuation;
   issue: Issue;
   startedAt: number;
   finishedAt?: number;
@@ -151,6 +157,12 @@ export interface Run {
   mergeGateResult?: MergeGateResult;
   pullRequest?: PullRequestInfo;
   deliverableError?: string;
+}
+
+export interface RunContinuation {
+  instruction: string;
+  externalEventId: string;
+  trigger: string;
 }
 
 /** LLM provider abstraction. v1: OpenRouter. Tests: FakeProvider. */

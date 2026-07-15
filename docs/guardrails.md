@@ -12,7 +12,7 @@ Related: [`plan.md`](./plan.md), [`architecture.md`](./architecture.md), [`repo-
 
 | Mechanism | Where | Behavior |
 |---|---|---|
-| Workflow rails + LLM orchestrator | `orchestrator/driver.ts`, config `workflow` / `loops` | Soft guidance; may skip/reorder |
+| Workflow rails + LLM orchestrator | `orchestrator/driver.ts`, config `workflow` | Soft guidance; may skip/reorder/retry |
 | Iteration cap | `orchestrator/gates.ts` | Forces `escalate` |
 | Blocking-failure gate | `engine/engine.ts` | `done` over failed specialist → escalate |
 | Merge gate + approval | `mergeGate.ts`, deliverable pipeline, approve/reject API | Size/risk → auto-merge or `approvalStatus: pending` |
@@ -20,6 +20,8 @@ Related: [`plan.md`](./plan.md), [`architecture.md`](./architecture.md), [`repo-
 | Extensions default off | config, `loaderBuilder.ts` | Less ambient privilege |
 | Session isolation | specialist/orchestrator sessions | No inter-specialist chat; no global pi skills/context files |
 | Agent `tools:` frontmatter | `.helix/agents/*.md` | Declares tools; **not** a hard global policy layer |
+
+The current deliverable pipeline combines PR creation and merge handling. This is a provisional demo boundary. The target architecture makes implementation runs responsible for producing a new PR, then hands lifecycle ownership to an independent PR-control module. That module applies separate review, fix, approval, and merge policy to Helix-created or external PRs. See [`architecture.md`](./architecture.md#pull-request-lifecycle-boundary).
 
 ### Escalation today (gap)
 
@@ -56,6 +58,8 @@ Default assumption for Helix’s current use (local-issues + localhost serve): o
 ### 2. Side effects outside the repo
 
 - Git push / PR / merge — already opt-in via `deliverable.pr`; keep fail-closed.
+- In the target split, Helix may create a PR but cannot authorize its own merge. Merge permission belongs to the independent PR-control policy or an explicit human decision.
+- PR-trigger consumers must pin work to repository + PR number + head SHA, deduplicate webhook/comment events, and ignore their own bot-authored events.
 - Issue-tracker / webhook callbacks — URL allowlist, auth (today: POC, no auth).
 - Outbound network via `bash` (curl, etc.).
 
@@ -68,7 +72,7 @@ Default assumption for Helix’s current use (local-issues + localhost serve): o
 
 ### 4. Human gates
 
-- Merge approval (exists).
+- Merge approval exists in the provisional pipeline; later it belongs to the PR-control module.
 - Optional **plan approval** before `dev`.
 - Optional approval for policy exceptions (e.g. allow one denied path).
 
@@ -127,7 +131,7 @@ type EscalationCode =
   | "needs_human_decision"  // product / ambiguous requirements
   | "policy_denied"         // guardrail blocked an action
   | "budget_exceeded"       // turns / time / tokens / iterations
-  | "specialist_failed"     // unrecoverable after loops
+  | "specialist_failed"     // unrecoverable within the run limit
   | "orchestrator_error"    // LLM / parse / infra
   | "deliverable_blocked"   // merge gate / PR path failure
   | "external_blocked";     // tracker / gh unavailable when required
@@ -185,7 +189,7 @@ Approval = work looks done, need sign-off. Escalation = cannot continue the orch
 | Orchestrator: ambiguous / risky product call | `needs_human_decision` | pause |
 | Tool/path/command blocked by policy | `policy_denied` | pause or terminal (config) |
 | Iteration / time / token cap | `budget_exceeded` | terminal |
-| Verifier fail past maxRetries | `specialist_failed` | terminal or pause |
+| Specialist failure at the iteration cap | `specialist_failed` | terminal or pause |
 | Unparseable JSON / LLM down | `orchestrator_error` | terminal |
 | Merge gate pending | **approval**, not escalate | pause (exists) |
 | `gh` failed while `deliverable.pr` true | `deliverable_blocked` | terminal |

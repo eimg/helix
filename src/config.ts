@@ -1,7 +1,7 @@
 /**
  * Loads + validates `.helix/config.json`.
  *
- * Config is **wiring only**: workflow, loops, merge gate, triggers,
+ * Config is **wiring only**: workflow, merge gate, triggers,
  * deliverable, extensions, repoContext. Essentials (API key, model) come from
  * `.env` or the operator's global pi install — see `config/env.ts` and
  * `providers/openrouter.ts`.
@@ -15,7 +15,6 @@ export interface HelixConfig {
   orchestrator: {
     workflow: string[]; // specialist names, default order
     maxIterations?: number;
-    loops?: Record<string, { backTo: string; maxRetries: number }>;
   };
   /**
    * Repo-local extensions (arbitrary in-process code). OFF by default for
@@ -76,7 +75,6 @@ export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixCo
     orchestrator: {
       workflow: parsed.orchestrator?.workflow ?? DEFAULTS.orchestrator!.workflow!,
       maxIterations: parsed.orchestrator?.maxIterations ?? DEFAULTS.orchestrator!.maxIterations,
-      loops: parsed.orchestrator?.loops,
     },
     extensions: {
       enabled: parsed.extensions?.enabled ?? DEFAULTS.extensions!.enabled!,

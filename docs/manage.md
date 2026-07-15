@@ -1,8 +1,8 @@
-# Manage — agent & skill authoring
+# Manage — agent, skill & workflow authoring
 
 **Status:** Experimental. Web UI + HTTP API shipped; **CLI not implemented**.
 
-Manage is a separate surface from the issue orchestration loop (`helix run` / Run UI). Operators use natural language to create, edit, or delete repo-local specialists and skills under `.helix/`.
+Manage is a separate surface from the issue orchestration loop (`helix run` / Run UI). Operators use natural language to create, edit, or delete repo-local specialists and skills under `.helix/`, then arrange agents in the default workflow with a small structured editor.
 
 ---
 
@@ -24,7 +24,7 @@ The core orchestration loop is unchanged. Manage never runs planner → dev → 
 When `helix serve` is running:
 
 - **Run** (`/`) — submit issues, watch specialist events, view deliverable
-- **Manage** (`/manage`) — single prompt box; chat with the meta agent; preview drafts and deletions; **Apply** / **Discard**
+- **Manage** (`/manage`) — ordered workflow editor plus a prompt box for agent/skill authoring; preview drafts and deletions; **Apply** / **Discard**
 
 Capabilities today:
 
@@ -32,8 +32,12 @@ Capabilities today:
 - Create or update `.helix/skills/<name>/SKILL.md`
 - Propose deletions (skills anytime; workflow agents only with force)
 - List current agents/skills in the inventory panel
+- Add any repo agent to the default workflow, remove it, or move it up/down
+- Save the workflow directly to `.helix/config.json`; new runs reload workflow and agent files without a server restart
 
-Requires `OPENROUTER_API_KEY` (or configured provider) for live LLM calls.
+The workflow editor intentionally exposes only the ordered default sequence. Merge gates and delivery policy remain advanced wiring in `config.json`. The sequence is a rail: the orchestrator may still skip, reorder, retry, or parallelize specialists when appropriate; `maxIterations` is the hard bound on recovery attempts.
+
+Workflow editing is local and needs no model credentials. Prompt-based agent/skill authoring requires `OPENROUTER_API_KEY` (or a configured provider) for live LLM calls.
 
 ---
 
@@ -43,6 +47,8 @@ Requires `OPENROUTER_API_KEY` (or configured provider) for live LLM calls.
 |--------|------|---------|
 | `GET` | `/manage/agents` | List agents |
 | `GET` | `/manage/skills` | List skills |
+| `GET` | `/manage/workflow` | Read the ordered default workflow |
+| `PUT` | `/manage/workflow` | Replace it with `{ "steps": ["planner", "dev", "verifier"] }` |
 | `POST` | `/manage/sessions` | `{ "prompt": "..." }` → start session |
 | `GET` | `/manage/sessions/:id` | Session state, drafts, deletions |
 | `GET` | `/manage/sessions/:id/events?live=1` | SSE event stream |
@@ -81,7 +87,9 @@ The CLI should call the same `ManageService` / API as the web UI — no second c
 - Meta agent **proposes** changes as JSON (`drafts`, `deletions`); it does not write or delete directly.
 - Operator must click **Apply** (web) or `POST .../apply` (API).
 - Paths restricted to `.helix/agents/` and `.helix/skills/`.
-- Agents listed in `config.orchestrator.workflow` cannot be deleted unless `force: true`.
+- Agents listed in `config.orchestrator.workflow` cannot be deleted unless `force: true`; normally remove them in the workflow editor first.
+- Workflow saves require at least one unique agent and reject names without a matching repo agent definition.
+- Each run captures its starting workflow/resources. Manage changes affect new runs, not runs already in progress.
 - Skill deletion removes the entire `skills/<name>/` directory.
 
 ---
@@ -90,7 +98,7 @@ The CLI should call the same `ManageService` / API as the web UI — no second c
 
 | Area | Files |
 |------|--------|
-| Manage core | `src/manage/{service,author,prompt,validate,apply,delete}.ts` |
+| Manage core | `src/manage/{service,author,prompt,validate,apply,delete,workflow}.ts` |
 | Server routes | `src/server/app.ts` |
 | Web UI | `src/server/public/manage.{html,js}` |
 | Tests | `test/manage.test.ts` |
@@ -99,7 +107,7 @@ The CLI should call the same `ManageService` / API as the web UI — no second c
 
 ## Non-goals (current)
 
-- No `config.json` workflow auto-patch (agent mentions manual steps only)
+- No visual DAG, named workflow library, or advanced gate editor
 - No token streaming from the manage agent
 - No CLI REPL
 - No subprocess / global pi skill publishing
