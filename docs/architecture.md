@@ -2,7 +2,7 @@
 
 Living document. Captures stack and ownership decisions for exploration → eventual production, without locking Helix to a vendor agent platform.
 
-Related: [`plan.md`](./plan.md) · [`guardrails.md`](./guardrails.md) · [`repo-context.md`](./repo-context.md)
+Related: [`vision.md`](./vision.md) · [`plan.md`](./plan.md) · [`guardrails.md`](./guardrails.md) · [`repo-context.md`](./repo-context.md)
 
 > **Status:** Direction for ongoing exploration. Not a mandate to implement general-assistant surfaces, Temporal, OTel, or a second agent runtime in the current milestone.
 

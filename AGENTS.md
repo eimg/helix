@@ -7,6 +7,7 @@ This file is an entrypoint, not the full specification. Follow the linked docs w
 ## Read first
 
 - [`README.md`](./README.md) — user-facing behavior, setup, CLI, HTTP API, and configuration.
+- [`docs/vision.md`](./docs/vision.md) — broader product direction for connected knowledge, planning, implementation, PR, release, deployment, and learning loops.
 - [`docs/plan.md`](./docs/plan.md) — shipped milestones, current status, and open work.
 - [`docs/architecture.md`](./docs/architecture.md) — ownership boundaries, Pi-first strategy, platform independence, and workflow versus conversation modes.
 - [`docs/guardrails.md`](./docs/guardrails.md) — current safety mechanisms and the proposed policy/escalation model.

@@ -240,7 +240,7 @@ Useful knobs:
 - `deliverable.pr` (default `false`) — opt into GitHub PR create/merge via `gh` after successful runs
 - `mergeGate` — auto-merge thresholds (only applies when `deliverable.pr` is true)
 
-Architecture: [`docs/architecture.md`](./docs/architecture.md) · milestones: [`docs/plan.md`](./docs/plan.md) · Manage: [`docs/manage.md`](./docs/manage.md) · cold-start: [`docs/repo-context.md`](./docs/repo-context.md) · guardrails/escalation: [`docs/guardrails.md`](./docs/guardrails.md)
+Vision: [`docs/vision.md`](./docs/vision.md) · architecture: [`docs/architecture.md`](./docs/architecture.md) · milestones: [`docs/plan.md`](./docs/plan.md) · Manage: [`docs/manage.md`](./docs/manage.md) · cold-start: [`docs/repo-context.md`](./docs/repo-context.md) · guardrails/escalation: [`docs/guardrails.md`](./docs/guardrails.md)
 
 ## GitHub paths (optional)
 

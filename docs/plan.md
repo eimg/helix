@@ -4,6 +4,8 @@ Living document. Revised as we learn.
 
 > Package: `@eimg/helix` · command: `helix` · **experimental, not for production.**
 
+Broader product direction across knowledge, planning, implementation, PR control, release, deployment, and production learning lives in [`vision.md`](./vision.md). This plan remains the source for shipped status and concrete next work.
+
 ## Milestones
 
 - **M1 — Core engine (shipped).** Manual + inline trigger. Hybrid orchestrator. Live event log. Presets.
