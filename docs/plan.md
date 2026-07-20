@@ -10,7 +10,7 @@ Broader product direction across knowledge, planning, implementation, PR control
 
 - **M1 — Core engine (shipped).** Manual + inline trigger. Hybrid orchestrator. Live event log. Presets.
 - **M2 — Auto + deliverable (shipped).** Express server + Run UI; GitHub poll; PR creation; merge gate execution.
-- **Beyond M2 (partial).** Manage (experimental); Phase A repo bootstrap; run history/delete; local-issues demo path. Further scale still open.
+- **Beyond M2 (partial).** Manage (experimental); Phase A repo bootstrap; run history/delete; acme-issues demo path. Further scale still open.
 
 ---
 
@@ -69,7 +69,7 @@ Turn the engine into a self-driving service: issues can arrive automatically, ru
 
 ### Demo path note
 
-**Preferred integration testing** uses [local-issues](https://github.com/eimg/local-issues) → Helix `POST /runs`, not GitHub. GitHub poll/PR remain available when `gh` is configured.
+**Preferred integration testing** uses [acme-issues](https://github.com/eimg/acme-issues) → Helix `POST /runs`, not GitHub. GitHub poll/PR remain available when `gh` is configured.
 
 ### M2 non-goals (at ship time; some later filled)
 
@@ -86,7 +86,7 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 | **Within-run context reuse** | One Pi session per specialist lane per run + bounded structured handoffs (`RunKnowledgeEntry`) |
 | **Web-native streaming** | Orchestrator and specialist responses share started → live buffered deltas → durable full finished output; token deltas stay ephemeral |
 | **SQLite run state** | `.helix/runs.db` default with WAL; legacy `.helix/runs/*.json` imported when the database is empty |
-| **Issue-tracker callback** | Best-effort `run.completed` POST to external tracker (POC, no auth) — used with local-issues |
+| **Issue-tracker callback** | Best-effort `run.completed` POST to external tracker (POC, no auth) — used with acme-issues |
 | **External workflow continuations** | Issue reopen/comment events create idempotent linked child runs with fresh sessions and bounded parent context |
 | **Run history / delete** | `GET /runs`, UI sidebar, `DELETE /runs/:id` for test cleanup |
 | **Config observability** | Config tab + `GET /config/snapshot` — resolved essentials provenance (env / pi / default) + wiring |
@@ -114,7 +114,7 @@ PR lifecycle ownership is also separated: an implementation run should eventuall
 - **Run-scoped Git delivery** — isolated branch/worktree, deterministic commit and push, and one new PR for each successful change-producing implementation run
 - **Independent PR-control module** — PR webhook/comment triggers, first-class PR/head-SHA state, independent reviewers/fixers/policy, and external-PR support; owns merge decisions after Helix delivers a PR
 - **More providers** — Anthropic, OpenAI, … (`Provider` interface is ready); alternate agent SDKs remain evaluation fallbacks
-- **First-class webhook trigger** in Helix core (today: HTTP `POST /runs` + external local-issues)
+- **First-class webhook trigger** in Helix core (today: HTTP `POST /runs` + external acme-issues)
 - **Subprocess isolation** for untrusted specialists
 - **Manage CLI** (`helix manage`) parity
 - **Settings UI/API** — edit wiring/secrets without hand-editing files (related to guardrail presets)

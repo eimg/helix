@@ -4,6 +4,17 @@ Helix is an experimental, platform-independent agent control plane built on the 
 
 This file is an entrypoint, not the full specification. Follow the linked docs when working in an area.
 
+## Related projects
+
+| Project | Local path | Responsibility |
+|---|---|---|
+| Primer | `~/Desktop/acme/primer` | Knowledge product and fictional Acme evidence corpus; not currently part of the runtime loop. |
+| Helix | `~/Desktop/acme/helix` | Agent workflow control plane that receives work and orchestrates changes. |
+| Acme Issues | `~/Desktop/acme/acme-issues` | Local issue tracker and webhook harness that triggers Helix and receives callbacks. |
+| Acme Todo | `~/Desktop/acme/acme-todo` | Disposable target application used for agent implementation and verification. |
+
+The current local runtime flow is Acme Issues → Helix → Acme Todo, followed by a Helix completion callback to Acme Issues. Primer shares the fictional Acme context but remains a separate knowledge-product and dataset effort.
+
 ## Read first
 
 - [`README.md`](./README.md) — user-facing behavior, setup, CLI, HTTP API, and configuration.

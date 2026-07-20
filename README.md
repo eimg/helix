@@ -8,6 +8,19 @@ Package: [`@eimg/helix`](https://github.com/eimg/helix) · command: `helix`
 
 ![Helix run console](https://i.imgur.com/D1cPcgq.png)
 
+## Acme development testbed
+
+Helix is one of four related local projects. They remain separate products with separate responsibilities.
+
+| Project | Local path | Role |
+|---|---|---|
+| **Primer** | `~/Desktop/acme/primer` | Knowledge product and fictional Acme evidence corpus; not currently part of the runtime loop. |
+| **Helix** | `~/Desktop/acme/helix` | Agent workflow control plane that receives work and orchestrates changes. |
+| **Acme Issues** | `~/Desktop/acme/acme-issues` | Local issue tracker and webhook harness that triggers Helix and receives callbacks. |
+| **Acme Todo** | `~/Desktop/acme/acme-todo` | Disposable target application used for agent implementation and verification. |
+
+Typical exercise: Acme Issues triggers Helix, Helix works on Acme Todo, and Primer develops the separate knowledge and retrieval side of the same fictional Acme context.
+
 ## Requirements
 
 - Node.js ≥ 20
@@ -45,7 +58,7 @@ Set your OpenRouter API key and model in `.env`. For `config.json`, specialist m
 
 ## Quick run
 
-Two ways to start a run without local-issues: **CLI** (blocking, logs to terminal) or **HTTP API** (async, web UI + SSE).
+Two ways to start a run without acme-issues: **CLI** (blocking, logs to terminal) or **HTTP API** (async, web UI + SSE).
 
 ### CLI
 
@@ -102,17 +115,17 @@ curl -s -X POST http://127.0.0.1:8319/runs \
 
 See [Server & web UI](#server--web-ui) for the full endpoint list and webhook payload format.
 
-## Companion project: [local-issues](https://github.com/eimg/local-issues)
+## Companion project: [acme-issues](https://github.com/eimg/acme-issues)
 
-For a fuller workflow without GitHub, pair Helix with **[local-issues](https://github.com/eimg/local-issues)** — a small local issue tracker that POSTs work items into Helix and receives completion callbacks.
+For a fuller workflow without GitHub, pair Helix with **[acme-issues](https://github.com/eimg/acme-issues)** — a small local issue tracker that POSTs work items into Helix and receives completion callbacks.
 
 | Project | Role |
 |---------|------|
 | **Helix** (this repo) | Orchestrates specialist agents; exposes `POST /runs` and a run console |
-| **[local-issues](https://github.com/eimg/local-issues)** | Local SQLite issue tracker; fires webhooks when labeled issues appear |
+| **[acme-issues](https://github.com/eimg/acme-issues)** | Local SQLite issue tracker; fires webhooks when labeled issues appear |
 
 ```
-local-issues (issue + label) ──POST──► Helix /runs ──► planner → dev → verifier
+acme-issues (issue + label) ──POST──► Helix /runs ──► planner → dev → verifier
        ▲                                        │
        └──────── run.completed callback ────────┘
 ```
@@ -128,14 +141,14 @@ helix serve
 **Terminal 2 — local issue tracker**
 
 ```bash
-git clone https://github.com/eimg/local-issues.git
-cd local-issues
+git clone https://github.com/eimg/acme-issues.git
+cd acme-issues
 npm install
 npm run dev
 # → http://127.0.0.1:8320/
 ```
 
-**Configure local-issues** (Settings in the UI):
+**Configure acme-issues** (Settings in the UI):
 
 | Setting | Value |
 |---------|-------|
@@ -144,16 +157,16 @@ npm run dev
 | Continuation comment command | `/helix` (default) |
 | Webhooks enabled | on |
 
-**Create an issue** in local-issues with the filter label (e.g. `trigger`). The tracker POSTs to Helix; a run starts and appears in the Helix run console. When the run finishes, Helix sends a `run.completed` callback — local-issues closes the issue and adds a Helix comment.
+**Create an issue** in acme-issues with the filter label (e.g. `trigger`). The tracker POSTs to Helix; a run starts and appears in the Helix run console. When the run finishes, Helix sends a `run.completed` callback — acme-issues closes the issue and adds a Helix comment.
 
-To request more work after completion, reopen the issue or add a comment beginning with `/helix`. local-issues sends that external event to the completed run; Helix creates a linked child run with fresh specialist sessions and bounded context from the original issue and parent outcome. This is workflow continuation, not a manual chat prompt.
+To request more work after completion, reopen the issue or add a comment beginning with `/helix`. acme-issues sends that external event to the completed run; Helix creates a linked child run with fresh specialist sessions and bounded context from the original issue and parent outcome. This is workflow continuation, not a manual chat prompt.
 
-See the [local-issues README](https://github.com/eimg/local-issues#helix-integration) for webhook payload details and API reference.
+See the [acme-issues README](https://github.com/eimg/acme-issues#helix-integration) for webhook payload details and API reference.
 
 ## Tips
 
-- Prefer **inline** or **local-issues** over GitHub poll until you understand merge-gate behavior.
-- **GitHub PR create/merge is off by default** (`deliverable.pr: false`). The local-issues demo does not need `gh`. Enable later with `"deliverable": { "pr": true }` plus `triggers.github.repo`.
+- Prefer **inline** or **acme-issues** over GitHub poll until you understand merge-gate behavior.
+- **GitHub PR create/merge is off by default** (`deliverable.pr: false`). The acme-issues demo does not need `gh`. Enable later with `"deliverable": { "pr": true }` plus `triggers.github.repo`.
 - `mergeGate.autoMerge` only matters when PR deliverables are enabled.
 - Run history **delete (×)** permanently removes the run from `.helix/runs.db` (handy while testing).
 
@@ -186,7 +199,7 @@ Default port **8319** (phone-keypad mnemonic for HELIX). Override with `--port` 
 
 ### `POST /runs` (webhook receiver)
 
-Accepts inline issues from local-issues and other producers:
+Accepts inline issues from acme-issues and other producers:
 
 ```json
 {
@@ -200,7 +213,7 @@ Accepts inline issues from local-issues and other producers:
 }
 ```
 
-Correlation also works via headers: `X-Issues-Issue-Id`, `X-Issues-Source`. The `external` block (or headers) enables completion callbacks to local-issues.
+Correlation also works via headers: `X-Issues-Issue-Id`, `X-Issues-Source`. The `external` block (or headers) enables completion callbacks to acme-issues.
 
 ### `POST /runs/:id/continuations`
 

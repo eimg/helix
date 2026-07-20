@@ -6,6 +6,8 @@ Helix should help a small development team operate the full path from knowledge 
 
 Related: [`architecture.md`](./architecture.md) · [`plan.md`](./plan.md) · [`guardrails.md`](./guardrails.md)
 
+![Agentic software development loops](../omni-loop.png)
+
 ## Core idea
 
 Each loop owns one durable work-object type, reacts to explicit events or a bounded schedule, produces evidence and artifacts, and proposes a state transition. The next loop or a human accepts that handoff.

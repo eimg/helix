@@ -42,7 +42,7 @@ Clarify which of these you are protecting against:
 2. **Malicious or injected prompts** — issue body / tracker content trying to exfiltrate or escape the repo.
 3. **Exposed `helix serve`** — anything beyond `127.0.0.1` needs auth; localhost single-operator can defer this.
 
-Default assumption for Helix’s current use (local-issues + localhost serve): optimize for (1), harden lightly for (2), defer (3) until bind address leaves loopback.
+Default assumption for Helix’s current use (acme-issues + localhost serve): optimize for (1), harden lightly for (2), defer (3) until bind address leaves loopback.
 
 ---
 
@@ -102,7 +102,7 @@ Default assumption for Helix’s current use (local-issues + localhost serve): o
 }
 ```
 
-Map `mode` to defaults so “local-issues demo” vs “GitHub PR mode” is one switch. Fold `deliverable.pr` into this story so operators are not hunting multiple knobs.
+Map `mode` to defaults so “acme-issues demo” vs “GitHub PR mode” is one switch. Fold `deliverable.pr` into this story so operators are not hunting multiple knobs.
 
 ### Phased implementation (guardrails)
 
@@ -114,7 +114,7 @@ Map `mode` to defaults so “local-issues demo” vs “GitHub PR mode” is one
 | **3** | Human checkpoints (plan gate) reusing approval/escalation pause UX |
 | **4** | Authn for non-localhost serve; webhook HMAC |
 
-**Priority for current local-issues demos:** side-effect defaults (done for PR) → run budgets → workspace jail → demo/github preset → Settings UI later.
+**Priority for current acme-issues demos:** side-effect defaults (done for PR) → run budgets → workspace jail → demo/github preset → Settings UI later.
 
 **Defer early:** multi-tenant auth, full VM sandbox, OPA-style engines.
 
@@ -193,12 +193,12 @@ Approval = work looks done, need sign-off. Escalation = cannot continue the orch
 | Unparseable JSON / LLM down | `orchestrator_error` | terminal |
 | Merge gate pending | **approval**, not escalate | pause (exists) |
 | `gh` failed while `deliverable.pr` true | `deliverable_blocked` | terminal |
-| local-issues completion webhook failed | usually **not** escalate — log callback failure | — |
+| acme-issues completion webhook failed | usually **not** escalate — log callback failure | — |
 
 ### Operator contract (future)
 
 1. **Surface** — Run UI: code badge + reason + suggested action.
-2. **Notify** — optional `run.escalated` / `run.awaiting_human` to local-issues with structured payload.
+2. **Notify** — optional `run.escalated` / `run.awaiting_human` to acme-issues with structured payload.
 3. **Resume** (paused only) — e.g. `POST /runs/:id/resume` with `{ reply }` or `{ decision }`; inject as human input into orchestrator and continue.
 4. **Close** — abandon without resume.
 
@@ -211,7 +211,7 @@ Approval = work looks done, need sign-off. Escalation = cannot continue the orch
 | **C** | Tracker notifications; policy denials always emit `policy_denied` with details |
 | **D** | Presets: demo (pause + notify) vs github (escalate + optional issue comment / draft PR) |
 
-**Recommended start:** Phase A only — gives local-issues and the UI signal without inventing resume yet.
+**Recommended start:** Phase A only — gives acme-issues and the UI signal without inventing resume yet.
 
 ---
 
@@ -247,7 +247,7 @@ policy / budget / gate trip
 
 1. Ship Phase A (structured, terminal) before pause/resume?
 2. Same UX as merge approval, or separate “Respond / Abort” flow?
-3. Notify Run UI only, or also local-issues status/comment?
+3. Notify Run UI only, or also acme-issues status/comment?
 4. Resume with free text, fixed decisions only, or both?
 
 ---
