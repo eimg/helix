@@ -119,7 +119,7 @@ PR control is logically independent from implementation. The shipped local slice
 
 Today it reacts to an explicit local review request. It resolves the exact base/head commits, creates a detached temporary worktree at the head SHA, runs independent reviewer and verifier specialists concurrently, parses structured reports, and returns `ready_to_merge`, `changes_requested`, or `blocked`. Acme Issues rejects stale results when the stored head SHA changed. Automatic event reconciliation, conditional specialists, authorized fixes, and hosted-provider adapters remain planned.
 
-Its identity includes repository, PR number, base branch, head branch, head SHA, author, trigger, and external event ID. It must ignore self-authored events and deduplicate effects to avoid bot feedback loops. Merge belongs to PR-control policy or an explicit human decision.
+Its identity includes repository, PR number, base branch, head branch, head SHA, author, trigger, and external event ID. It must ignore self-authored events and deduplicate effects to avoid bot feedback loops. In the shipped local workflow, merge remains an explicit human action after PR control reports readiness.
 
 ### Release readiness
 

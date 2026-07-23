@@ -91,8 +91,7 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 | **Run history / delete** | `GET /runs`, UI sidebar, `DELETE /runs/:id` for test cleanup |
 | **Config observability** | Config tab + `GET /config/snapshot` — resolved essentials provenance (env / pi / default) + wiring |
 | **Local PR delivery** | Acme-linked successful runs use a host-created isolated worktree/branch; Helix safely commits remaining implementation changes and registers a draft local PR; no push or merge |
-| **Independent local PR control** | Separate `/pr-reviews` API and `/reviews` operational UI, `.helix/pr-reviews.db`, durable lifecycle events, exact-head temporary worktree, concurrent reviewer/verifier, structured readiness callback |
-| **React UI migration** | React + TanStack Query is the sole UI for Run, PR Reviews, Manage, and Config |
+| **Independent local PR control** | Helix-created and trusted external PRs share the separate `/pr-reviews` API, `.helix/pr-reviews.db`, durable lifecycle events, exact-head temporary worktree, concurrent reviewer/verifier, fail-closed host policy, and structured readiness callback |
 
 ---
 

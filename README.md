@@ -168,9 +168,20 @@ Open **Pull requests** in Acme Issues and request review. Helix checks out the e
 
 > The current local harness assumes repositories and PR branches are trusted. Verification commands execute locally without a VM/container boundary. Do not review untrusted third-party code while credentials are present in the Helix process environment.
 
+### Independent PR review contract
+
+PR review is a separate Helix workflow, not another step inside the implementation run:
+
+- It accepts both Helix-created PRs and PRs registered by another trusted producer.
+- Every review is pinned to one repository, base SHA, and head SHA. Updating the head requires a new review.
+- `reviewer` evaluates intent, scope, and the diff while `verifier` runs repository checks; they execute independently and concurrently in a detached exact-head worktree.
+- Structured specialist reports are combined by host policy into `ready_to_merge`, `changes_requested`, or `blocked`. Invalid or incomplete evidence fails closed.
+- Review state and lifecycle events are durable in `.helix/pr-reviews.db`; findings, checks, and the decision are returned to the requesting tracker.
+- `ready_to_merge` is evidence for a human decision, not permission for Helix to merge.
+
 To request more work after completion, reopen the issue or add a comment beginning with `/helix`. acme-issues sends that external event to the completed run; Helix creates a linked child run with fresh specialist sessions and bounded context from the original issue and parent outcome. This is workflow continuation, not a manual chat prompt.
 
-See the [acme-issues README](https://github.com/eimg/acme-issues#helix-integration) for webhook payload details and API reference.
+See the [acme-issues README](https://github.com/eimg/acme-issues#pull-request-review-lifecycle) for the tracker-side review lifecycle, webhook payloads, and API reference.
 
 ## Tips
 
@@ -190,10 +201,10 @@ helix serve
 
 | Surface | URL | Notes |
 |--------|-----|--------|
-| Run console | `/` | React UI with form, live log, cached run history, and delete |
-| PR Reviews | `/reviews` | React UI for active exact-SHA reviews, durable history, lifecycle progress, findings, and checks |
-| Manage | `/manage` | React UI for experimental agent/skill authoring and default-workflow ordering (web/API only) |
-| Config | `/config` | React UI for resolved runtime settings and provenance |
+| Run console | `/` | Form, live log, cached run history, and delete |
+| PR Reviews | `/reviews` | Active exact-SHA reviews, durable history, lifecycle progress, findings, and checks |
+| Manage | `/manage` | Experimental agent/skill authoring and default-workflow ordering (web/API only) |
+| Config | `/config` | Resolved runtime settings and provenance |
 | API | `/runs`, `/runs/:id/events`, … | JSON + SSE |
 
 Default port **8319** (phone-keypad mnemonic for HELIX). Override with `--port` or `PORT`.
