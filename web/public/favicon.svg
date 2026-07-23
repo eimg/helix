@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="helix-bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#73d2ff"/>
+      <stop offset="1" stop-color="#4ba9e8"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#0f1117"/>
+  <rect x="6" y="6" width="52" height="52" rx="13" fill="url(#helix-bg)"/>
+  <path d="M20 18h8v10h8V18h8v28h-8V35h-8v11h-8V18Z" fill="#071018"/>
+</svg>
