@@ -184,19 +184,19 @@ test("manage workflow API reorders available agents and preserves other config",
 
   const before = await request(app).get("/manage/workflow");
   assert.equal(before.status, 200);
-  assert.deepEqual(before.body.steps, ["planner", "dev", "verifier"]);
+  assert.deepEqual(before.body.steps, ["planner", "dev"]);
 
-  const saved = await request(app).put("/manage/workflow").send({ steps: ["dev", "verifier", "planner"] });
+  const saved = await request(app).put("/manage/workflow").send({ steps: ["dev", "planner"] });
   assert.equal(saved.status, 200);
-  assert.deepEqual(saved.body.steps, ["dev", "verifier", "planner"]);
+  assert.deepEqual(saved.body.steps, ["dev", "planner"]);
 
   const config = JSON.parse(readFileSync(join(helixDir, "config.json"), "utf-8"));
-  assert.deepEqual(config.orchestrator.workflow, ["dev", "verifier", "planner"]);
+  assert.deepEqual(config.orchestrator.workflow, ["dev", "planner"]);
   assert.equal(config.orchestrator.maxIterations, 6);
   assert.equal(config.repoContext.enabled, true);
 
   const snapshot = await request(app).get("/config/snapshot");
-  assert.deepEqual(snapshot.body.workflow.steps, ["dev", "verifier", "planner"]);
+  assert.deepEqual(snapshot.body.workflow.steps, ["dev", "planner"]);
 
   const duplicate = await request(app).put("/manage/workflow").send({ steps: ["dev", "dev"] });
   assert.equal(duplicate.status, 400);
@@ -237,14 +237,14 @@ test("new runs reload workflow and agents saved while the server is running", as
   const app = createApp({ ctx });
 
   writeFileSync(join(helixDir, "agents", "reviewer.md"), "---\nname: reviewer\ndescription: Reviews changes\n---\n\nReview carefully.\n");
-  const saved = await request(app).put("/manage/workflow").send({ steps: ["planner", "reviewer", "dev", "verifier"] });
+  const saved = await request(app).put("/manage/workflow").send({ steps: ["planner", "reviewer", "dev"] });
   assert.equal(saved.status, 200);
 
   const started = await request(app).post("/runs").send({ title: "Reload resources" });
   assert.equal(started.status, 202);
   await new Promise((resolveDelay) => setTimeout(resolveDelay, 80));
 
-  assert.deepEqual(observedSteps, ["planner", "reviewer", "dev", "verifier"]);
+  assert.deepEqual(observedSteps, ["planner", "reviewer", "dev"]);
   assert.ok(observedAgents.includes("reviewer"));
 
   rmSync(dir, { recursive: true, force: true });

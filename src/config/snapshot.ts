@@ -7,7 +7,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { HelixConfig } from "../config.js";
-import { githubPrEnabled } from "../config.js";
+import { githubPrEnabled, localPrEnabled } from "../config.js";
 import { OPENROUTER_API_KEY_ENV } from "./defaults.js";
 import { HELIX_MODEL_ENV, resolveModelRef, repoRootFromHelixDir } from "./env.js";
 import {
@@ -68,6 +68,7 @@ export interface ConfigSnapshot {
     extensionPaths: string[];
     repoContextEnabled: boolean;
     deliverablePr: boolean;
+    deliverableLocalPr: boolean;
   };
   workflow: {
     steps: string[];
@@ -145,6 +146,7 @@ export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
       ],
       repoContextEnabled: ctx.config.repoContext?.enabled !== false,
       deliverablePr: githubPrEnabled(ctx.config),
+      deliverableLocalPr: localPrEnabled(ctx.config),
     },
     workflow: {
       steps: workflowSteps,

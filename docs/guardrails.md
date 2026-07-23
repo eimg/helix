@@ -17,11 +17,13 @@ Related: [`plan.md`](./plan.md), [`architecture.md`](./architecture.md), [`repo-
 | Blocking-failure gate | `engine/engine.ts` | `done` over failed specialist → escalate |
 | Merge gate + approval | `mergeGate.ts`, deliverable pipeline, approve/reject API | Size/risk → auto-merge or `approvalStatus: pending` |
 | `deliverable.pr` (default `false`) | config + `cli.ts` serve wiring | No `gh pr create` unless opted in |
+| Local PR delivery | `run/workspace.ts`, `localPullRequest.ts`, `deliverable.localPr` | Acme-linked server runs use a host-created isolated branch/worktree; remaining changes are policy-checked and committed before metadata registration; never pushes or merges |
+| Independent PR control | `src/pr-control/` | Exact head SHA, detached temporary worktree, read-only reviewer/verifier, structured fail-closed policy |
 | Extensions default off | config, `loaderBuilder.ts` | Less ambient privilege |
 | Session isolation | specialist/orchestrator sessions | No inter-specialist chat; no global pi skills/context files |
 | Agent `tools:` frontmatter | `.helix/agents/*.md` | Declares tools; **not** a hard global policy layer |
 
-The current deliverable pipeline combines PR creation and merge handling. This is a provisional demo boundary. The target architecture makes implementation runs responsible for producing a new PR, then hands lifecycle ownership to an independent PR-control module. That module applies separate review, fix, approval, and merge policy to Helix-created or external PRs. See [`architecture.md`](./architecture.md#pull-request-lifecycle-boundary).
+The local Acme path now separates implementation delivery from PR control. Acme Issues stores Helix-created and external PRs; Helix independently reviews an exact head SHA and never merges. The GitHub deliverable pipeline still combines PR creation and merge handling and remains provisional. See [`architecture.md`](./architecture.md#pull-request-lifecycle-boundary).
 
 ### Escalation today (gap)
 
@@ -44,6 +46,8 @@ Clarify which of these you are protecting against:
 
 Default assumption for Helix’s current use (acme-issues + localhost serve): optimize for (1), harden lightly for (2), defer (3) until bind address leaves loopback.
 
+The shipped local PR reviewer is **not** a sandbox for hostile contributions. A detached worktree isolates checkout state, not process permissions or environment secrets; reviewer/verifier tools and repository test scripts still execute with local process authority. External currently means work produced outside the Helix implementation loop but still trusted by the operator. Untrusted PR support requires the subprocess/container isolation work below.
+
 ---
 
 ## Guardrails — what to consider
@@ -58,7 +62,7 @@ Default assumption for Helix’s current use (acme-issues + localhost serve): op
 ### 2. Side effects outside the repo
 
 - Git push / PR / merge — already opt-in via `deliverable.pr`; keep fail-closed.
-- In the target split, Helix may create a PR but cannot authorize its own merge. Merge permission belongs to the independent PR-control policy or an explicit human decision.
+- In the local split, Helix may register a PR and report `ready_to_merge`, but it exposes no merge operation. The human performs the Git merge and records it in Acme Issues.
 - PR-trigger consumers must pin work to repository + PR number + head SHA, deduplicate webhook/comment events, and ignore their own bot-authored events.
 - Issue-tracker / webhook callbacks — URL allowlist, auth (today: POC, no auth).
 - Outbound network via `bash` (curl, etc.).

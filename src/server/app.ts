@@ -8,6 +8,10 @@
  * DELETE /runs/:id    delete a finished run (testing cleanup)
  * GET  /runs/:id/events   SSE stream of RunEvents
  * POST /runs/:id/approve | /reject   human merge gate decisions
+ * POST /pr-reviews     start an independent, SHA-bound local PR review
+ * GET  /pr-reviews     list PR-control reviews
+ * GET  /pr-reviews/:id inspect one PR-control review
+ * GET  /pr-reviews/:id/events stream durable PR-review lifecycle events
  *
  * Manage (experimental):
  * POST /manage/sessions, GET /manage/sessions/:id, SSE events, apply, discard
@@ -38,12 +42,15 @@ import { externalFromHeaders, parseIssueExternal } from "../callbacks/issueTrack
 import { loadManagedWorkflow, saveManagedWorkflow } from "../manage/workflow.js";
 import { buildContinuationIssue } from "../run/continuation.js";
 import type { RunStore } from "../state/runStore.js";
+import type { PullRequestControlService } from "../pr-control/service.js";
+import type { PullRequestReviewEvent, PullRequestReviewRequest } from "../pr-control/types.js";
 
 export interface CreateAppOptions {
   ctx: RunContext;
   pr?: PullRequestCreator;
   githubRepo?: string;
   manage?: ManageService;
+  prControl?: PullRequestControlService;
 }
 
 interface ActiveRunEntry {
@@ -275,6 +282,90 @@ export function createApp(opts: CreateAppOptions): Express {
     }
   });
 
+  app.post("/pr-reviews", (req: Request, res: Response) => {
+    if (!opts.prControl) {
+      res.status(501).json({ error: "PR control is not configured on this server" });
+      return;
+    }
+    let request: PullRequestReviewRequest;
+    try {
+      request = parsePullRequestReviewRequest(req.body);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
+    const started = opts.prControl.start(request);
+    started.promise.catch(() => {
+      // The PR-control service persists and reports its own terminal error state.
+    });
+    res.status(started.duplicate ? 200 : 202).json({
+      id: started.review.id,
+      status: started.review.status,
+      duplicate: started.duplicate,
+      headSha: started.review.request.pullRequest.headSha,
+    });
+  });
+
+  app.get("/pr-reviews", (req: Request, res: Response) => {
+    if (!opts.prControl) {
+      res.status(501).json({ error: "PR control is not configured on this server" });
+      return;
+    }
+    res.json(opts.prControl.list(parseLimit(req.query.limit, 50)).map((review) => ({
+      ...review,
+      live: opts.prControl!.isActive(review.id),
+    })));
+  });
+
+  app.get("/pr-reviews/:id/events", (req: Request, res: Response) => {
+    if (!opts.prControl) {
+      res.status(501).json({ error: "PR control is not configured on this server" });
+      return;
+    }
+    const id = String(req.params.id);
+    const review = opts.prControl.get(id);
+    if (!review) {
+      res.status(404).json({ error: "PR review not found" });
+      return;
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+    for (const event of review.events) writePullRequestReviewSse(res, event);
+    if (!opts.prControl.isActive(id)) {
+      res.end();
+      return;
+    }
+
+    const unsubscribe = opts.prControl.subscribe(id, (event) => {
+      writePullRequestReviewSse(res, event);
+      if (event.type === "review_completed" || event.type === "review_error") {
+        unsubscribe();
+        res.end();
+      }
+    });
+    req.on("close", unsubscribe);
+    if (!opts.prControl.isActive(id)) {
+      unsubscribe();
+      res.end();
+    }
+  });
+
+  app.get("/pr-reviews/:id", (req: Request, res: Response) => {
+    if (!opts.prControl) {
+      res.status(501).json({ error: "PR control is not configured on this server" });
+      return;
+    }
+    const review = opts.prControl.get(String(req.params.id));
+    if (!review) {
+      res.status(404).json({ error: "PR review not found" });
+      return;
+    }
+    res.json({ ...review, live: opts.prControl.isActive(review.id) });
+  });
+
   app.get("/manage/agents", (_req, res) => {
     res.json(manage.getInventory().agents);
   });
@@ -427,6 +518,9 @@ export function createApp(opts: CreateAppOptions): Express {
   app.get("/config", (_req, res) => {
     res.sendFile(join(publicDir, "config.html"));
   });
+  app.get("/reviews", (_req, res) => {
+    res.sendFile(join(publicDir, "reviews.html"));
+  });
 
   return app;
 }
@@ -473,6 +567,85 @@ function attachExternalRef(
   return issue;
 }
 
+function parsePullRequestReviewRequest(value: unknown): PullRequestReviewRequest {
+  if (!value || typeof value !== "object") throw new Error("Request body must be a JSON object");
+  const body = value as Record<string, unknown>;
+  const rawPr = body.pullRequest;
+  const rawCallback = body.callback;
+  if (!rawPr || typeof rawPr !== "object") throw new Error("pullRequest is required");
+  if (!rawCallback || typeof rawCallback !== "object") throw new Error("callback is required");
+  const pr = rawPr as Record<string, unknown>;
+  const callback = rawCallback as Record<string, unknown>;
+  const requiredPrStrings = [
+    "title",
+    "repositoryPath",
+    "baseBranch",
+    "baseSha",
+    "headBranch",
+    "headSha",
+    "author",
+  ] as const;
+  for (const field of requiredPrStrings) {
+    if (typeof pr[field] !== "string" || !pr[field].trim()) {
+      throw new Error(`pullRequest.${field} is required`);
+    }
+  }
+  const pullRequestId = Number(pr.id);
+  if (!Number.isInteger(pullRequestId) || pullRequestId <= 0) {
+    throw new Error("pullRequest.id must be a positive integer");
+  }
+  if (pr.origin !== "helix" && pr.origin !== "external") {
+    throw new Error("pullRequest.origin must be helix or external");
+  }
+  const callbackPullRequestId = Number(callback.pullRequestId);
+  if (!Number.isInteger(callbackPullRequestId) || callbackPullRequestId <= 0) {
+    throw new Error("callback.pullRequestId must be a positive integer");
+  }
+  const trackerUrl =
+    typeof callback.trackerUrl === "string" ? callback.trackerUrl.trim() : "";
+  if (!trackerUrl) throw new Error("callback.trackerUrl is required");
+  const externalEventId =
+    typeof body.externalEventId === "string" ? body.externalEventId.trim() : "";
+  if (!externalEventId || externalEventId.length > 300) {
+    throw new Error("externalEventId is required and must be 300 characters or fewer");
+  }
+
+  let issue: PullRequestReviewRequest["pullRequest"]["issue"];
+  if (pr.issue && typeof pr.issue === "object") {
+    const rawIssue = pr.issue as Record<string, unknown>;
+    const issueId = Number(rawIssue.id);
+    if (
+      Number.isInteger(issueId) &&
+      issueId > 0 &&
+      typeof rawIssue.title === "string" &&
+      typeof rawIssue.body === "string"
+    ) {
+      issue = { id: issueId, title: rawIssue.title, body: rawIssue.body };
+    }
+  }
+
+  return {
+    pullRequest: {
+      id: pullRequestId,
+      title: String(pr.title).trim(),
+      description: typeof pr.description === "string" ? pr.description : "",
+      repositoryPath: String(pr.repositoryPath).trim(),
+      baseBranch: String(pr.baseBranch).trim(),
+      baseSha: String(pr.baseSha).trim(),
+      headBranch: String(pr.headBranch).trim(),
+      headSha: String(pr.headSha).trim(),
+      author: String(pr.author).trim(),
+      origin: pr.origin,
+      issue,
+    },
+    callback: {
+      trackerUrl,
+      pullRequestId: callbackPullRequestId,
+    },
+    externalEventId,
+  };
+}
+
 function parseLimit(value: unknown, fallback: number): number {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return fallback;
@@ -508,6 +681,10 @@ function writeRunSse(res: Response, event: RunEvent): void {
     // through their generic durable-event renderer once per token.
     res.write("event: live\n");
   }
+  res.write(`data: ${JSON.stringify(event)}\n\n`);
+}
+
+function writePullRequestReviewSse(res: Response, event: PullRequestReviewEvent): void {
   res.write(`data: ${JSON.stringify(event)}\n\n`);
 }
 

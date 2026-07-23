@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Helix — PR Reviews</title>
+  <link rel="stylesheet" href="/app.css?v=reviews-1" />
+</head>
+<body>
+  <div class="layout">
+    <header class="header">
+      <nav class="site-nav">
+        <a href="/" class="nav-link">Run</a>
+        <a href="/reviews" class="nav-link active">PR Reviews</a>
+        <a href="/manage" class="nav-link">Manage</a>
+        <a href="/config" class="nav-link">Config</a>
+      </nav>
+      <h1>PR Reviews</h1>
+      <p class="subtitle">Independent exact-SHA review activity and durable evidence</p>
+    </header>
+
+    <div class="reviews-toolbar">
+      <div class="reviews-filters" role="group" aria-label="Filter review history">
+        <button class="ghost active" type="button" data-review-filter="">All</button>
+        <button class="ghost" type="button" data-review-filter="ready_to_merge">Passed</button>
+        <button class="ghost" type="button" data-review-filter="changes_requested">Changes</button>
+        <button class="ghost" type="button" data-review-filter="blocked">Blocked</button>
+        <button class="ghost" type="button" data-review-filter="error">Errors</button>
+      </div>
+      <button id="refresh-reviews" class="ghost" type="button">Refresh</button>
+    </div>
+
+    <div class="reviews-layout">
+      <aside class="reviews-sidebar">
+        <section class="panel reviews-list-panel">
+          <div class="panel-head">
+            <h2>Active</h2>
+            <span id="active-review-count" class="reviews-count">0</span>
+          </div>
+          <ul id="active-review-list" class="review-list" aria-live="polite"></ul>
+        </section>
+
+        <section class="panel reviews-list-panel">
+          <div class="panel-head">
+            <h2>History</h2>
+            <span id="history-review-count" class="reviews-count">0</span>
+          </div>
+          <ul id="review-history-list" class="review-list" aria-live="polite"></ul>
+        </section>
+      </aside>
+
+      <main id="review-detail" class="panel review-detail">
+        <div class="review-empty">
+          <h2>No review selected</h2>
+          <p>Select an active or completed PR review to inspect its progress and evidence.</p>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script src="/reviews.js?v=reviews-1" type="module"></script>
+</body>
+</html>

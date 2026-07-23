@@ -2,7 +2,7 @@
 
 Agent orchestration loop built on [pi](https://pi.dev).
 
-Helix takes a work item and drives it through specialist agents (planner, dev, verifier, …) toward a deliverable. It is **not** an LLM and **not** a coding agent — it is the system that *orchestrates* coding agents.
+Helix takes a work item through implementation specialists, then independently reviews its Git-backed local PR through PR-control specialists. It is **not** an LLM and **not** a coding agent — it is the system that *orchestrates* coding agents and deterministic lifecycle policy.
 
 Package: [`@eimg/helix`](https://github.com/eimg/helix) · command: `helix`
 
@@ -16,7 +16,7 @@ Helix is one of four related projects. They remain separate products with separa
 |---|---|
 | **[Primer](https://github.com/eimg/primer)** | Knowledge product and fictional Acme evidence corpus; not currently part of the runtime loop. |
 | **[Helix](https://github.com/eimg/helix)** | Agent workflow control plane that receives work and orchestrates changes. |
-| **[Acme Issues](https://github.com/eimg/acme-issues)** | Local issue tracker and webhook harness that triggers Helix and receives callbacks. |
+| **[Acme Issues](https://github.com/eimg/acme-issues)** | Local issue and PR management surface that triggers Helix and receives callbacks. |
 | **[Acme Todo](https://github.com/eimg/acme-todo)** | Disposable target application used for agent implementation and verification. |
 
 Typical exercise: Acme Issues triggers Helix, Helix works on Acme Todo, and Primer develops the separate knowledge and retrieval side of the same fictional Acme context.
@@ -117,17 +117,22 @@ See [Server & web UI](#server--web-ui) for the full endpoint list and webhook pa
 
 ## Companion project: [acme-issues](https://github.com/eimg/acme-issues)
 
-For a fuller workflow without GitHub, pair Helix with **[acme-issues](https://github.com/eimg/acme-issues)** — a small local issue tracker that POSTs work items into Helix and receives completion callbacks.
+For a fuller workflow without GitHub, pair Helix with **[acme-issues](https://github.com/eimg/acme-issues)** — a local issue and PR management surface that POSTs work and review requests into Helix.
 
 | Project | Role |
 |---------|------|
-| **Helix** (this repo) | Orchestrates specialist agents; exposes `POST /runs` and a run console |
-| **[acme-issues](https://github.com/eimg/acme-issues)** | Local SQLite issue tracker; fires webhooks when labeled issues appear |
+| **Helix** (this repo) | Runs implementation and independent PR-control workflows |
+| **[acme-issues](https://github.com/eimg/acme-issues)** | Stores issues and local PRs; provides the human review/merge-readiness UI |
 
 ```
-acme-issues (issue + label) ──POST──► Helix /runs ──► planner → dev → verifier
-       ▲                                        │
-       └──────── run.completed callback ────────┘
+Acme issue ──POST /runs──► isolated worktree/branch → planner → dev self-check
+    ▲                                                   │
+    │                                                   ▼
+    │                                        Acme local PR (draft)
+    │                                                   │
+    │                         POST /pr-reviews───────────┘
+    │                                                   ▼
+    └──── SHA-bound decision callback ◄──── reviewer + verifier → host policy
 ```
 
 **Terminal 1 — Helix on your target repo**
@@ -157,7 +162,11 @@ npm run dev
 | Continuation comment command | `/helix` (default) |
 | Webhooks enabled | on |
 
-**Create an issue** in acme-issues with the filter label (e.g. `trigger`). The tracker POSTs to Helix; a run starts and appears in the Helix run console. When the run finishes, Helix sends a `run.completed` callback — acme-issues closes the issue and adds a Helix comment.
+**Create an issue** in acme-issues with the filter label (e.g. `trigger`). The tracker POSTs to Helix; Helix creates an isolated feature branch/worktree, then the run starts and appears in the Helix run console. On success, Helix policy-checks and commits any remaining implementation changes before registering a draft local PR in Acme Issues. The linked issue remains in progress while the PR is reviewed.
+
+Open **Pull requests** in Acme Issues and request review. Helix checks out the exact head SHA in a detached temporary worktree and runs the independent `reviewer` and `verifier` concurrently. Acme Issues displays the findings, executed checks, decision, diff, and review history. A changed head SHA invalidates the current readiness state. Helix never merges; after manually merging the reviewed SHA, use **Mark merged** to record the result and close the linked issue.
+
+> The current local harness assumes repositories and PR branches are trusted. Verification commands execute locally without a VM/container boundary. Do not review untrusted third-party code while credentials are present in the Helix process environment.
 
 To request more work after completion, reopen the issue or add a comment beginning with `/helix`. acme-issues sends that external event to the completed run; Helix creates a linked child run with fresh specialist sessions and bounded context from the original issue and parent outcome. This is workflow continuation, not a manual chat prompt.
 
@@ -166,6 +175,8 @@ See the [acme-issues README](https://github.com/eimg/acme-issues#helix-integrati
 ## Tips
 
 - Prefer **inline** or **acme-issues** over GitHub poll until you understand merge-gate behavior.
+- New projects use `planner → dev` for implementation. Independent `reviewer + verifier` definitions live under `.helix/pr-agents/` and run only in PR control.
+- `deliverable.localPr` defaults to `true`, but only Acme-linked server runs get a Helix-managed worktree and create a local PR. Standalone inline runs have no tracker or Git-delivery side effect.
 - **GitHub PR create/merge is off by default** (`deliverable.pr: false`). The acme-issues demo does not need `gh`. Enable later with `"deliverable": { "pr": true }` plus `triggers.github.repo`.
 - `mergeGate.autoMerge` only matters when PR deliverables are enabled.
 - Run history **delete (×)** permanently removes the run from `.helix/runs.db` (handy while testing).
@@ -180,6 +191,7 @@ helix serve
 | Surface | URL | Notes |
 |--------|-----|--------|
 | Run console | `/` | Form, live log, run history, delete finished runs |
+| PR Reviews | `/reviews` | Active exact-SHA reviews, durable history, lifecycle progress, findings, and checks |
 | Manage | `/manage` | Experimental agent/skill authoring and default-workflow ordering (web/API only) |
 | API | `/runs`, `/runs/:id/events`, … | JSON + SSE |
 
@@ -195,6 +207,10 @@ Default port **8319** (phone-keypad mnemonic for HELIX). Override with `--port` 
 | `GET` | `/runs/:id/events` | SSE stream of run events |
 | `POST` | `/runs/:id/approve` | Approve merge gate (when PR deliverable enabled) |
 | `POST` | `/runs/:id/reject` | Reject merge gate |
+| `POST` | `/pr-reviews` | Start an independent local PR review at one exact head SHA |
+| `GET` | `/pr-reviews` | List durable PR-control reviews |
+| `GET` | `/pr-reviews/:id` | Inspect one PR-control review and its evidence |
+| `GET` | `/pr-reviews/:id/events` | SSE stream of durable PR-review lifecycle events |
 | `GET` | `/health` | Health check |
 
 ### `POST /runs` (webhook receiver)
@@ -236,20 +252,24 @@ The parent must be `done` or `escalated`. Helix returns the existing child for a
 ```
 .helix/
   config.json       # workflow wiring, triggers, mergeGate, repoContext
-  agents/*.md       # specialists
+  agents/*.md       # implementation specialists (default: planner, dev)
+  pr-agents/*.md    # independent PR specialists (default: reviewer, verifier)
   skills/*/SKILL.md
   context/*.md      # optional curated notes (Phase A bootstrap)
   runs.db           # SQLite run state (gitignored)
+  pr-reviews.db     # SQLite PR-control state (gitignored)
   runs/             # legacy JSON import source (gitignored)
 ```
 
 Useful knobs:
 
 - **`.env`** — essentials: `OPENROUTER_API_KEY`, `HELIX_MODEL` (default: `openrouter/xiaomi/mimo-v2.5-pro`). Loaded from project root; shell exports win. If the API key is unset, Helix falls back to `~/.pi/agent/auth.json`.
-- **`config.json`** — wiring only: `workflow`, `maxIterations`, `mergeGate`, `deliverable.pr`, `triggers`, `repoContext`, `extensions`
+- **`config.json`** — wiring only: `workflow`, `maxIterations`, `mergeGate`, `deliverable`, `triggers`, `repoContext`, `extensions`
 - The Manage tab can add, remove, and reorder agents in the default workflow. New runs reload saved workflow and agent definitions without restarting the server.
 - **`agents/*.md`** — optional per-specialist `model:` in frontmatter (overrides the default for that agent only)
 - `repoContext.enabled` (default `true`) — deterministic repo bootstrap injected once into every cold specialist session
+- `deliverable.localPr` (default `true`) — create an isolated implementation branch/worktree, safely finalize its commit, and register a draft PR with the linked local tracker
+- `deliverable.baseBranch` (default `main`) — base ref recorded for local PR identity and review
 - `deliverable.pr` (default `false`) — opt into GitHub PR create/merge via `gh` after successful runs
 - `mergeGate` — auto-merge thresholds (only applies when `deliverable.pr` is true)
 

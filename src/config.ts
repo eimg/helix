@@ -50,14 +50,18 @@ export interface HelixConfig {
   deliverable?: {
     /** Create/merge a GitHub PR after a successful run. Default false. */
     pr?: boolean;
+    /** Register a Git-backed local PR with the linked local tracker. */
+    localPr?: boolean;
+    /** Base branch used for local PR identity. */
+    baseBranch?: string;
   };
 }
 
 const DEFAULTS: Partial<HelixConfig> = {
-  orchestrator: { workflow: ["planner", "dev", "verifier"], maxIterations: 6 },
+  orchestrator: { workflow: ["planner", "dev"], maxIterations: 6 },
   extensions: { enabled: false },
   repoContext: { enabled: true },
-  deliverable: { pr: false },
+  deliverable: { pr: false, localPr: true, baseBranch: "main" },
 };
 
 export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixConfig {
@@ -107,4 +111,9 @@ export function extensionsEnabled(config: HelixConfig): boolean {
 /** True when post-run GitHub PR create/merge via `gh` is enabled. */
 export function githubPrEnabled(config: HelixConfig): boolean {
   return config.deliverable?.pr === true;
+}
+
+/** True when Acme-linked runs should register a local PR after implementation. */
+export function localPrEnabled(config: HelixConfig): boolean {
+  return config.deliverable?.localPr === true;
 }

@@ -1,9 +1,9 @@
 {
   "extensions": { "enabled": false },
   "repoContext": { "enabled": true },
-  "deliverable": { "pr": false },
+  "deliverable": { "pr": false, "localPr": true, "baseBranch": "main" },
   "orchestrator": {
-    "workflow": ["planner", "dev", "verifier"],
+    "workflow": ["planner", "dev"],
     "maxIterations": 6
   },
   "triggers": {

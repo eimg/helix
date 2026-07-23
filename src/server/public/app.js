@@ -136,14 +136,14 @@ async function loadHistory() {
     for (const run of runHistory) knownRunIds.add(run.id);
     renderHistory();
 
-    const newLive = runHistory.filter(
-      (r) => (r.live || r.status === "running") && !prevIds.has(r.id)
-    );
+    const newLive = runHistory.filter((r) => r.live && !prevIds.has(r.id));
     if (newLive.length > 0 && !userPinnedSelection) {
       void openRun(newLive[0].id);
     }
-    if (runHistory.some((r) => r.live || r.status === "running")) {
+    if (runHistory.some((r) => r.live)) {
       startHistoryPoll();
+    } else {
+      stopHistoryPoll();
     }
   } catch {
     /* ignore */
@@ -160,9 +160,10 @@ function renderHistory() {
   historyListEl.innerHTML = runHistory
     .map((run) => {
       const active = run.id === selectedRunId ? " active" : "";
-      const live = run.live || run.status === "running";
-      const pillClass = live ? "live" : run.status;
-      const pillLabel = live ? "live" : run.status;
+      const live = run.live;
+      const interrupted = run.status === "running" && !live;
+      const pillClass = live ? "live" : interrupted ? "interrupted" : run.status;
+      const pillLabel = live ? "live" : interrupted ? "interrupted" : run.status;
       const deleteBtn = live
         ? ""
         : `<button type="button" class="history-delete" data-delete-run-id="${escapeHtml(run.id)}" title="Delete run" aria-label="Delete run">×</button>`;
@@ -217,7 +218,7 @@ function startHistoryPoll() {
     void loadHistory();
     if (!selectedRunId) return;
     const selected = runHistory.find((r) => r.id === selectedRunId);
-    if (selected && (selected.live || selected.status === "running")) {
+    if (selected?.live) {
       void refreshSelectedRun();
     }
   }, 2000);
@@ -262,9 +263,11 @@ async function openRun(id) {
     await streamRun(id);
     const run = await fetchRun(id);
     showResult(run);
-    setPill(run.status, run.status);
+    const summary = runHistory.find((item) => item.id === id);
+    const interrupted = run.status === "running" && !summary?.live;
+    setPill(interrupted ? "interrupted" : run.status, interrupted ? "interrupted" : run.status);
     await loadHistory();
-    if (!runHistory.some((r) => r.live || r.status === "running")) stopHistoryPoll();
+    if (!runHistory.some((r) => r.live)) stopHistoryPoll();
   } catch (err) {
     appendLine(formatError(err instanceof Error ? err.message : String(err)));
     setPill("error", "error");
@@ -625,6 +628,11 @@ function showResult(run) {
   }
   if (run.approvalStatus === "pending") parts.push(`<p>Awaiting approval</p>`);
   if (run.deliverableError) parts.push(`<p class="tag-fail">${escapeHtml(run.deliverableError)}</p>`);
+  if (run.implementationWorkspace) {
+    parts.push(
+      `<p>Implementation workspace retained at <code>${escapeHtml(run.implementationWorkspace.path)}</code> on branch <code>${escapeHtml(run.implementationWorkspace.branch)}</code>.</p>`,
+    );
+  }
 
   resultEl.innerHTML = parts.join("");
 }
@@ -742,8 +750,8 @@ function escapeHtml(s) {
 showLogPlaceholder();
 syncHistoryHeight();
 void loadHistory().then(() => {
-  const live = runHistory.find((r) => r.live || r.status === "running");
+  const live = runHistory.find((r) => r.live);
   if (live && !selectedRunId) void openRun(live.id);
-  startHistoryPoll();
+  if (live) startHistoryPoll();
   syncHistoryHeight();
 });

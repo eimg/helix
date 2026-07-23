@@ -40,7 +40,7 @@ The loops may reuse Pi-backed runtime adapters, specialist-session construction,
 | Knowledge and discovery | Opportunity or hypothesis | Scheduled scan plus knowledge changes | Brief, RFC, prototype, experiment, proposed issues | Planned |
 | Planning | Milestone or implementation plan | Team cadence, accepted proposal, or new-project request | Prioritized issues or a bootstrap-ready plan | Planned |
 | Implementation | Issue | Create, reopen, or command comment | Verified repository change delivered as a new PR | Partially shipped |
-| PR control | Pull request at a head SHA | PR, CI, and review events plus scheduled reconciliation | Review, fixes, evidence, merge decision | Planned |
+| PR control | Pull request at a head SHA | Local review request; later PR, CI, and review events plus reconciliation | Review evidence and merge-readiness decision | Partially shipped |
 | Release readiness | Release candidate | Merged changes, milestone, or release schedule | Changelog, risk analysis, rollout and rollback plan | Planned |
 | Deployment | Deployment record | Approved release candidate | Staged rollout, verification, production result, rollback | Planned |
 | Production learning | Incident or observation | Alert, support report, failed deployment, scheduled analysis | Issue, runbook update, regression proposal, knowledge entry | Planned |
@@ -111,13 +111,13 @@ planning loop
 
 The implementation loop consumes an issue and produces a verified change. Issue creation, reopen, and explicit issue command comments are external workflow triggers. Continuations remain fresh linked runs with bounded lineage context.
 
-The target Git behavior is one isolated branch or worktree and one new PR for every successful change-producing run. Direct work on the current checkout is acceptable only during the demo stage. Helix delivers the PR with evidence and then stops; it does not authorize its own merge.
+The Git behavior is one isolated worktree, one named feature branch, and one new PR for every successful Acme-linked change-producing run. Helix creates the branch from the configured base SHA before agent execution, lets the Dev commit logically, safely commits remaining changes at the host boundary, then registers the exact base/head SHAs as a draft PR in Acme Issues. Successful registration removes the temporary checkout while retaining the branch; failures retain the workspace for diagnosis. Helix delivers the PR and stops; it does not authorize its own merge.
 
 ### PR control
 
-PR control is logically independent from implementation. It consumes Helix-created or external pull requests and works on the existing PR rather than creating another PR for review-only or fix activity.
+PR control is logically independent from implementation. The shipped local slice consumes Helix-created or manually registered external PRs. Acme Issues owns the human-facing PR record and UI; Helix owns review execution, durable PR-review runs, specialist evidence, and deterministic readiness policy.
 
-It reacts to PR open/update events, head-SHA changes, CI results, reviews, and explicit PR comment commands. A scheduled reconciliation pass revisits waiting or stale PRs and recovers missed events. It may review, verify, post checks or comments, request changes, or push fixes to the existing head branch when authorized.
+Today it reacts to an explicit local review request. It resolves the exact base/head commits, creates a detached temporary worktree at the head SHA, runs independent reviewer and verifier specialists concurrently, parses structured reports, and returns `ready_to_merge`, `changes_requested`, or `blocked`. Acme Issues rejects stale results when the stored head SHA changed. Automatic event reconciliation, conditional specialists, authorized fixes, and hosted-provider adapters remain planned.
 
 Its identity includes repository, PR number, base branch, head branch, head SHA, author, trigger, and external event ID. It must ignore self-authored events and deduplicate effects to avoid bot feedback loops. Merge belongs to PR-control policy or an explicit human decision.
 

@@ -102,6 +102,7 @@ function renderFlags(s) {
   return `<div class="config-kv">
     ${kv("Extensions", boolPill(s.flags.extensionsEnabled), "extensions.enabled")}
     ${kv("Repo context", boolPill(s.flags.repoContextEnabled), "repoContext.enabled")}
+    ${kv("Local PR deliverable", boolPill(s.flags.deliverableLocalPr), "deliverable.localPr")}
     ${kv("GitHub PR deliverable", boolPill(s.flags.deliverablePr), "deliverable.pr")}
     ${kv("Helix dir", `<code>${escapeHtml(s.paths.helixDir)}</code>`)}
     ${kv("Repo cwd", `<code>${escapeHtml(s.paths.cwd)}</code>`)}
@@ -127,6 +128,7 @@ function renderGate(s) {
     ${kv("Max diff lines", g.maxDiffLines === undefined ? mutedDash() : String(g.maxDiffLines), "maxDiffLines")}
     ${kv("Max files", g.maxFiles === undefined ? mutedDash() : String(g.maxFiles), "maxFiles")}
     ${kv("Require verifier pass", g.requireVerifierPass === undefined ? mutedDash() : boolPill(g.requireVerifierPass), "requireVerifierPass")}
+    ${kv("Local PR deliverable", boolPill(s.flags.deliverableLocalPr), "deliverable.localPr")}
     ${kv("GitHub PR deliverable", boolPill(s.flags.deliverablePr), "deliverable.pr")}
   </div>`;
 }

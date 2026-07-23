@@ -6,12 +6,13 @@ import { tmpdir } from "node:os";
 import { loadConfig } from "../src/config.js";
 import { loadSpecialists } from "../src/agents/loader.js";
 import { loadWorkflow, describeWorkflow } from "../src/orchestrator/workflow.js";
+import { loadPullRequestSpecialists } from "../src/pr-control/loader.js";
 
 const fixtureDir = resolve(import.meta.dirname, "..", "examples", "ts", ".helix");
 
 test("config: loads and validates the TS fixture config (wiring only)", () => {
   const config = loadConfig(fixtureDir);
-  assert.deepEqual(config.orchestrator.workflow, ["planner", "dev", "verifier"]);
+  assert.deepEqual(config.orchestrator.workflow, ["planner", "dev"]);
   assert.equal(config.orchestrator.maxIterations, 6);
   assert.equal(config.triggers?.github?.repo, "acme/widget");
   assert.equal(config.mergeGate?.requireVerifierPass, true);
@@ -51,31 +52,41 @@ test("config: deliverable.pr can be enabled explicitly", () => {
   assert.equal(config.deliverable?.pr, true);
 });
 
-test("loader: discovers the three preset specialists with frontmatter + body", () => {
+test("loader: keeps implementation and PR-control specialists in separate packs", () => {
   const defs = loadSpecialists(resolve(fixtureDir, "agents"));
-  assert.equal(defs.length, 3);
+  assert.equal(defs.length, 2);
   const names = defs.map((d) => d.name).sort();
-  assert.deepEqual(names, ["dev", "planner", "verifier"]);
+  assert.deepEqual(names, ["dev", "planner"]);
   const planner = defs.find((d) => d.name === "planner")!;
   assert.ok(planner.description.length > 0);
   assert.equal(planner.model, undefined);
   assert.ok(planner.systemPrompt.length > 0);
   assert.ok(planner.tools?.includes("read"));
   assert.equal(planner.source, "project");
+
+  const prDefs = loadSpecialists(resolve(fixtureDir, "pr-agents"));
+  assert.deepEqual(prDefs.map((d) => d.name).sort(), ["reviewer", "verifier"]);
 });
 
 test("workflow: loads steps, iteration cap, merge gate, and renders rails text", () => {
   const config = loadConfig(fixtureDir);
   const wf = loadWorkflow(config);
-  assert.deepEqual(wf.steps, ["planner", "dev", "verifier"]);
+  assert.deepEqual(wf.steps, ["planner", "dev"]);
   assert.equal(wf.mergeGate.autoMerge, true);
   assert.equal(wf.maxIterations, 6);
   const text = describeWorkflow(wf);
-  assert.match(text, /planner → dev → verifier/);
+  assert.match(text, /planner → dev/);
   assert.match(text, /Hard iteration cap: 6/);
 });
 
 test("loader: returns empty list for a missing agents dir", () => {
   const defs = loadSpecialists(resolve(fixtureDir, "does-not-exist"));
   assert.deepEqual(defs, []);
+});
+
+test("PR-control loader prefers project pack and fills missing roles from shipped presets", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "helix-pr-pack-"));
+  writeFileSync(join(tmp, "config.json"), JSON.stringify({ orchestrator: { workflow: ["dev"] } }));
+  const definitions = loadPullRequestSpecialists(tmp);
+  assert.deepEqual(definitions.map((item) => item.name), ["reviewer", "verifier"]);
 });

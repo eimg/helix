@@ -157,6 +157,11 @@ export interface Run {
   mergeGateResult?: MergeGateResult;
   pullRequest?: PullRequestInfo;
   deliverableError?: string;
+  /** Retained only when a Helix-managed implementation worktree needs inspection. */
+  implementationWorkspace?: {
+    path: string;
+    branch: string;
+  };
 }
 
 export interface RunContinuation {
