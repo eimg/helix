@@ -15,7 +15,7 @@ Manage is a separate surface from the issue orchestration loop (`helix run` / Ru
 | **Manage (HTTP API)** | Shipped | `POST /manage/sessions`, … |
 | **Manage (CLI)** | **Not implemented** | — |
 
-The core orchestration loop is unchanged. Manage never runs planner → dev → verifier or opens PRs.
+Manage never executes the implementation workflow (`planner → dev`) or the separate PR-control workflow (`reviewer + verifier`).
 
 ---
 
@@ -48,7 +48,7 @@ Workflow editing is local and needs no model credentials. Prompt-based agent/ski
 | `GET` | `/manage/agents` | List agents |
 | `GET` | `/manage/skills` | List skills |
 | `GET` | `/manage/workflow` | Read the ordered default workflow |
-| `PUT` | `/manage/workflow` | Replace it with `{ "steps": ["planner", "dev", "verifier"] }` |
+| `PUT` | `/manage/workflow` | Replace it with `{ "steps": ["planner", "dev"] }` |
 | `POST` | `/manage/sessions` | `{ "prompt": "..." }` → start session |
 | `GET` | `/manage/sessions/:id` | Session state, drafts, deletions |
 | `GET` | `/manage/sessions/:id/events?live=1` | SSE event stream |

@@ -30,7 +30,7 @@ End-to-end orchestration of a GitHub issue (or inline terminal task) through spe
 | Triggers | `src/triggers/{github,inline}.ts` — `gh issue view` + inline (terminal) path |
 | State | `src/state/runStore.ts` — SQLite by default (`.helix/runs.db`), normalized incremental events/results, legacy JSON import |
 | CLI | `src/cli.ts` — `helix run <n>` (GitHub) / `--title`/`--body`/`--stdin` (inline) |
-| Presets | `presets/agents/{planner,dev,verifier}.md` + `presets/skills/{ts,react,express,rn,expo}/SKILL.md` |
+| Presets | Implementation `presets/agents/{planner,dev}.md`, PR control `presets/pr-agents/{reviewer,verifier}.md`, plus stack skills |
 | Fixture | `examples/ts/.helix/` — reference consumer wired to the TS preset |
 | Tests | `test/{gates,m1-happy-path,inline-trigger,paths,presets}.test.ts` + fakes under `src/` |
 
@@ -90,6 +90,8 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 | **External workflow continuations** | Issue reopen/comment events create idempotent linked child runs with fresh sessions and bounded parent context |
 | **Run history / delete** | `GET /runs`, UI sidebar, `DELETE /runs/:id` for test cleanup |
 | **Config observability** | Config tab + `GET /config/snapshot` — resolved essentials provenance (env / pi / default) + wiring |
+| **Local PR delivery** | Acme-linked successful runs use a host-created isolated worktree/branch; Helix safely commits remaining implementation changes and registers a draft local PR; no push or merge |
+| **Independent local PR control** | Separate `/pr-reviews` API and `/reviews` operational UI, `.helix/pr-reviews.db`, durable lifecycle events, exact-head temporary worktree, concurrent reviewer/verifier, structured readiness callback |
 
 ---
 
@@ -99,7 +101,7 @@ Stack and ownership posture (platform independence, Pi-first runtime profiles, w
 
 Short version: keep Helix’s control plane independent; use **pi as the default harness for coding and general-purpose profiles**; add a persistent single-agent conversation mode instead of forcing ordinary assistant turns through specialist orchestration; and leave ports open for alternate runtimes, **Temporal-class** durability, and **OTel**/LLM-ops exporters only when measured pain justifies them.
 
-PR lifecycle ownership is also separated: an implementation run should eventually use a run-scoped branch/worktree and deliver a new PR, then stop. An independent PR-control module will consume existing-PR events, review or fix the existing head, report evidence, and leave merge decisions to its own policy or a human. The current combined create/approve/auto-merge pipeline remains an opt-in demo implementation. [→](./architecture.md#pull-request-lifecycle-boundary)
+PR lifecycle ownership is now separated for the local Acme path: implementation defaults to planner/dev self-check and creates a local PR handoff; PR control independently reviews the exact head SHA and reports readiness; the human merges. The hosted GitHub combined create/approve/auto-merge pipeline remains an opt-in provisional path. [→](./architecture.md#pull-request-lifecycle-boundary)
 
 ---
 
@@ -111,8 +113,8 @@ PR lifecycle ownership is also separated: an implementation run should eventuall
 - **Observability** — cost/token dashboards and richer searchable SQLite projections (domain `RunEvent` first; OTel later per architecture.md)
 - **Durability** — resume after crash / HITL park; shape `DurableRunner` before adopting Temporal
 - **General-assistant mode** — persistent Pi thread sessions, profile-specific tools/resources, streamed messages; specialist orchestration remains optional
-- **Run-scoped Git delivery** — isolated branch/worktree, deterministic commit and push, and one new PR for each successful change-producing implementation run
-- **Independent PR-control module** — PR webhook/comment triggers, first-class PR/head-SHA state, independent reviewers/fixers/policy, and external-PR support; owns merge decisions after Helix delivers a PR
+- **Run-scoped Git delivery hardening** — shipped host-created isolated branch/worktree and deterministic fallback commit; next add explicit failed-workspace discovery/cleanup controls and stronger subprocess isolation
+- **PR-control expansion** — conditional security/performance/etc. specialists, fix authorization, event reconciliation, and hosted-provider adapters
 - **More providers** — Anthropic, OpenAI, … (`Provider` interface is ready); alternate agent SDKs remain evaluation fallbacks
 - **First-class webhook trigger** in Helix core (today: HTTP `POST /runs` + external acme-issues)
 - **Subprocess isolation** for untrusted specialists

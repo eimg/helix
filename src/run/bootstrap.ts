@@ -20,6 +20,7 @@ import type { DeliverablePipeline } from "../deliverable/pipeline.js";
 import { NoOpDeliverablePipeline } from "../deliverable/pipeline.js";
 import { notifyIssueTracker } from "../callbacks/issueTracker.js";
 import { buildRepoBootstrap } from "../context/bootstrap.js";
+import type { PreparedRunWorkspace, RunWorkspaceManager } from "./workspace.js";
 
 export interface RunContext {
   helixDir: string;
@@ -32,6 +33,7 @@ export interface RunContext {
   specialists: SpecialistDefinition[];
   store: RunStore;
   deliverable: DeliverablePipeline;
+  workspace?: RunWorkspaceManager;
   createOrchestrator?: (ctx: RunContext) => Orchestrator;
   createSpecialistFactory?: (ctx: RunContext) => SpecialistSessionFactory;
   issueTrackerFetch?: typeof fetch;
@@ -42,6 +44,7 @@ export interface RunContextOptions {
   cwd?: string;
   store?: RunStore;
   deliverable?: DeliverablePipeline;
+  workspace?: RunWorkspaceManager;
   provider?: PiProvider;
   issueTrackerFetch?: typeof fetch;
   createOrchestrator?: (ctx: RunContext) => Orchestrator;
@@ -73,6 +76,7 @@ export function createRunContext(opts: RunContextOptions = {}): RunContext {
     specialists,
     store,
     deliverable,
+    workspace: opts.workspace,
     createOrchestrator: opts.createOrchestrator,
     createSpecialistFactory: opts.createSpecialistFactory,
     issueTrackerFetch: opts.issueTrackerFetch,
@@ -112,43 +116,93 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
   const specialists = ctx.specialists;
   const runId = opts.runId ?? randomUUID();
   const eventStream = opts.eventStream ?? new EventStream();
-  const orchestrator =
-    ctx.createOrchestrator?.(ctx) ??
-    new LlmOrchestrator(ctx.provider, workflow, ctx.model, {
-      cwd: ctx.cwd,
-      helixDir: ctx.helixDir,
-      extensions: config.extensions,
-    });
-
-  const factory =
-    ctx.createSpecialistFactory?.(ctx) ??
-    new PiSpecialistSessionFactory(ctx.provider, specialists, {
-      cwd: ctx.cwd,
-      helixDir: ctx.helixDir,
-      defaultModel: ctx.model,
-      extensions: config.extensions,
-    });
-
-  const repoContext = buildRepoBootstrap(ctx.cwd, config.repoContext);
-
-  const deps: EngineDeps = {
-    provider: ctx.provider,
-    orchestrator,
-    specialistFactory: factory,
-    gates: { ...DEFAULT_GATE_CONFIG, maxIterations: workflow.maxIterations },
-    eventStream,
-    runId,
-    parentRunId: opts.parentRunId,
-    rootRunId: opts.rootRunId,
-    continuation: opts.continuation,
-    repoContext,
-    onEvent: (run, event) => {
-      opts.onEvent?.(run, event);
-      run.runFile = ctx.store.save(run);
-    },
-  };
-
   const promise = (async (): Promise<Run> => {
+    let workspace: PreparedRunWorkspace | undefined;
+    if (!opts.skipDeliverable && issue.external && ctx.workspace) {
+      try {
+        workspace = await ctx.workspace.prepare({ runId, issue });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const now = Date.now();
+        const events: RunEvent[] = [
+          {
+            ts: now,
+            type: "run_started",
+            summary: `Run for ${issue.source}: ${issue.title}`,
+          },
+          {
+            ts: now,
+            type: "run_error",
+            summary: `Implementation workspace preparation failed: ${message}`,
+          },
+        ];
+        const failedRun: Run = {
+          id: runId,
+          parentRunId: opts.parentRunId,
+          rootRunId: opts.rootRunId,
+          continuation: opts.continuation,
+          issue,
+          startedAt: now,
+          finishedAt: now,
+          status: "error",
+          events,
+          results: [],
+          approvalStatus: "none",
+          deliverableError: message,
+        };
+        for (const event of events) {
+          eventStream.emit(event);
+          opts.onEvent?.(failedRun, event);
+        }
+        failedRun.runFile = ctx.store.save(failedRun);
+        return failedRun;
+      }
+    }
+    const runCwd = workspace?.cwd ?? ctx.cwd;
+    const runContext = workspace ? { ...ctx, cwd: runCwd } : ctx;
+    const orchestrator =
+      ctx.createOrchestrator?.(runContext) ??
+      new LlmOrchestrator(ctx.provider, workflow, ctx.model, {
+        cwd: runCwd,
+        helixDir: ctx.helixDir,
+        extensions: config.extensions,
+      });
+
+    const factory =
+      ctx.createSpecialistFactory?.(runContext) ??
+      new PiSpecialistSessionFactory(ctx.provider, specialists, {
+        cwd: runCwd,
+        helixDir: ctx.helixDir,
+        defaultModel: ctx.model,
+        extensions: config.extensions,
+      });
+    const workspaceNotice = workspace
+      ? [
+          "",
+          "## Helix-managed implementation workspace",
+          `You are already on feature branch \`${workspace.branch}\` in an isolated worktree.`,
+          "Do not create, rename, or switch branches. Implement and verify here; Helix will commit any remaining changes before PR registration.",
+        ].join("\n")
+      : "";
+    const repoContext = buildRepoBootstrap(runCwd, config.repoContext) + workspaceNotice;
+
+    const deps: EngineDeps = {
+      provider: ctx.provider,
+      orchestrator,
+      specialistFactory: factory,
+      gates: { ...DEFAULT_GATE_CONFIG, maxIterations: workflow.maxIterations },
+      eventStream,
+      runId,
+      parentRunId: opts.parentRunId,
+      rootRunId: opts.rootRunId,
+      continuation: opts.continuation,
+      repoContext,
+      onEvent: (run, event) => {
+        opts.onEvent?.(run, event);
+        run.runFile = ctx.store.save(run);
+      },
+    };
+
     let run: Run;
     try {
       run = await runIssue(issue, deps);
@@ -159,7 +213,26 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
     }
 
     if (!opts.skipDeliverable && run.status === "done") {
-      run = await ctx.deliverable.finalize(run, workflow.mergeGate);
+      run = await ctx.deliverable.finalize(run, workflow.mergeGate, {
+        cwd: runCwd,
+        repositoryPath: workspace?.repositoryPath ?? ctx.cwd,
+        branch: workspace?.branch,
+        baseBranch: workspace?.baseBranch,
+        baseSha: workspace?.baseSha,
+      });
+    }
+    if (workspace && run.pullRequest) {
+      try {
+        await workspace.cleanup();
+      } catch {
+        // PR identity is already durable. A stale temporary worktree is safe
+        // to prune later and must not turn a successful run into a rejection.
+      }
+    } else if (workspace) {
+      run.implementationWorkspace = {
+        path: workspace.cwd,
+        branch: workspace.branch,
+      };
     }
 
     run.runFile = ctx.store.save(run);

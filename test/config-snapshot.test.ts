@@ -51,6 +51,7 @@ test("buildConfigSnapshot reports resolved models and provenance", () => {
     assert.ok(snap.models.specialists.length >= 1);
     assert.ok(snap.workflow.steps.includes("planner"));
     assert.equal(typeof snap.flags.extensionsEnabled, "boolean");
+    assert.equal(snap.flags.deliverableLocalPr, true);
     assert.ok(!("inheritPi" in snap.flags));
     assert.ok(!("helixHome" in snap.paths));
   } finally {
@@ -103,13 +104,15 @@ test("GET /config serves UI and GET /config/snapshot returns JSON", async () => 
   assert.ok(!JSON.stringify(snap.body).includes("sk-"));
 });
 
-test("Run and Manage nav include Config link", async () => {
+test("Run and Manage nav include Config and PR Reviews links", async () => {
   const ctx = testCtx();
   const app = createApp({ ctx });
 
   const run = await request(app).get("/");
   assert.match(run.text, /href="\/config"/);
+  assert.match(run.text, /href="\/reviews"/);
 
   const manage = await request(app).get("/manage");
   assert.match(manage.text, /href="\/config"/);
+  assert.match(manage.text, /href="\/reviews"/);
 });

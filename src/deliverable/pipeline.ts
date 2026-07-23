@@ -8,7 +8,21 @@ import type { GitContext } from "../deliverable/git.js";
 import type { PullRequestCreator } from "../deliverable/pr.js";
 
 export interface DeliverablePipeline {
-  finalize(run: Run, mergeGate: MergeGateConfig): Promise<Run>;
+  finalize(
+    run: Run,
+    mergeGate: MergeGateConfig,
+    context?: DeliverableFinalizeContext,
+  ): Promise<Run>;
+}
+
+export interface DeliverableFinalizeContext {
+  /** Run-specific checkout in which specialists performed implementation. */
+  cwd: string;
+  /** Stable canonical repository path shared with PR control. */
+  repositoryPath: string;
+  branch?: string;
+  baseBranch?: string;
+  baseSha?: string;
 }
 
 export interface DeliverablePipelineDeps {

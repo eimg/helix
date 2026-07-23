@@ -5,7 +5,7 @@
  * helix serve [--port 8319]   # M2: HTTP API + web UI + optional GitHub poll
  */
 import { resolve } from "node:path";
-import { loadConfig, githubPrEnabled } from "./config.js";
+import { loadConfig, githubPrEnabled, localPrEnabled } from "./config.js";
 import { resolveModelRef } from "./config/env.js";
 import { runIssue, type EngineDeps } from "./engine/engine.js";
 import { EventStream } from "./engine/eventStream.js";
@@ -29,6 +29,12 @@ import { GhPullRequestCreator } from "./deliverable/pr.js";
 import { GitHubPollTrigger } from "./triggers/github-poll.js";
 import { startRun } from "./run/bootstrap.js";
 import { HELIX_DEFAULT_PORT } from "./config/defaults.js";
+import { PullRequestControlService } from "./pr-control/service.js";
+import { SqlitePullRequestReviewStore } from "./pr-control/store.js";
+import { GitPullRequestWorkspace } from "./pr-control/workspace.js";
+import { LocalPullRequestDeliverablePipeline } from "./deliverable/localPullRequest.js";
+import { GitRunWorkspaceManager } from "./run/workspace.js";
+import { loadPullRequestSpecialists } from "./pr-control/loader.js";
 
 function usage(): never {
   console.error(`Usage:
@@ -205,6 +211,7 @@ async function cmdServe(args: string[]): Promise<void> {
   const config = loadConfig(helixDir);
   const repo = config.triggers?.github?.repo;
   const prEnabled = githubPrEnabled(config);
+  const localPullRequestEnabled = localPrEnabled(config);
 
   if (prEnabled && !repo) {
     console.error('config: deliverable.pr is true but triggers.github.repo is missing.');
@@ -218,11 +225,32 @@ async function cmdServe(args: string[]): Promise<void> {
         pr,
         repo,
       })
+    : localPullRequestEnabled
+      ? new LocalPullRequestDeliverablePipeline({
+          cwd: process.cwd(),
+          baseBranch: config.deliverable?.baseBranch,
+        })
     : new NoOpDeliverablePipeline();
 
   const ctx = createRunContext({
     helixDir,
     deliverable,
+    workspace: localPullRequestEnabled
+      ? new GitRunWorkspaceManager(process.cwd(), config.deliverable?.baseBranch)
+      : undefined,
+  });
+  const prControlSpecialists = loadPullRequestSpecialists(helixDir);
+  const prControl = new PullRequestControlService({
+    store: new SqlitePullRequestReviewStore(resolve(helixDir, "pr-reviews.db")),
+    workspace: new GitPullRequestWorkspace(ctx.cwd),
+    specialists: prControlSpecialists,
+    createSessionFactory: (cwd) =>
+      new PiSpecialistSessionFactory(ctx.provider, prControlSpecialists, {
+        cwd,
+        helixDir: ctx.helixDir,
+        defaultModel: ctx.model,
+        extensions: ctx.config.extensions,
+      }),
   });
 
   if (!ctx.provider.hasAuth()) {
@@ -237,9 +265,13 @@ async function cmdServe(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  startServer({ ctx, pr, githubRepo: repo, port, host: "127.0.0.1" });
+  startServer({ ctx, pr, githubRepo: repo, prControl, port, host: "127.0.0.1" });
   if (!prEnabled) {
-    console.log("Deliverable: PR create/merge disabled (set deliverable.pr=true to enable gh).");
+    console.log(
+      localPullRequestEnabled
+        ? "Deliverable: Acme-linked runs register a local PR; merge remains human-only."
+        : "Deliverable: PR creation disabled.",
+    );
   }
 
   const gh = config.triggers?.github;

@@ -46,7 +46,7 @@ Reply with ONE JSON object and nothing else. Schema:
 
 Rules:
 - kind=run: invoke one or more specialists in parallel. Keep each task focused. Helix injects compact shared run knowledge, and a specialist retains its own session for the current run.
-- kind=done: only when the work is complete and verified. Include "deliverable".
+- kind=done: only when implementation is complete and the Dev has reported its self-checks. Independent merge-readiness verification belongs to PR control. Include "deliverable".
 - kind=escalate: when blocked, too risky, or needs a human.
 - Never invent specialist names; use only those listed in the available specialists.
 - When a Repo bootstrap section is present, treat it as ground truth for layout/scripts/docs. Tell specialists to use it and only explore gaps — do not ask them to rediscover the whole tree.`;

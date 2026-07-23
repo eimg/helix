@@ -29,9 +29,9 @@ const PRESETS = ["typescript", "express", "react", "react-native", "expo"];
 const CONFIG_TEMPLATE = `{
   "extensions": { "enabled": false },
   "repoContext": { "enabled": true },
-  "deliverable": { "pr": false },
+  "deliverable": { "pr": false, "localPr": true, "baseBranch": "main" },
   "orchestrator": {
-    "workflow": ["planner", "dev", "verifier"],
+    "workflow": ["planner", "dev"],
     "maxIterations": 6
   },
   "mergeGate": {
@@ -43,7 +43,7 @@ const CONFIG_TEMPLATE = `{
 }
 `;
 
-const GITIGNORE_ENTRIES = [".helix/runs/", ".helix/runs.db*", ".env"];
+const GITIGNORE_ENTRIES = [".helix/runs/", ".helix/runs.db*", ".helix/pr-reviews.db*", ".env"];
 
 const ENV_EXAMPLE = `# Helix — copy to .env and fill in (never commit .env)
 OPENROUTER_API_KEY=
@@ -89,13 +89,26 @@ export function init(opts: InitOptions = {}): void {
   const agentsDir = resolve(helixDir, "agents");
   mkdirSync(agentsDir, { recursive: true });
   let agentCount = 0;
-  for (const name of ["planner.md", "dev.md", "verifier.md"]) {
+  for (const name of ["planner.md", "dev.md"]) {
     const src = join(agentsSrc, name);
     if (!existsSync(src)) continue;
     copyFileSync(src, join(agentsDir, name));
     agentCount++;
   }
   console.log(`✓ wrote .helix/agents/ (${agentCount} specialists)`);
+
+  // PR-control reviewers are deliberately separate from implementation agents.
+  const prAgentsSrc = resolve(pkgRoot, "presets", "pr-agents");
+  const prAgentsDir = resolve(helixDir, "pr-agents");
+  mkdirSync(prAgentsDir, { recursive: true });
+  let prAgentCount = 0;
+  for (const name of ["reviewer.md", "verifier.md"]) {
+    const src = join(prAgentsSrc, name);
+    if (!existsSync(src)) continue;
+    copyFileSync(src, join(prAgentsDir, name));
+    prAgentCount++;
+  }
+  console.log(`✓ wrote .helix/pr-agents/ (${prAgentCount} PR-control specialists)`);
 
   // 3. skills/<preset>/SKILL.md
   const skillDst = resolve(helixDir, "skills", preset);

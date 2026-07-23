@@ -10,7 +10,7 @@ This file is an entrypoint, not the full specification. Follow the linked docs w
 |---|---|---|
 | Primer | `~/Desktop/acme/primer` | Knowledge product and fictional Acme evidence corpus; not currently part of the runtime loop. |
 | Helix | `~/Desktop/acme/helix` | Agent workflow control plane that receives work and orchestrates changes. |
-| Acme Issues | `~/Desktop/acme/acme-issues` | Local issue tracker and webhook harness that triggers Helix and receives callbacks. |
+| Acme Issues | `~/Desktop/acme/acme-issues` | Local issue and PR management surface that triggers Helix and receives callbacks. |
 | Acme Todo | `~/Desktop/acme/acme-todo` | Disposable target application used for agent implementation and verification. |
 
 The current local runtime flow is Acme Issues → Helix → Acme Todo, followed by a Helix completion callback to Acme Issues. Primer shares the fictional Acme context but remains a separate knowledge-product and dataset effort.
@@ -33,7 +33,7 @@ Read only the relevant detailed docs, but read `architecture.md` before changing
 - **Independent core:** Helix must remain runnable locally and headlessly. Do not make a hosted control plane, React/Next.js, Google Cloud, or another vendor topology the source of truth.
 - **Own the control plane, not the agent loop:** Helix owns product modes, orchestration, gates, policy, identity/channel mapping, memory strategy, durable jobs, and presentation. Pi owns provider/model execution, tool continuation, sessions, transcripts, compaction, skills, extensions, and resource loading.
 - **Two product modes:** coding workflow runs are goal-oriented and may use isolated specialists; assistant conversations are long-lived Pi threads and should use specialists only when decomposition is genuinely useful.
-- **Separate PR lifecycle:** implementation workflows should eventually deliver a new PR and stop. Independent PR-control owns review, fixes, policy, and merge decisions for Helix-created or external PRs; the current combined deliverable/auto-merge pipeline is provisional.
+- **Separate PR lifecycle:** local implementation workflows use `planner → dev`, register a clean committed feature branch as an Acme local PR, and stop. Independent PR control uses `.helix/pr-agents/{reviewer,verifier}.md`, exact-SHA temporary worktrees, its own SQLite state, and structured callbacks for both Helix-created and external PRs. It reports readiness; humans merge. The GitHub auto-merge pipeline remains provisional.
 - **Explicit safety:** prompt instructions are not hard guardrails. Enforce consequential restrictions at engine, session/tool, deliverable, or host boundaries.
 
 ## Current runtime invariants
@@ -47,6 +47,8 @@ Read only the relevant detailed docs, but read `architecture.md` before changing
 - Full completed orchestrator and specialist responses are durable. High-volume token deltas are live-only.
 - Web runs stream orchestrator and specialist output through SSE. The direct CLI intentionally remains a compact event/preview renderer unless an explicit streaming mode is added.
 - GitHub PR creation and merging are opt-in through `deliverable.pr`; local and inline runs must not acquire GitHub side effects by accident.
+- `deliverable.localPr` only acts for a run linked to an external local tracker. The server creates an isolated run worktree and named feature branch, safely commits remaining implementation changes there, registers the PR, and cleans up the temporary checkout. It never merges or pushes. Direct/manual deliverable use still requires a clean committed feature branch.
+- PR-control decisions are valid only for the requested head SHA. `reviewer` and `verifier` run independently and concurrently in a detached exact-head worktree; malformed specialist reports fail closed.
 
 ## Repository map
 
@@ -61,6 +63,7 @@ src/state/runStore.ts      SQLite store and legacy JSON compatibility
 src/server/                Express API and dependency-free browser UI
 src/manage/                separate experimental authoring workflow
 src/deliverable/           diff inspection, PR creation, merge/approval path
+src/pr-control/            local PR review domain, workspace, store, policy, callbacks
 src/providers/             Pi model/auth integration and test fake
 src/triggers/              inline and GitHub issue inputs
 presets/                   starter specialists and stack skills
@@ -78,7 +81,7 @@ The smallest important interfaces live in [`src/engine/types.ts`](./src/engine/t
 4. Subscribe web clients before execution can emit events, and preserve late-attach snapshots when changing streaming.
 5. Keep browser rendering bounded: one collapsible block per invocation, buffered text updates, and no DOM row per token.
 6. Use dependency injection and fakes for tests. Normal test runs must not need network access, provider credentials, GitHub, or an LLM.
-7. Treat `.env`, `.helix/runs.db*`, `dist/`, and installed dependencies as local/generated state. Never commit secrets or runtime databases.
+7. Treat `.env`, `.helix/runs.db*`, `.helix/pr-reviews.db*`, `dist/`, and installed dependencies as local/generated state. Never commit secrets or runtime databases.
 8. Preserve unrelated user changes. Do not silently broaden a focused fix into an architecture rewrite.
 9. Update `docs/plan.md` for roadmap/status changes and `docs/architecture.md` for changed ownership or substrate decisions. Keep README claims limited to shipped user behavior.
 
