@@ -169,9 +169,11 @@ test("PR review HTTP API starts and returns a separate review record", async () 
   assert.match(events.text, /"type":"review_completed"/);
 
   const page = await request(app).get("/reviews").expect(200);
-  assert.match(page.text, /PR Reviews/);
-  assert.match(page.text, /active-review-list/);
-  assert.match(page.text, />Passed</);
+  assert.match(page.text, /id="root"/);
+  const legacyPage = await request(app).get("/legacy/reviews").expect(200);
+  assert.match(legacyPage.text, /PR Reviews/);
+  assert.match(legacyPage.text, /active-review-list/);
+  assert.match(legacyPage.text, />Passed</);
   const script = await request(app).get("/reviews.js").expect(200);
   assert.match(script.text, /pr-reviews/);
   assert.match(script.text, /review passed/);

@@ -148,7 +148,11 @@ test("manage API: session, events, apply", async () => {
 
   const page = await request(app).get("/manage");
   assert.equal(page.status, 200);
-  assert.match(page.text, /Manage/);
+  assert.match(page.text, /id="root"/);
+
+  const legacyPage = await request(app).get("/legacy/manage");
+  assert.equal(legacyPage.status, 200);
+  assert.match(legacyPage.text, /Manage/);
 
   const agents = await request(app).get("/manage/agents");
   assert.equal(agents.status, 200);

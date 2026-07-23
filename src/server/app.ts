@@ -70,6 +70,9 @@ const bundledReactDir = join(dirname(fileURLToPath(import.meta.url)), "react");
 const reactDir = existsSync(bundledReactDir)
   ? bundledReactDir
   : resolve(process.cwd(), "dist/server/react");
+const reactIndex = existsSync(join(reactDir, "index.html"))
+  ? join(reactDir, "index.html")
+  : resolve(process.cwd(), "web/index.html");
 
 export function createApp(opts: CreateAppOptions): Express {
   const { ctx, pr, githubRepo } = opts;
@@ -508,25 +511,29 @@ export function createApp(opts: CreateAppOptions): Express {
   });
 
   app.use(express.static(publicDir, {
+    index: false,
     setHeaders(res) {
       // The SSE protocol and its browser client evolve together. Avoid leaving
       // an older app.js active against a newer event stream after restart.
       res.setHeader("Cache-Control", "no-store");
     },
   }));
-  app.use("/react", express.static(reactDir));
-  app.get("/react", (_req, res) => res.redirect("/react/"));
-  app.get("/", (_req, res) => {
+  app.use(express.static(reactDir, { index: false }));
+  app.get(["/react", "/react/"], (_req, res) => res.redirect("/"));
+  app.get("/legacy", (_req, res) => {
     res.sendFile(join(publicDir, "index.html"));
   });
-  app.get("/manage", (_req, res) => {
+  app.get("/legacy/manage", (_req, res) => {
     res.sendFile(join(publicDir, "manage.html"));
   });
-  app.get("/config", (_req, res) => {
+  app.get("/legacy/config", (_req, res) => {
     res.sendFile(join(publicDir, "config.html"));
   });
-  app.get("/reviews", (_req, res) => {
+  app.get("/legacy/reviews", (_req, res) => {
     res.sendFile(join(publicDir, "reviews.html"));
+  });
+  app.get(["/", "/manage", "/config", "/reviews"], (_req, res) => {
+    res.sendFile(reactIndex);
   });
 
   return app;

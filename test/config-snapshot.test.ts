@@ -86,8 +86,12 @@ test("GET /config serves UI and GET /config/snapshot returns JSON", async () => 
 
   const page = await request(app).get("/config");
   assert.equal(page.status, 200);
-  assert.match(page.text, /Helix — Config/);
-  assert.match(page.text, /id="config-root"/);
+  assert.match(page.text, /id="root"/);
+
+  const legacyPage = await request(app).get("/legacy/config");
+  assert.equal(legacyPage.status, 200);
+  assert.match(legacyPage.text, /Helix — Config/);
+  assert.match(legacyPage.text, /id="config-root"/);
 
   const js = await request(app).get("/config.js");
   assert.equal(js.status, 200);
@@ -104,15 +108,15 @@ test("GET /config serves UI and GET /config/snapshot returns JSON", async () => 
   assert.ok(!JSON.stringify(snap.body).includes("sk-"));
 });
 
-test("Run and Manage nav include Config and PR Reviews links", async () => {
+test("legacy Run and Manage nav retain Config and PR Reviews links", async () => {
   const ctx = testCtx();
   const app = createApp({ ctx });
 
-  const run = await request(app).get("/");
+  const run = await request(app).get("/legacy");
   assert.match(run.text, /href="\/config"/);
   assert.match(run.text, /href="\/reviews"/);
 
-  const manage = await request(app).get("/manage");
+  const manage = await request(app).get("/legacy/manage");
   assert.match(manage.text, /href="\/config"/);
   assert.match(manage.text, /href="\/reviews"/);
 });

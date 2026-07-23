@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, timeAgo, timeOnly } from "./api";
+import { ReviewsPage } from "./ReviewsPage";
+import { ManagePage } from "./ManagePage";
+import { ConfigPage } from "./ConfigPage";
 
 type RunStatus = "running" | "done" | "escalated" | "error";
 
@@ -57,6 +60,14 @@ interface LogBlock {
 }
 
 export function App() {
+  const path = location.pathname;
+  if (path === "/reviews") return <PageShell active="reviews"><ReviewsPage /></PageShell>;
+  if (path === "/manage") return <PageShell active="manage"><ManagePage /></PageShell>;
+  if (path === "/config") return <PageShell active="config"><ConfigPage /></PageShell>;
+  return <PageShell active="run"><RunPage /></PageShell>;
+}
+
+function RunPage() {
   const client = useQueryClient();
   const deepLink = new URLSearchParams(location.search).get("run");
   const [selectedId, setSelectedId] = useState<string | null>(deepLink);
@@ -99,8 +110,6 @@ export function App() {
   }, [history.data, selectedId]);
 
   return (
-    <div className="app-shell">
-      <Header />
       <main className="workspace">
         <div className="top-grid">
           <RunForm mutation={create} />
@@ -126,12 +135,12 @@ export function App() {
         />
         {run.data && <ResultPanel run={run.data} />}
       </main>
-    </div>
   );
 }
 
-function Header() {
+function PageShell({ active, children }: { active: "run" | "reviews" | "manage" | "config"; children: ReactNode }) {
   return (
+    <div className="app-shell">
     <header className="app-header">
       <div className="brand">
         <span className="brand-mark" aria-hidden="true">H</span>
@@ -141,13 +150,14 @@ function Header() {
         </div>
       </div>
       <nav className="site-nav" aria-label="Workspace">
-        <a className="nav-link active" href="/react/">Run</a>
-        <a className="nav-link" href="/reviews">PR Reviews</a>
-        <a className="nav-link" href="/manage">Manage</a>
-        <a className="nav-link" href="/config">Config</a>
+        <a className={`nav-link ${active === "run" ? "active" : ""}`} href="/">Run</a>
+        <a className={`nav-link ${active === "reviews" ? "active" : ""}`} href="/reviews">PR Reviews</a>
+        <a className={`nav-link ${active === "manage" ? "active" : ""}`} href="/manage">Manage</a>
+        <a className={`nav-link ${active === "config" ? "active" : ""}`} href="/config">Config</a>
       </nav>
-      <span className="preview-badge">React preview</span>
     </header>
+    {children}
+    </div>
   );
 }
 
