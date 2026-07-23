@@ -191,6 +191,7 @@ helix serve
 | Surface | URL | Notes |
 |--------|-----|--------|
 | Run console | `/` | Form, live log, run history, delete finished runs |
+| React run preview | `/react/` | React + TanStack Query port of the Run console; legacy `/` remains authoritative during migration |
 | PR Reviews | `/reviews` | Active exact-SHA reviews, durable history, lifecycle progress, findings, and checks |
 | Manage | `/manage` | Experimental agent/skill authoring and default-workflow ordering (web/API only) |
 | API | `/runs`, `/runs/:id/events`, … | JSON + SSE |

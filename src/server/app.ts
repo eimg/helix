@@ -25,7 +25,8 @@
 import express, { type Express, type Request, type Response } from "express";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import type { RunContext } from "../run/bootstrap.js";
 import { refreshRunContextResources, startRun } from "../run/bootstrap.js";
 import type { Issue, Run, RunContinuation, RunEvent } from "../engine/types.js";
@@ -65,6 +66,10 @@ interface ActiveManageEntry {
 }
 
 const publicDir = join(dirname(fileURLToPath(import.meta.url)), "public");
+const bundledReactDir = join(dirname(fileURLToPath(import.meta.url)), "react");
+const reactDir = existsSync(bundledReactDir)
+  ? bundledReactDir
+  : resolve(process.cwd(), "dist/server/react");
 
 export function createApp(opts: CreateAppOptions): Express {
   const { ctx, pr, githubRepo } = opts;
@@ -509,6 +514,8 @@ export function createApp(opts: CreateAppOptions): Express {
       res.setHeader("Cache-Control", "no-store");
     },
   }));
+  app.use("/react", express.static(reactDir));
+  app.get("/react", (_req, res) => res.redirect("/react/"));
   app.get("/", (_req, res) => {
     res.sendFile(join(publicDir, "index.html"));
   });

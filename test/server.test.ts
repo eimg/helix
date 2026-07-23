@@ -67,6 +67,13 @@ test("GET / serves web UI", async () => {
   assert.match(String(js.headers["cache-control"]), /no-store/);
 });
 
+test("GET /react redirects to the React run-console preview", async () => {
+  const { ctx } = testCtx([{ kind: "done", reason: "ok" }]);
+  const app = createApp({ ctx });
+  const response = await request(app).get("/react").expect(301);
+  assert.equal(response.headers.location, "/react/");
+});
+
 test("POST /runs starts inline run and GET returns final state", async () => {
   const script: OrchestratorDecision[] = [
     { kind: "run", specialists: [{ specialist: "dev", task: "go" }], reason: "start" },
