@@ -100,7 +100,7 @@ The CLI should call the same `ManageService` / API as the web UI — no second c
 |------|--------|
 | Manage core | `src/manage/{service,author,prompt,validate,apply,delete,workflow}.ts` |
 | Server routes | `src/server/app.ts` |
-| Web UI | `src/server/public/manage.{html,js}` |
+| Web UI | `web/src/ManagePage.tsx` |
 | Tests | `test/manage.test.ts` |
 
 ---

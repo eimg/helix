@@ -42,7 +42,7 @@ function testCtx(script: OrchestratorDecision[]) {
   return { ctx, store };
 }
 
-test("GET / serves the React UI and /legacy serves the previous UI", async () => {
+test("GET / serves the React UI and its static assets", async () => {
   const script: OrchestratorDecision[] = [{ kind: "done", reason: "ok" }];
   const { ctx } = testCtx(script);
   const app = createApp({ ctx });
@@ -52,30 +52,12 @@ test("GET / serves the React UI and /legacy serves the previous UI", async () =>
   assert.match(page.text, /<title>Helix<\/title>/);
   assert.match(page.text, /id="root"/);
 
-  const legacyPage = await request(app).get("/legacy");
-  assert.equal(legacyPage.status, 200);
-  assert.match(legacyPage.text, /id="run-form"/);
+  const favicon = await request(app).get("/favicon.svg");
+  assert.equal(favicon.status, 200);
+  assert.match(String(favicon.headers["content-type"]), /image\/svg\+xml/);
 
-  const css = await request(app).get("/app.css");
-  assert.equal(css.status, 200);
-
-  const js = await request(app).get("/app.js");
-  assert.equal(js.status, 200);
-  assert.match(js.text, /streamRun/);
-  assert.match(js.text, /orchestrator_output_delta/);
-  assert.match(js.text, /handleOrchestratorStarted/);
-  assert.match(js.text, /handleOrchestratorFinished/);
-  assert.doesNotMatch(js.text, /details\.open = true/);
-  assert.match(js.text, /formatOrchestratorDecision/);
-  assert.doesNotMatch(js.text, /previewText\(d\.reason/);
-  assert.match(String(js.headers["cache-control"]), /no-store/);
-});
-
-test("GET /react redirects to the primary React UI", async () => {
-  const { ctx } = testCtx([{ kind: "done", reason: "ok" }]);
-  const app = createApp({ ctx });
-  const response = await request(app).get("/react").expect(302);
-  assert.equal(response.headers.location, "/");
+  await request(app).get("/legacy").expect(404);
+  await request(app).get("/react").expect(404);
 });
 
 test("POST /runs starts inline run and GET returns final state", async () => {

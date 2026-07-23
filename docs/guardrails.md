@@ -275,6 +275,6 @@ policy / budget / gate trip
 | Session / tools | `src/agents/session.ts`, `loaderBuilder.ts` — tool policy |
 | Deliverable | `src/deliverable/pipeline.ts`, `deliverable.pr` |
 | Callbacks | `src/callbacks/issueTracker.ts` — escalated events, auth later |
-| UI | `src/server/public/app.js` — badges, resume actions |
+| UI | `web/src/` — React badges and future resume actions |
 | Config | `src/config.ts` — `guardrails` block + presets |
 | Docs | Update this file + `plan.md` when phases ship |

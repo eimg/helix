@@ -65,7 +65,6 @@ interface ActiveManageEntry {
   sseClients: Set<Response>;
 }
 
-const publicDir = join(dirname(fileURLToPath(import.meta.url)), "public");
 const bundledReactDir = join(dirname(fileURLToPath(import.meta.url)), "react");
 const reactDir = existsSync(bundledReactDir)
   ? bundledReactDir
@@ -510,28 +509,7 @@ export function createApp(opts: CreateAppOptions): Express {
     res.json({ ok: true });
   });
 
-  app.use(express.static(publicDir, {
-    index: false,
-    setHeaders(res) {
-      // The SSE protocol and its browser client evolve together. Avoid leaving
-      // an older app.js active against a newer event stream after restart.
-      res.setHeader("Cache-Control", "no-store");
-    },
-  }));
   app.use(express.static(reactDir, { index: false }));
-  app.get(["/react", "/react/"], (_req, res) => res.redirect("/"));
-  app.get("/legacy", (_req, res) => {
-    res.sendFile(join(publicDir, "index.html"));
-  });
-  app.get("/legacy/manage", (_req, res) => {
-    res.sendFile(join(publicDir, "manage.html"));
-  });
-  app.get("/legacy/config", (_req, res) => {
-    res.sendFile(join(publicDir, "config.html"));
-  });
-  app.get("/legacy/reviews", (_req, res) => {
-    res.sendFile(join(publicDir, "reviews.html"));
-  });
   app.get(["/", "/manage", "/config", "/reviews"], (_req, res) => {
     res.sendFile(reactIndex);
   });

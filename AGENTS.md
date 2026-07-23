@@ -60,7 +60,8 @@ src/orchestrator/          LLM driver, workflow rails, deterministic gates
 src/agents/                specialist definitions, Pi sessions, resource loader
 src/context/               deterministic repo bootstrap and bounded handoffs
 src/state/runStore.ts      SQLite store and legacy JSON compatibility
-src/server/                Express API and dependency-free browser UI
+src/server/                Express API and React asset host
+web/src/                   React + TanStack Query browser UI
 src/manage/                separate experimental authoring workflow
 src/deliverable/           diff inspection, PR creation, merge/approval path
 src/pr-control/            local PR review domain, workspace, store, policy, callbacks

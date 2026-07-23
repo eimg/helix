@@ -194,7 +194,6 @@ helix serve
 | PR Reviews | `/reviews` | React UI for active exact-SHA reviews, durable history, lifecycle progress, findings, and checks |
 | Manage | `/manage` | React UI for experimental agent/skill authoring and default-workflow ordering (web/API only) |
 | Config | `/config` | React UI for resolved runtime settings and provenance |
-| Legacy UI | `/legacy` | Previous Run UI; its other screens remain at `/legacy/reviews`, `/legacy/manage`, and `/legacy/config` during the transition |
 | API | `/runs`, `/runs/:id/events`, … | JSON + SSE |
 
 Default port **8319** (phone-keypad mnemonic for HELIX). Override with `--port` or `PORT`.

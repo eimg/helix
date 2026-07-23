@@ -41,7 +41,7 @@
     "docs/guardrails.md"
   ],
   "scripts": {
-    "build": "tsc && cp -r src/server/public dist/server/ && vite build",
+    "build": "tsc && vite build",
     "build:web": "vite build",
     "dev": "npm run build:web && tsx src/cli.ts",
     "dev:web": "vite --host 127.0.0.1",

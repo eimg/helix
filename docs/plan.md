@@ -63,7 +63,7 @@ Turn the engine into a self-driving service: issues can arrive automatically, ru
 | Deliverable pipeline | `src/deliverable/pipeline.ts` — merge gate → PR → auto-merge or pending approval |
 | Merge gate | `src/orchestrator/mergeGate.ts` — pure threshold evaluation |
 | CLI | `helix serve [--port]` — starts server; PR deliverable only if `deliverable.pr`; honors `triggers.github.mode: "poll"` |
-| Run UI | `src/server/public/{index.html,app.js,app.css}` — form, live log, history, delete |
+| Web UI | `web/src/` — React + TanStack Query surfaces for Run, PR Reviews, Manage, and Config |
 | State | `RunStore` load/list/delete + incremental save during runs |
 | Tests | `test/{server,merge-gate,github-poll}.test.ts` — HTTP + fakes, no GitHub required |
 
@@ -92,7 +92,7 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 | **Config observability** | Config tab + `GET /config/snapshot` — resolved essentials provenance (env / pi / default) + wiring |
 | **Local PR delivery** | Acme-linked successful runs use a host-created isolated worktree/branch; Helix safely commits remaining implementation changes and registers a draft local PR; no push or merge |
 | **Independent local PR control** | Separate `/pr-reviews` API and `/reviews` operational UI, `.helix/pr-reviews.db`, durable lifecycle events, exact-head temporary worktree, concurrent reviewer/verifier, structured readiness callback |
-| **React UI migration** | React + TanStack Query is primary for Run, PR Reviews, Manage, and Config; previous pages remain under `/legacy` as a temporary compatibility fallback |
+| **React UI migration** | React + TanStack Query is the sole UI for Run, PR Reviews, Manage, and Config |
 
 ---
 
