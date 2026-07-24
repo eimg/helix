@@ -28,6 +28,7 @@ test("init: scaffolds implementation and PR-control specialists separately", () 
   const config = JSON.parse(readFileSync(join(dir, ".helix", "config.json"), "utf-8"));
   assert.deepEqual(config.orchestrator.workflow, ["planner", "dev"]);
   assert.equal(config.deliverable.localPr, true);
+  assert.ok(!("requireVerifierPass" in config.mergeGate));
   assert.ok(!config.provider);
   assert.ok(!config.inheritPi);
   assert.ok(!config.orchestrator.model);

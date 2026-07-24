@@ -7,19 +7,28 @@ import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import type { ManageDraft, ManageDeletion } from "./types.js";
 
 const AGENT_PATH = /^agents\/[a-z0-9-]+\.md$/;
+const PR_AGENT_PATH = /^pr-agents\/(reviewer|verifier)\.md$/;
 const SKILL_PATH = /^skills\/[a-z0-9-]+\/SKILL\.md$/;
 
-export { AGENT_PATH, SKILL_PATH };
+export { AGENT_PATH, PR_AGENT_PATH, SKILL_PATH };
 
 export function validateDraft(draft: ManageDraft, _helixDir: string): string | undefined {
-  if (draft.kind === "agent") {
-    if (!AGENT_PATH.test(draft.relativePath)) {
-      return `Invalid agent path "${draft.relativePath}" (expected agents/<name>.md)`;
+  if (draft.kind === "agent" || draft.kind === "pr-agent") {
+    const pathPattern = draft.kind === "pr-agent" ? PR_AGENT_PATH : AGENT_PATH;
+    const expectedPath = draft.kind === "pr-agent" ? "pr-agents/(reviewer|verifier).md" : "agents/<name>.md";
+    if (!pathPattern.test(draft.relativePath)) {
+      return `Invalid ${draft.kind} path "${draft.relativePath}" (expected ${expectedPath})`;
     }
     const { frontmatter, body } = parseFrontmatter<Record<string, string>>(draft.content);
     if (!frontmatter.name?.trim()) return `Agent ${draft.relativePath} missing frontmatter "name"`;
     if (!frontmatter.description?.trim()) return `Agent ${draft.relativePath} missing frontmatter "description"`;
     if (!body.trim()) return `Agent ${draft.relativePath} has empty body (system prompt)`;
+    if (draft.kind === "pr-agent") {
+      const role = draft.relativePath.match(PR_AGENT_PATH)?.[1];
+      if (frontmatter.name.trim() !== role) {
+        return `PR agent ${draft.relativePath} must use frontmatter name "${role}"`;
+      }
+    }
     return undefined;
   }
 
@@ -80,6 +89,9 @@ export function validateDraftsForApply(
 export function validateDeletion(deletion: ManageDeletion): string | undefined {
   if (deletion.kind === "agent" && !AGENT_PATH.test(deletion.relativePath)) {
     return `Invalid agent delete path "${deletion.relativePath}"`;
+  }
+  if (deletion.kind === "pr-agent" && !PR_AGENT_PATH.test(deletion.relativePath)) {
+    return `Invalid pr-agent delete path "${deletion.relativePath}"`;
   }
   if (deletion.kind === "skill" && !SKILL_PATH.test(deletion.relativePath)) {
     return `Invalid skill delete path "${deletion.relativePath}"`;

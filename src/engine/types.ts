@@ -120,11 +120,10 @@ export interface RunEvent {
 export type ApprovalStatus = "none" | "pending" | "approved" | "rejected";
 
 export interface MergeGateResult {
-  action: "auto-merge" | "pending-approval" | "blocked";
+  action: "auto-merge" | "pending-approval";
   reason: string;
   diffLines: number;
   diffFiles: number;
-  verifierPassed: boolean;
 }
 
 export interface PullRequestInfo {

@@ -110,6 +110,8 @@ issue event → isolated implementation run → developer self-check → commit 
 
 The local implementation default is `planner → dev`; the Dev performs self-checks but does not approve its own work. For an Acme-linked server run, Helix creates a named feature branch from the configured base SHA in an isolated temporary Git worktree before constructing the orchestrator and specialist sessions. The Dev may commit logically, but the host safely commits any remaining changes in that Helix-owned worktree, rejects sensitive/runtime paths, symbolic links, and oversized files, then registers the committed branch with Acme Issues as a draft local PR. It records the canonical repository path, configured base branch and SHA, head branch and SHA, origin, and linked issue. Successful PR registration removes only the temporary checkout; the branch remains for review and human merge. Failed runs or finalization retain the worktree for diagnosis. Helix never pushes or merges.
 
+The implementation workflow has no verification phase or privileged verifier agent. A workflow specialist may perform deterministic self-checks as part of producing the change, but Helix never interprets a Run specialist result as independent approval or merge-readiness evidence.
+
 An independent **PR-control module** owns a pull request after it exists, including pull requests created outside Helix:
 
 ```text
@@ -120,7 +122,7 @@ The shipped PR-control module has its own `/pr-reviews` trigger, `/reviews` oper
 
 Acme Issues owns the human-facing local PR record, diff/review UI, and merge record; Helix owns PR-review execution and evidence. The PR work item carries repository path, PR number, base branch/SHA, head branch/SHA, author, origin, callback identity, and idempotent external event ID as first-class data. Acme Issues applies a completed decision only when its current head SHA matches the reviewed SHA.
 
-The GitHub `DefaultDeliverablePipeline` remains provisional because it combines PR creation, merge-gate evaluation, approval, and optional immediate merge. `deliverable.pr` remains opt-in. The local Acme path uses the independent PR-control boundary and human-only merge behavior.
+The GitHub `DefaultDeliverablePipeline` remains provisional because it combines PR creation, size-based delivery-gate evaluation, approval, and optional immediate merge. Its gate does not perform verification or inspect Run results. `deliverable.pr` remains opt-in. The local Acme path uses the independent PR-control boundary and human-only merge behavior.
 
 ### What Pi owns and what Helix owns
 

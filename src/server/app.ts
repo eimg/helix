@@ -15,7 +15,7 @@
  *
  * Manage (experimental):
  * POST /manage/sessions, GET /manage/sessions/:id, SSE events, apply, discard
- * GET  /manage/agents | /manage/skills | /manage/workflow
+ * GET  /manage/agents | /manage/pr-agents | /manage/skills | /manage/workflow
  * PUT  /manage/workflow   update the ordered default workflow
  *
  * Config (observability):
@@ -375,6 +375,10 @@ export function createApp(opts: CreateAppOptions): Express {
 
   app.get("/manage/agents", (_req, res) => {
     res.json(manage.getInventory().agents);
+  });
+
+  app.get("/manage/pr-agents", (_req, res) => {
+    res.json(manage.getInventory().prAgents);
   });
 
   app.get("/manage/skills", (_req, res) => {

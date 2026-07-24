@@ -5,23 +5,32 @@ import type { SpecialistDefinition } from "../engine/types.js";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
+export type PullRequestSpecialistSource = "project" | "built_in";
+
+export interface ResolvedPullRequestSpecialist {
+  definition: SpecialistDefinition;
+  source: PullRequestSpecialistSource;
+}
+
 /**
- * Project PR specialists win. Existing projects may reuse their legacy
- * `.helix/agents/verifier.md`; any remaining required role falls back to the
- * shipped read-only PR presets.
+ * Project PR specialists win. Any missing required role falls back to the
+ * shipped read-only PR presets. Workflow agents are deliberately ignored:
+ * verification belongs only to PR control.
  */
-export function loadPullRequestSpecialists(helixDir: string): SpecialistDefinition[] {
+export function resolvePullRequestSpecialists(helixDir: string): ResolvedPullRequestSpecialist[] {
   const projectPr = loadSpecialists(resolve(helixDir, "pr-agents"));
-  const legacy = loadSpecialists(resolve(helixDir, "agents"));
   const shipped = loadSpecialists(resolve(packageRoot, "presets", "pr-agents"));
-  const definitions: SpecialistDefinition[] = [];
+  const definitions: ResolvedPullRequestSpecialist[] = [];
 
   for (const name of ["reviewer", "verifier"]) {
-    const definition =
-      projectPr.find((item) => item.name === name) ??
-      legacy.find((item) => item.name === name) ??
-      shipped.find((item) => item.name === name);
-    if (definition) definitions.push(definition);
+    const projectDefinition = projectPr.find((item) => item.name === name);
+    const builtInDefinition = shipped.find((item) => item.name === name);
+    if (projectDefinition) definitions.push({ definition: projectDefinition, source: "project" });
+    else if (builtInDefinition) definitions.push({ definition: builtInDefinition, source: "built_in" });
   }
   return definitions;
+}
+
+export function loadPullRequestSpecialists(helixDir: string): SpecialistDefinition[] {
+  return resolvePullRequestSpecialists(helixDir).map((item) => item.definition);
 }

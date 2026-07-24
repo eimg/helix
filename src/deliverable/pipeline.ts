@@ -43,14 +43,8 @@ export class DefaultDeliverablePipeline implements DeliverablePipeline {
 
     try {
       const stats = await this.deps.git.getDiffStats(this.deps.baseBranch);
-      const gate = evaluateMergeGate({ stats, results: run.results, config: mergeGate });
+      const gate = evaluateMergeGate({ stats, config: mergeGate });
       run.mergeGateResult = gate;
-
-      if (gate.action === "blocked") {
-        run.approvalStatus = "none";
-        run.deliverableError = gate.reason;
-        return run;
-      }
 
       const branch = await this.deps.git.getCurrentBranch();
       const title = run.issue.title;

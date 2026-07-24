@@ -3,13 +3,12 @@
   "repoContext": { "enabled": true },
   "deliverable": { "pr": false },
   "orchestrator": {
-    "workflow": ["planner", "dev", "verifier"],
+    "workflow": ["planner", "dev"],
     "maxIterations": 6
   },
   "mergeGate": {
     "autoMerge": true,
     "maxDiffLines": 300,
-    "maxFiles": 10,
-    "requireVerifierPass": true
+    "maxFiles": 10
   }
 }

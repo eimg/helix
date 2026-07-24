@@ -77,7 +77,6 @@ test("local deliverable registers a committed feature branch without merging it"
       autoMerge: false,
       maxDiffLines: 100,
       maxFiles: 5,
-      requireVerifierPass: false,
       else: "draft-pr-and-notify",
     });
     assert.equal(result.pullRequest?.number, 12);
@@ -302,7 +301,6 @@ function mergeGate() {
     autoMerge: false,
     maxDiffLines: 100,
     maxFiles: 5,
-    requireVerifierPass: false,
     else: "draft-pr-and-notify" as const,
   };
 }

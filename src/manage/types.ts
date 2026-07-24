@@ -24,15 +24,15 @@ export interface ManageMessage {
 }
 
 export interface ManageDraft {
-  kind: "agent" | "skill";
-  /** Path relative to `.helix/` — e.g. `agents/reviewer.md` or `skills/foo/SKILL.md`. */
+  kind: "agent" | "pr-agent" | "skill";
+  /** Path relative to `.helix/` — e.g. `agents/dev.md`, `pr-agents/verifier.md`, or `skills/foo/SKILL.md`. */
   relativePath: string;
   content: string;
 }
 
 /** Explicit delete proposal — applied only after operator confirms Apply. */
 export interface ManageDeletion {
-  kind: "agent" | "skill";
+  kind: "agent" | "pr-agent" | "skill";
   /** Path relative to `.helix/` — same rules as drafts. */
   relativePath: string;
 }
@@ -60,8 +60,14 @@ export interface ManageInventorySkill {
   relativePath: string;
 }
 
+export interface ManageInventoryPrAgent extends ManageInventoryAgent {
+  source: "project" | "built_in";
+  model?: string;
+}
+
 export interface ManageInventory {
   agents: ManageInventoryAgent[];
+  prAgents: ManageInventoryPrAgent[];
   skills: ManageInventorySkill[];
 }
 

@@ -80,10 +80,17 @@ function ReviewDetail({ review }: { review: Review }) {
       <div><dt>Author</dt><dd>{pr.author}</dd></div><div><dt>Started</dt><dd>{new Date(review.startedAt).toLocaleString()}</dd></div>
     </dl>
     <a className="result-link" href={tracker.toString()} target="_blank" rel="noreferrer">Open in Acme Issues ↗</a>
-    <EvidenceSection title="Activity">{review.events.length ? <ol className="timeline">{review.events.map((event, index) => <li key={`${event.ts}-${index}`}><i /><div><strong>{event.specialist ? `${event.specialist} · ` : ""}{event.type.replaceAll("_", " ")}</strong><time>{new Date(event.ts).toLocaleTimeString()}</time><p>{event.summary}</p></div></li>)}</ol> : <Empty text="No lifecycle events recorded." />}</EvidenceSection>
+    <EvidenceSection title="Activity">{review.events.length ? <ol className="timeline">{review.events.map((event, index) => {
+      const tone = event.type === "review_error"
+        ? "error"
+        : event.type === "review_completed" || event.type === "mergeability_checked" || event.type === "specialist_completed"
+          ? "complete"
+          : "";
+      return <li className={tone} key={`${event.ts}-${index}`}><span className="timeline-marker" aria-hidden="true" /><div><strong>{event.specialist ? `${event.specialist} · ` : ""}{event.type.replaceAll("_", " ")}</strong><time>{new Date(event.ts).toLocaleTimeString()}</time><p>{event.summary}</p></div></li>;
+    })}</ol> : <Empty text="No lifecycle events recorded." />}</EvidenceSection>
     <EvidenceSection title="Review outcome"><p className="review-summary">{review.summary || (review.live ? "Review in progress." : "No summary recorded.")}</p>{review.error && <p className="error-text">{review.error}</p>}</EvidenceSection>
-    <EvidenceSection title="Checks"><div className="evidence-list">{review.checks.map((check) => <article className={`evidence ${check.status}`} key={check.name}><b>{check.status === "passed" ? "✓" : check.status === "failed" ? "×" : "!"}</b><div><strong>{check.name}</strong><p>{check.summary}</p></div></article>)}{!review.checks.length && <Empty text="Checks will appear as specialists finish." />}</div></EvidenceSection>
-    <EvidenceSection title="Findings"><div className="evidence-list">{review.findings.map((finding, index) => <article className={`evidence ${finding.severity}`} key={`${finding.title}-${index}`}><b>{finding.severity}</b><div><strong>{finding.title}</strong><p>{finding.details}</p></div></article>)}{!review.findings.length && <Empty text="No findings recorded." />}</div></EvidenceSection>
+    <EvidenceSection title="Checks"><div className="evidence-list">{review.checks.map((check) => <article className={`evidence check-evidence ${check.status}`} key={check.name}><span className="check-marker" aria-label={check.status}>{check.status === "passed" ? "✓" : check.status === "failed" ? "×" : "!"}</span><div><strong>{check.name}</strong><p>{check.summary}</p></div></article>)}{!review.checks.length && <Empty text="Checks will appear as specialists finish." />}</div></EvidenceSection>
+    <EvidenceSection title="Findings"><div className="evidence-list">{review.findings.map((finding, index) => <article className={`evidence finding-evidence ${finding.severity}`} key={`${finding.title}-${index}`}><span className="finding-badge">{finding.severity}</span><div><strong>{finding.title}</strong><p>{finding.details}</p></div></article>)}{!review.findings.length && <Empty text="No findings recorded." />}</div></EvidenceSection>
     <EvidenceSection title="Specialist reports">{review.reports.map((report) => <details className="report" key={report.specialist}><summary><strong>{report.specialist}</strong><span className={`status-pill ${report.verdict}`}>{report.verdict}</span></summary><p>{report.summary}</p><details><summary>Raw specialist output</summary><pre>{report.result.output || report.result.error}</pre></details></details>)}{!review.reports.length && <Empty text="Reports will appear when specialists finish." />}</EvidenceSection>
   </article>;
 }
@@ -91,6 +98,6 @@ function ReviewDetail({ review }: { review: Review }) {
 function EvidenceSection({ title, children }: { title: string; children: React.ReactNode }) { return <section className="evidence-section"><h3>{title}</h3>{children}</section>; }
 function Status({ review }: { review: Review }) {
   const value = review.live ? "reviewing" : review.status === "running" ? "interrupted" : review.status === "error" ? "error" : review.decision ?? review.status;
-  return <span className={`status-pill ${value}`}>{value.replaceAll("_", " ")}</span>;
+  return <span className={`status-pill review-status ${value}`}>{value.replaceAll("_", " ")}</span>;
 }
 function Empty({ text }: { text: string }) { return <p className="empty-row">{text}</p>; }

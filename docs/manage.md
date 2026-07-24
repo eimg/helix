@@ -29,13 +29,18 @@ When `helix serve` is running:
 Capabilities today:
 
 - Create or update `.helix/agents/*.md`
+- Create or update `.helix/pr-agents/*.md` for the fixed PR-control `reviewer` and `verifier` roles
 - Create or update `.helix/skills/<name>/SKILL.md`
-- Propose deletions (skills anytime; workflow agents only with force)
-- List current agents/skills in the inventory panel
+- Propose deletions (skills and project PR agents anytime; workflow agents only with force)
+- List workflow agents, effective PR-review agents, and skills in the inventory panel
 - Add any repo agent to the default workflow, remove it, or move it up/down
 - Save the workflow directly to `.helix/config.json`; new runs reload workflow and agent files without a server restart
 
-The workflow editor intentionally exposes only the ordered default sequence. Merge gates and delivery policy remain advanced wiring in `config.json`. The sequence is a rail: the orchestrator may still skip, reorder, retry, or parallelize specialists when appropriate; `maxIterations` is the hard bound on recovery attempts.
+The workflow editor intentionally exposes only the ordered default implementation sequence. PR control has no configurable workflow today: it resolves the fixed `reviewer` and `verifier` roles and runs them concurrently. The inventory shows whether each effective PR role comes from a project definition or the built-in fallback. `helix init` copies the shipped PR presets into `.helix/pr-agents/`, so newly initialized projects report those active copies as `project`; deleting a project copy exposes the corresponding `built in` fallback. Asking Manage to change a built-in PR role creates a project override under `.helix/pr-agents/`.
+
+GitHub delivery thresholds and delivery policy remain advanced wiring in `config.json`. They do not perform verification. The implementation sequence is a rail: the orchestrator may still skip, reorder, retry, or parallelize specialists when appropriate; `maxIterations` is the hard bound on recovery attempts.
+
+Workflow agents may run builds, tests, linting, or other self-checks, but Helix does not recognize any workflow agent as a verifier or use Run results as merge-readiness evidence. Independent verification belongs only to the fixed PR-control roles.
 
 Workflow editing is local and needs no model credentials. Prompt-based agent/skill authoring requires `OPENROUTER_API_KEY` (or a configured provider) for live LLM calls.
 
@@ -45,7 +50,8 @@ Workflow editing is local and needs no model credentials. Prompt-based agent/ski
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/manage/agents` | List agents |
+| `GET` | `/manage/agents` | List workflow agents |
+| `GET` | `/manage/pr-agents` | List effective PR-review agents and their source |
 | `GET` | `/manage/skills` | List skills |
 | `GET` | `/manage/workflow` | Read the ordered default workflow |
 | `PUT` | `/manage/workflow` | Replace it with `{ "steps": ["planner", "dev"] }` |
@@ -86,7 +92,7 @@ The CLI should call the same `ManageService` / API as the web UI — no second c
 
 - Meta agent **proposes** changes as JSON (`drafts`, `deletions`); it does not write or delete directly.
 - Operator must click **Apply** (web) or `POST .../apply` (API).
-- Paths restricted to `.helix/agents/` and `.helix/skills/`.
+- Paths restricted to `.helix/agents/`, `.helix/pr-agents/`, and `.helix/skills/`.
 - Agents listed in `config.orchestrator.workflow` cannot be deleted unless `force: true`; normally remove them in the workflow editor first.
 - Workflow saves require at least one unique agent and reject names without a matching repo agent definition.
 - Each run captures its starting workflow/resources. Manage changes affect new runs, not runs already in progress.

@@ -47,6 +47,7 @@ Read only the relevant detailed docs, but read `architecture.md` before changing
 - Full completed orchestrator and specialist responses are durable. High-volume token deltas are live-only.
 - Web runs stream orchestrator and specialist output through SSE. The direct CLI intentionally remains a compact event/preview renderer unless an explicit streaming mode is added.
 - GitHub PR creation and merging are opt-in through `deliverable.pr`; local and inline runs must not acquire GitHub side effects by accident.
+- Implementation workflows have no privileged verification role. Agents may run deterministic self-checks, but independent `reviewer` and `verifier` authority belongs only to PR control.
 - `deliverable.localPr` only acts for a run linked to an external local tracker. The server creates an isolated run worktree and named feature branch, safely commits remaining implementation changes there, registers the PR, and cleans up the temporary checkout. It never merges or pushes. Direct/manual deliverable use still requires a clean committed feature branch.
 - PR-control decisions are valid only for the requested head SHA. `reviewer` and `verifier` run independently and concurrently in a detached exact-head worktree; malformed specialist reports fail closed.
 

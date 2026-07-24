@@ -7,7 +7,7 @@ import request from "supertest";
 import { parseManageResponse } from "../src/manage/parseResponse.js";
 import { validateDraftsForApply } from "../src/manage/validate.js";
 import { applyDrafts } from "../src/manage/apply.js";
-import { applyDeletions } from "../src/manage/delete.js";
+import { applyChanges, applyDeletions } from "../src/manage/delete.js";
 import { ManageService } from "../src/manage/service.js";
 import { FakeManageAuthor } from "../src/manage/fakeAuthor.js";
 import { MemoryManageStore } from "../src/manage/store.js";
@@ -17,6 +17,7 @@ import { MemoryRunStore } from "../src/state/runStore.js";
 import { FakeProvider } from "../src/providers/fake.js";
 import { loadConfig } from "../src/config.js";
 import { StubSpecialistFactory } from "../src/agents/stubSession.js";
+import { loadManageInventory } from "../src/manage/inventory.js";
 
 const fixtureDir = join(process.cwd(), "examples/ts/.helix");
 
@@ -37,13 +38,47 @@ test("parseManageResponse extracts deletions", () => {
   assert.equal(parsed!.deletions[0].relativePath, "skills/test/SKILL.md");
 });
 
-test("applyDrafts writes agent and skill under helix dir", () => {
+test("parseManageResponse accepts PR-agent drafts", () => {
+  const text = `{"message":"Updated verifier","drafts":[{"kind":"pr-agent","relativePath":"pr-agents/verifier.md","content":"---\\nname: verifier\\ndescription: Runs checks\\n---\\n\\nVerify."}],"deletions":[]}`;
+  const parsed = parseManageResponse(text);
+  assert.ok(parsed);
+  assert.equal(parsed!.drafts[0]?.kind, "pr-agent");
+  assert.equal(parsed!.drafts[0]?.relativePath, "pr-agents/verifier.md");
+});
+
+test("PR-agent validation allows only fixed roles with matching names", () => {
+  const dir = mkdtempSync(join(tmpdir(), "helix-manage-pr-validation-"));
+  const unknownRole = validateDraftsForApply([{
+    kind: "pr-agent",
+    relativePath: "pr-agents/security.md",
+    content: "---\nname: security\ndescription: Security review\n---\n\nReview security.\n",
+  }], dir, false);
+  assert.equal(unknownRole.ok, false);
+  if (!unknownRole.ok) assert.match(unknownRole.errors.join("\n"), /reviewer.*verifier/);
+
+  const mismatchedName = validateDraftsForApply([{
+    kind: "pr-agent",
+    relativePath: "pr-agents/verifier.md",
+    content: "---\nname: reviewer\ndescription: Wrong role\n---\n\nReview.\n",
+  }], dir, false);
+  assert.equal(mismatchedName.ok, false);
+  if (!mismatchedName.ok) assert.match(mismatchedName.errors.join("\n"), /frontmatter name "verifier"/);
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("applyDrafts writes workflow agent, PR agent, and skill under helix dir", () => {
   const dir = mkdtempSync(join(tmpdir(), "helix-manage-"));
   const drafts = [
     {
       kind: "agent" as const,
       relativePath: "agents/sample.md",
       content: "---\nname: sample\ndescription: Test agent\n---\n\nDo things.\n",
+    },
+    {
+      kind: "pr-agent" as const,
+      relativePath: "pr-agents/verifier.md",
+      content: "---\nname: verifier\ndescription: Run project checks\n---\n\nVerify the exact PR head.\n",
     },
     {
       kind: "skill" as const,
@@ -57,9 +92,10 @@ test("applyDrafts writes agent and skill under helix dir", () => {
 
   const result = applyDrafts(dir, drafts, false);
   assert.equal(result.ok, true);
-  assert.deepEqual(result.written, ["agents/sample.md", "skills/sample/SKILL.md"]);
+  assert.deepEqual(result.written, ["agents/sample.md", "pr-agents/verifier.md", "skills/sample/SKILL.md"]);
 
   assert.match(readFileSync(join(dir, "agents/sample.md"), "utf-8"), /name: sample/);
+  assert.match(readFileSync(join(dir, "pr-agents/verifier.md"), "utf-8"), /name: verifier/);
   assert.match(readFileSync(join(dir, "skills/sample/SKILL.md"), "utf-8"), /# Sample/);
 
   rmSync(dir, { recursive: true, force: true });
@@ -74,6 +110,25 @@ test("applyDeletions removes skill directory", () => {
   const result = applyDeletions(dir, [{ kind: "skill", relativePath: "skills/test/SKILL.md" }]);
   assert.equal(result.ok, true);
   assert.equal(existsSync(skillPath), false);
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("applyChanges removes a project PR-agent override", () => {
+  const dir = mkdtempSync(join(tmpdir(), "helix-manage-pr-delete-"));
+  const prAgentPath = join(dir, "pr-agents", "verifier.md");
+  mkdirSync(join(dir, "pr-agents"), { recursive: true });
+  writeFileSync(prAgentPath, "---\nname: verifier\ndescription: Test\n---\n\nVerify.\n");
+
+  const result = applyChanges(
+    dir,
+    [],
+    [{ kind: "pr-agent", relativePath: "pr-agents/verifier.md" }],
+    [],
+    false,
+  );
+  assert.equal(result.ok, true);
+  assert.equal(existsSync(prAgentPath), false);
 
   rmSync(dir, { recursive: true, force: true });
 });
@@ -132,6 +187,54 @@ test("ManageService delete skill via apply", async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+test("manage inventory resolves project PR agents over built-in fallbacks", () => {
+  const dir = mkdtempSync(join(tmpdir(), "helix-manage-pr-inventory-"));
+  mkdirSync(join(dir, "pr-agents"), { recursive: true });
+  writeFileSync(
+    join(dir, "pr-agents", "reviewer.md"),
+    "---\nname: reviewer\ndescription: Project reviewer\n---\n\nReview this project.\n",
+  );
+
+  const inventory = loadManageInventory(dir);
+  assert.deepEqual(inventory.prAgents.map((item) => [item.name, item.source]), [
+    ["reviewer", "project"],
+    ["verifier", "built_in"],
+  ]);
+  assert.equal(inventory.prAgents[0]?.relativePath, "pr-agents/reviewer.md");
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("ManageService applies a project PR-agent override", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "helix-manage-pr-agent-"));
+  const config = loadConfig(fixtureDir);
+  const service = new ManageService({
+    helixDir: dir,
+    config,
+    model: "openrouter/test/model",
+    provider: new FakeProvider(),
+    store: new MemoryManageStore(),
+    createAuthor: () => new FakeManageAuthor(() => ({
+      message: "Drafted a verifier override.",
+      drafts: [{
+        kind: "pr-agent",
+        relativePath: "pr-agents/verifier.md",
+        content: "---\nname: verifier\ndescription: Project verifier\n---\n\nRun the project gates.\n",
+      }],
+      deletions: [],
+    })),
+  });
+
+  const { id, promise } = service.startSession("update the PR verifier");
+  await promise;
+  const applied = service.applySession(id, false);
+  assert.equal(applied.status, "applied");
+  assert.match(readFileSync(join(dir, "pr-agents/verifier.md"), "utf-8"), /Project verifier/);
+  assert.equal(service.getInventory().prAgents.find((item) => item.name === "verifier")?.source, "project");
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test("manage API: session, events, apply", async () => {
   const dir = mkdtempSync(join(tmpdir(), "helix-manage-api-"));
   const config = loadConfig(fixtureDir);
@@ -153,6 +256,11 @@ test("manage API: session, events, apply", async () => {
   const agents = await request(app).get("/manage/agents");
   assert.equal(agents.status, 200);
   assert.ok(Array.isArray(agents.body));
+
+  const prAgents = await request(app).get("/manage/pr-agents");
+  assert.equal(prAgents.status, 200);
+  assert.deepEqual(prAgents.body.map((item: { name: string }) => item.name), ["reviewer", "verifier"]);
+  assert.ok(prAgents.body.every((item: { source: string }) => item.source === "built_in"));
 
   const start = await request(app).post("/manage/sessions").send({ prompt: "create an agent" });
   assert.equal(start.status, 202);

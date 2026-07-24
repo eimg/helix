@@ -18,7 +18,6 @@ export interface MergeGateConfig {
   autoMerge: boolean;
   maxDiffLines: number;
   maxFiles: number;
-  requireVerifierPass: boolean;
   /** "auto-merge" | "draft-pr-and-notify" — only the former is acted on in M2. */
   else: string;
 }
@@ -27,7 +26,6 @@ const DEFAULT_MERGE_GATE: MergeGateConfig = {
   autoMerge: true,
   maxDiffLines: 300,
   maxFiles: 10,
-  requireVerifierPass: true,
   else: "draft-pr-and-notify",
 };
 

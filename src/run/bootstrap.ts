@@ -181,7 +181,7 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
           "",
           "## Helix-managed implementation workspace",
           `You are already on feature branch \`${workspace.branch}\` in an isolated worktree.`,
-          "Do not create, rename, or switch branches. Implement and verify here; Helix will commit any remaining changes before PR registration.",
+          "Do not create, rename, or switch branches. Implement and run the required self-checks here; Helix will commit any remaining changes before PR registration.",
         ].join("\n")
       : "";
     const repoContext = buildRepoBootstrap(runCwd, config.repoContext) + workspaceNotice;

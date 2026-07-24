@@ -41,7 +41,6 @@ export interface HelixConfig {
     autoMerge?: boolean;
     maxDiffLines?: number;
     maxFiles?: number;
-    requireVerifierPass?: boolean;
   };
   /**
    * Post-run deliverable side effects. GitHub PR create/merge via `gh` is
@@ -93,7 +92,13 @@ export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixCo
       ...parsed.deliverable,
     },
     triggers: parsed.triggers,
-    mergeGate: parsed.mergeGate,
+    mergeGate: parsed.mergeGate
+      ? {
+          autoMerge: parsed.mergeGate.autoMerge,
+          maxDiffLines: parsed.mergeGate.maxDiffLines,
+          maxFiles: parsed.mergeGate.maxFiles,
+        }
+      : undefined,
   };
 
   if (config.orchestrator.workflow.length === 0) {

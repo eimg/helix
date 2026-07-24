@@ -56,7 +56,7 @@ function normalizeDraft(item: unknown): ManageDraft | undefined {
   if (!item || typeof item !== "object") return undefined;
   const d = item as Record<string, unknown>;
   const kind = d.kind;
-  if (kind !== "agent" && kind !== "skill") return undefined;
+  if (kind !== "agent" && kind !== "pr-agent" && kind !== "skill") return undefined;
   if (typeof d.relativePath !== "string" || !d.relativePath.trim()) return undefined;
   if (typeof d.content !== "string") return undefined;
   return {
@@ -70,7 +70,7 @@ function normalizeDeletion(item: unknown): ManageDeletion | undefined {
   if (!item || typeof item !== "object") return undefined;
   const d = item as Record<string, unknown>;
   const kind = d.kind;
-  if (kind !== "agent" && kind !== "skill") return undefined;
+  if (kind !== "agent" && kind !== "pr-agent" && kind !== "skill") return undefined;
   if (typeof d.relativePath !== "string" || !d.relativePath.trim()) return undefined;
   return {
     kind,

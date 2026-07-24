@@ -187,6 +187,7 @@ See the [acme-issues README](https://github.com/eimg/acme-issues#pull-request-re
 
 - Prefer **inline** or **acme-issues** over GitHub poll until you understand merge-gate behavior.
 - New projects use `planner → dev` for implementation. Independent `reviewer + verifier` definitions live under `.helix/pr-agents/` and run only in PR control.
+- Workflow agents can run builds, tests, and other self-checks, but no Run agent has special verification authority. Independent verification is always a PR-control responsibility.
 - `deliverable.localPr` defaults to `true`, but only Acme-linked server runs get a Helix-managed worktree and create a local PR. Standalone inline runs have no tracker or Git-delivery side effect.
 - **GitHub PR create/merge is off by default** (`deliverable.pr: false`). The acme-issues demo does not need `gh`. Enable later with `"deliverable": { "pr": true }` plus `triggers.github.repo`.
 - `mergeGate.autoMerge` only matters when PR deliverables are enabled.
@@ -204,7 +205,7 @@ helix serve
 | Run console | `/` | Form, live log, cached run history, and delete |
 | PR Reviews | `/reviews` | Active exact-SHA reviews, durable history, lifecycle progress, findings, and checks |
 | Manage | `/manage` | Experimental agent/skill authoring and default-workflow ordering (web/API only) |
-| Config | `/config` | Resolved runtime settings and provenance |
+| Config | `/config` | Resolved runtime settings, workflow and PR-control resources, and provenance |
 | API | `/runs`, `/runs/:id/events`, … | JSON + SSE |
 
 Default port **8319** (phone-keypad mnemonic for HELIX). Override with `--port` or `PORT`.
@@ -273,17 +274,19 @@ The parent must be `done` or `escalated`. Helix returns the existing child for a
   runs/             # legacy JSON import source (gitignored)
 ```
 
+The `reviewer` and `verifier` files are copied from Helix’s shipped PR presets during initialization. Config and Manage therefore report them as `project` definitions once copied. If a project-local PR definition is absent, Helix resolves the corresponding shipped `built in` fallback instead.
+
 Useful knobs:
 
 - **`.env`** — essentials: `OPENROUTER_API_KEY`, `HELIX_MODEL` (default: `openrouter/xiaomi/mimo-v2.5-pro`). Loaded from project root; shell exports win. If the API key is unset, Helix falls back to `~/.pi/agent/auth.json`.
 - **`config.json`** — wiring only: `workflow`, `maxIterations`, `mergeGate`, `deliverable`, `triggers`, `repoContext`, `extensions`
-- The Manage tab can add, remove, and reorder agents in the default workflow. New runs reload saved workflow and agent definitions without restarting the server.
+- The Manage tab can author workflow agents, PR-review agents, and skills. It can also add, remove, and reorder agents in the default implementation workflow; PR control remains the fixed concurrent `reviewer + verifier` pair. New runs and reviews reload saved definitions without restarting the server.
 - **`agents/*.md`** — optional per-specialist `model:` in frontmatter (overrides the default for that agent only)
 - `repoContext.enabled` (default `true`) — deterministic repo bootstrap injected once into every cold specialist session
 - `deliverable.localPr` (default `true`) — create an isolated implementation branch/worktree, safely finalize its commit, and register a draft PR with the linked local tracker
 - `deliverable.baseBranch` (default `main`) — base ref recorded for local PR identity and review
 - `deliverable.pr` (default `false`) — opt into GitHub PR create/merge via `gh` after successful runs
-- `mergeGate` — auto-merge thresholds (only applies when `deliverable.pr` is true)
+- `mergeGate` — size-based GitHub delivery thresholds (only applies when `deliverable.pr` is true; it does not perform verification)
 
 Vision: [`docs/vision.md`](./docs/vision.md) · architecture: [`docs/architecture.md`](./docs/architecture.md) · milestones: [`docs/plan.md`](./docs/plan.md) · Manage: [`docs/manage.md`](./docs/manage.md) · cold-start: [`docs/repo-context.md`](./docs/repo-context.md) · guardrails/escalation: [`docs/guardrails.md`](./docs/guardrails.md)
 

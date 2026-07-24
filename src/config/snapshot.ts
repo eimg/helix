@@ -62,6 +62,12 @@ export interface ConfigSnapshot {
       description: string;
       inWorkflow: boolean;
     }>;
+    prSpecialists: Array<{
+      name: string;
+      model: ResolvedValue<string | null>;
+      description: string;
+      definitionSource: "project" | "built_in";
+    }>;
   };
   flags: {
     extensionsEnabled: boolean;
@@ -83,6 +89,7 @@ export interface ConfigSnapshot {
   resources: {
     skills: Array<{ name: string; relativePath: string }>;
     agentsDir: string;
+    prAgentsDir: string;
     skillsDir: string;
   };
   /** Raw merged wiring config (no secrets). */
@@ -137,6 +144,22 @@ export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
       },
       helixModelEnvSet,
       specialists: ctx.specialists.map((s) => specialistModelRow(s, resolvedModel, workflowSet)),
+      prSpecialists: inventory.prAgents.map((specialist) => ({
+        name: specialist.name,
+        model: specialist.model
+          ? {
+              value: specialist.model,
+              source: "agent",
+              detail: specialist.relativePath,
+            }
+          : {
+              value: resolvedModel.value,
+              source: resolvedModel.source,
+              detail: resolvedModel.detail,
+            },
+        description: specialist.description,
+        definitionSource: specialist.source,
+      })),
     },
     flags: {
       extensionsEnabled: ctx.config.extensions?.enabled === true,
@@ -164,6 +187,7 @@ export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
     resources: {
       skills: inventory.skills,
       agentsDir: resolve(ctx.helixDir, "agents"),
+      prAgentsDir: resolve(ctx.helixDir, "pr-agents"),
       skillsDir: resolve(ctx.helixDir, "skills"),
     },
     config: ctx.config,

@@ -37,8 +37,7 @@ const CONFIG_TEMPLATE = `{
   "mergeGate": {
     "autoMerge": true,
     "maxDiffLines": 300,
-    "maxFiles": 10,
-    "requireVerifierPass": true
+    "maxFiles": 10
   }
 }
 `;

@@ -12,5 +12,5 @@ Rules:
 - Make the smallest correct change. Match existing style and conventions.
 - Run the project's build/typecheck/test commands (see the active skill) after each meaningful change; fix what you break before stopping.
 - Commit logically. Do not push or open a PR — the orchestrator decides delivery.
-- When you finish, report: the branch name, the files changed (with a one-line rationale each), and the final verification command output (passing).
+- When you finish, report: the branch name, the files changed (with a one-line rationale each), and the final self-check command output (passing).
 - If you cannot complete the task, say so explicitly and explain the blocker. Do not claim success you did not verify.

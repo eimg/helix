@@ -15,7 +15,7 @@ Related: [`plan.md`](./plan.md), [`architecture.md`](./architecture.md), [`repo-
 | Workflow rails + LLM orchestrator | `orchestrator/driver.ts`, config `workflow` | Soft guidance; may skip/reorder/retry |
 | Iteration cap | `orchestrator/gates.ts` | Forces `escalate` |
 | Blocking-failure gate | `engine/engine.ts` | `done` over failed specialist → escalate |
-| Merge gate + approval | `mergeGate.ts`, deliverable pipeline, approve/reject API | Size/risk → auto-merge or `approvalStatus: pending` |
+| GitHub delivery gate + approval | `mergeGate.ts`, deliverable pipeline, approve/reject API | Opt-in size thresholds → auto-merge or `approvalStatus: pending`; no verification |
 | `deliverable.pr` (default `false`) | config + `cli.ts` serve wiring | No `gh pr create` unless opted in |
 | Local PR delivery | `run/workspace.ts`, `localPullRequest.ts`, `deliverable.localPr` | Acme-linked server runs use a host-created isolated branch/worktree; remaining changes are policy-checked and committed before metadata registration; never pushes or merges |
 | Independent PR control | `src/pr-control/` | Exact head SHA, detached temporary worktree, read-only reviewer/verifier, structured fail-closed policy |

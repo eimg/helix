@@ -49,11 +49,17 @@ test("buildConfigSnapshot reports resolved models and provenance", () => {
     assert.equal(snap.models.orchestrator.source, "default");
     assert.equal(snap.models.helixModelEnvSet, false);
     assert.ok(snap.models.specialists.length >= 1);
+    assert.deepEqual(snap.models.prSpecialists.map((item) => [item.name, item.definitionSource]), [
+      ["reviewer", "project"],
+      ["verifier", "project"],
+    ]);
+    assert.ok(snap.models.prSpecialists.every((item) => item.model.value === HELIX_DEFAULT_MODEL));
     assert.ok(snap.workflow.steps.includes("planner"));
     assert.equal(typeof snap.flags.extensionsEnabled, "boolean");
     assert.equal(snap.flags.deliverableLocalPr, true);
     assert.ok(!("inheritPi" in snap.flags));
     assert.ok(!("helixHome" in snap.paths));
+    assert.equal(snap.resources.prAgentsDir, resolve(fixtureDir, "pr-agents"));
   } finally {
     if (prev === undefined) delete process.env[HELIX_MODEL_ENV];
     else process.env[HELIX_MODEL_ENV] = prev;
@@ -71,6 +77,10 @@ test("buildConfigSnapshot marks HELIX_MODEL as default source; agent model wins 
     assert.equal(snap.models.orchestrator.value, "openrouter/test/override-model");
     // Fixture specialists have no frontmatter model → inherit default provenance
     for (const sp of snap.models.specialists) {
+      assert.equal(sp.model.source, "env");
+      assert.equal(sp.model.value, "openrouter/test/override-model");
+    }
+    for (const sp of snap.models.prSpecialists) {
       assert.equal(sp.model.source, "env");
       assert.equal(sp.model.value, "openrouter/test/override-model");
     }
@@ -93,6 +103,7 @@ test("GET /config serves UI and GET /config/snapshot returns JSON", async () => 
   assert.equal(snap.body.paths.helixDir, fixtureDir);
   assert.ok(snap.body.models.orchestrator.value);
   assert.ok(Array.isArray(snap.body.models.specialists));
+  assert.deepEqual(snap.body.models.prSpecialists.map((item: { name: string }) => item.name), ["reviewer", "verifier"]);
   assert.ok(snap.body.workflow.steps.length >= 1);
   assert.equal(snap.body.provider.apiKeyEnv, "OPENROUTER_API_KEY");
   assert.equal(typeof snap.body.provider.authConfigured, "boolean");

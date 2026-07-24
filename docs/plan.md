@@ -9,7 +9,7 @@ Broader product direction across knowledge, planning, implementation, PR control
 ## Milestones
 
 - **M1 — Core engine (shipped).** Manual + inline trigger. Hybrid orchestrator. Live event log. Presets.
-- **M2 — Auto + deliverable (shipped).** Express server + Run UI; GitHub poll; PR creation; merge gate execution.
+- **M2 — Auto + deliverable (shipped).** Express server + Run UI; GitHub poll; PR creation; GitHub delivery-gate execution.
 - **Beyond M2 (partial).** Manage (experimental); Phase A repo bootstrap; run history/delete; acme-issues demo path. Further scale still open.
 
 ---
@@ -49,7 +49,7 @@ No Express/HTTP; no GitHub polling/webhook (manual `gh` only); no PR creation or
 
 ## M2 — Auto + deliverable ✅ SHIPPED
 
-Turn the engine into a self-driving service: issues can arrive automatically, runs can produce reviewable PRs, the merge gate acts.
+Turn the engine into a self-driving service: issues can arrive automatically, runs can produce reviewable PRs, and the size-based GitHub delivery gate acts when that opt-in path is enabled.
 
 ### What shipped
 
@@ -59,9 +59,9 @@ Turn the engine into a self-driving service: issues can arrive automatically, ru
 | Run bootstrap | `src/run/bootstrap.ts` — shared `createRunContext()` + async `startRun()` for CLI and server |
 | GitHub poll | `src/triggers/github-poll.ts` — `GitHubPollTrigger` + injectable `IssueLister` |
 | PR creation | `src/deliverable/pr.ts` — `GhPullRequestCreator` + `FakePullRequestCreator` |
-| Git / diff | `src/deliverable/git.ts` — `ShellGitContext` for merge gate diff stats |
-| Deliverable pipeline | `src/deliverable/pipeline.ts` — merge gate → PR → auto-merge or pending approval |
-| Merge gate | `src/orchestrator/mergeGate.ts` — pure threshold evaluation |
+| Git / diff | `src/deliverable/git.ts` — `ShellGitContext` for GitHub delivery-gate diff stats |
+| Deliverable pipeline | `src/deliverable/pipeline.ts` — delivery gate → PR → auto-merge or pending approval |
+| GitHub delivery gate | `src/orchestrator/mergeGate.ts` — pure size-threshold evaluation; no Run-verifier semantics |
 | CLI | `helix serve [--port]` — starts server; PR deliverable only if `deliverable.pr`; honors `triggers.github.mode: "poll"` |
 | Web UI | `web/src/` — React + TanStack Query surfaces for Run, PR Reviews, Manage, and Config |
 | State | `RunStore` load/list/delete + incremental save during runs |
@@ -89,7 +89,7 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 | **Issue-tracker callback** | Best-effort `run.completed` POST to external tracker (POC, no auth) — used with acme-issues |
 | **External workflow continuations** | Issue reopen/comment events create idempotent linked child runs with fresh sessions and bounded parent context |
 | **Run history / delete** | `GET /runs`, UI sidebar, `DELETE /runs/:id` for test cleanup |
-| **Config observability** | Config tab + `GET /config/snapshot` — resolved essentials provenance (env / pi / default) + wiring |
+| **Config observability** | Config tab + `GET /config/snapshot` — resolved essentials provenance, separate workflow/PR-control agents, delivery-gate activity, and wiring |
 | **Local PR delivery** | Acme-linked successful runs use a host-created isolated worktree/branch; Helix safely commits remaining implementation changes and registers a draft local PR; no push or merge |
 | **Independent local PR control** | Helix-created and trusted external PRs share the separate `/pr-reviews` API, `.helix/pr-reviews.db`, durable lifecycle events, exact-head temporary worktree, concurrent reviewer/verifier, fail-closed host policy, and structured readiness callback |
 
@@ -101,7 +101,7 @@ Stack and ownership posture (platform independence, Pi-first runtime profiles, w
 
 Short version: keep Helix’s control plane independent; use **pi as the default harness for coding and general-purpose profiles**; add a persistent single-agent conversation mode instead of forcing ordinary assistant turns through specialist orchestration; and leave ports open for alternate runtimes, **Temporal-class** durability, and **OTel**/LLM-ops exporters only when measured pain justifies them.
 
-PR lifecycle ownership is now separated for the local Acme path: implementation defaults to planner/dev self-check and creates a local PR handoff; PR control independently reviews the exact head SHA and reports readiness; the human merges. The hosted GitHub combined create/approve/auto-merge pipeline remains an opt-in provisional path. [→](./architecture.md#pull-request-lifecycle-boundary)
+PR lifecycle ownership is now separated for the local Acme path: implementation defaults to planner/dev self-check, has no verification phase, and creates a local PR handoff; PR control independently reviews the exact head SHA and reports readiness; the human merges. The hosted GitHub combined create/approve/auto-merge pipeline remains an opt-in provisional size-gated path and does not use Run results as verification. [→](./architecture.md#pull-request-lifecycle-boundary)
 
 ---
 

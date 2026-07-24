@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { resolve, join } from "node:path";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { loadConfig } from "../src/config.js";
 import { loadSpecialists } from "../src/agents/loader.js";
 import { loadWorkflow, describeWorkflow } from "../src/orchestrator/workflow.js";
-import { loadPullRequestSpecialists } from "../src/pr-control/loader.js";
+import { loadPullRequestSpecialists, resolvePullRequestSpecialists } from "../src/pr-control/loader.js";
 
 const fixtureDir = resolve(import.meta.dirname, "..", "examples", "ts", ".helix");
 
@@ -15,7 +15,7 @@ test("config: loads and validates the TS fixture config (wiring only)", () => {
   assert.deepEqual(config.orchestrator.workflow, ["planner", "dev"]);
   assert.equal(config.orchestrator.maxIterations, 6);
   assert.equal(config.triggers?.github?.repo, "acme/widget");
-  assert.equal(config.mergeGate?.requireVerifierPass, true);
+  assert.ok(!("requireVerifierPass" in (config.mergeGate ?? {})));
   assert.equal(config.extensions?.enabled, false);
   assert.ok(!("provider" in config));
   assert.ok(!("inheritPi" in config));
@@ -32,6 +32,7 @@ test("config: extensions default to false when absent; ignores legacy essentials
       workflow: ["dev"],
       loops: { "verifier-fail": { backTo: "dev", maxRetries: 2 } },
     },
+    mergeGate: { requireVerifierPass: true },
   }));
   const config = loadConfig(tmp);
   assert.equal(config.extensions?.enabled, false);
@@ -40,6 +41,7 @@ test("config: extensions default to false when absent; ignores legacy essentials
   assert.ok(!("model" in config.orchestrator));
   assert.ok(!("loops" in config.orchestrator));
   assert.ok(!("inheritPi" in config));
+  assert.ok(!("requireVerifierPass" in (config.mergeGate ?? {})));
 });
 
 test("config: deliverable.pr can be enabled explicitly", () => {
@@ -89,4 +91,19 @@ test("PR-control loader prefers project pack and fills missing roles from shippe
   writeFileSync(join(tmp, "config.json"), JSON.stringify({ orchestrator: { workflow: ["dev"] } }));
   const definitions = loadPullRequestSpecialists(tmp);
   assert.deepEqual(definitions.map((item) => item.name), ["reviewer", "verifier"]);
+});
+
+test("PR-control loader never resolves verifier from workflow agents", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "helix-pr-workflow-agent-"));
+  mkdirSync(join(tmp, "agents"), { recursive: true });
+  writeFileSync(
+    join(tmp, "agents", "verifier.md"),
+    "---\nname: verifier\ndescription: Legacy run verifier\n---\n\nDo not use for PR control.\n",
+  );
+
+  const definitions = resolvePullRequestSpecialists(tmp);
+  assert.deepEqual(definitions.map((item) => [item.definition.name, item.source]), [
+    ["reviewer", "built_in"],
+    ["verifier", "built_in"],
+  ]);
 });

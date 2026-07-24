@@ -39,7 +39,7 @@ The loops may reuse Pi-backed runtime adapters, specialist-session construction,
 |---|---|---|---|---|
 | Knowledge and discovery | Opportunity or hypothesis | Scheduled scan plus knowledge changes | Brief, RFC, prototype, experiment, proposed issues | Planned |
 | Planning | Milestone or implementation plan | Team cadence, accepted proposal, or new-project request | Prioritized issues or a bootstrap-ready plan | Planned |
-| Implementation | Issue | Create, reopen, or command comment | Verified repository change delivered as a new PR | Partially shipped |
+| Implementation | Issue | Create, reopen, or command comment | Self-checked repository change delivered as a new PR | Partially shipped |
 | PR control | Pull request at a head SHA | Local review request; later PR, CI, and review events plus reconciliation | Review evidence and merge-readiness decision | Partially shipped |
 | Release readiness | Release candidate | Merged changes, milestone, or release schedule | Changelog, risk analysis, rollout and rollback plan | Planned |
 | Deployment | Deployment record | Approved release candidate | Staged rollout, verification, production result, rollback | Planned |
@@ -109,7 +109,7 @@ planning loop
 
 ### Implementation
 
-The implementation loop consumes an issue and produces a verified change. Issue creation, reopen, and explicit issue command comments are external workflow triggers. Continuations remain fresh linked runs with bounded lineage context.
+The implementation loop consumes an issue and produces a self-checked change. Issue creation, reopen, and explicit issue command comments are external workflow triggers. Continuations remain fresh linked runs with bounded lineage context. Independent verification begins only after a PR exists and belongs to PR control.
 
 The Git behavior is one isolated worktree, one named feature branch, and one new PR for every successful Acme-linked change-producing run. Helix creates the branch from the configured base SHA before agent execution, lets the Dev commit logically, safely commits remaining changes at the host boundary, then registers the exact base/head SHAs as a draft PR in Acme Issues. Successful registration removes the temporary checkout while retaining the branch; failures retain the workspace for diagnosis. Helix delivers the PR and stops; it does not authorize its own merge.
 

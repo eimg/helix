@@ -4,11 +4,13 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
-import type { ManageInventory, ManageInventoryAgent, ManageInventorySkill } from "./types.js";
+import { resolvePullRequestSpecialists } from "../pr-control/loader.js";
+import type { ManageInventory, ManageInventoryAgent, ManageInventoryPrAgent, ManageInventorySkill } from "./types.js";
 
 export function loadManageInventory(helixDir: string): ManageInventory {
   return {
     agents: listAgents(helixDir),
+    prAgents: listPullRequestAgents(helixDir),
     skills: listSkills(helixDir),
   };
 }
@@ -44,6 +46,16 @@ function listAgents(helixDir: string): ManageInventoryAgent[] {
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function listPullRequestAgents(helixDir: string): ManageInventoryPrAgent[] {
+  return resolvePullRequestSpecialists(helixDir).map(({ definition, source }) => ({
+    name: definition.name,
+    description: definition.description,
+    relativePath: join("pr-agents", `${definition.name}.md`),
+    source,
+    model: definition.model,
+  }));
+}
+
 function listSkills(helixDir: string): ManageInventorySkill[] {
   const skillsDir = resolve(helixDir, "skills");
   const out: ManageInventorySkill[] = [];
@@ -75,5 +87,9 @@ export function formatInventoryForPrompt(inventory: ManageInventory): string {
     inventory.skills.length === 0
       ? "(none)"
       : inventory.skills.map((s) => `- ${s.name} [${s.relativePath}]`).join("\n");
-  return `## Current agents\n${agentLines}\n\n## Current skills\n${skillLines}`;
+  const prAgentLines =
+    inventory.prAgents.length === 0
+      ? "(none)"
+      : inventory.prAgents.map((a) => `- ${a.name}: ${a.description || "(no description)"} [${a.relativePath}; source=${a.source}]`).join("\n");
+  return `## Current workflow agents\n${agentLines}\n\n## Current PR review agents\n${prAgentLines}\n\n## Current skills\n${skillLines}`;
 }
