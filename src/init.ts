@@ -47,9 +47,16 @@ const CONFIG_TEMPLATE = `{
 }
 `;
 
-const GITIGNORE_ENTRIES = [".helix/runs/", ".helix/runs.db*", ".helix/pr-reviews.db*", ".env"];
+const GITIGNORE_ENTRIES = [
+  ".helix/runs/",
+  ".helix/runs.db*",
+  ".helix/pr-reviews.db*",
+  ".helix/.env",
+  ".env",
+];
 
-const ENV_EXAMPLE = `# Helix — copy to .env and fill in (never commit .env)
+const ENV_EXAMPLE = `# Helix — copy to .helix/.env and fill in (never commit .helix/.env)
+# App/runtime secrets belong in the repo-root .env, not here.
 OPENROUTER_API_KEY=
 
 # Default model shipped with helix init (OpenRouter: xiaomi/mimo-v2.5-pro)
@@ -164,16 +171,16 @@ export function init(opts: InitOptions = {}): void {
   // 5. Legacy runs/ dir (also used as a one-time SQLite import source)
   mkdirSync(resolve(helixDir, "runs"), { recursive: true });
 
-  // 6. .env.example (only if missing)
-  const envExamplePath = resolve(cwd, ".env.example");
+  // 6. .helix/.env.example (only if missing) — keep Helix secrets out of root .env
+  const envExamplePath = resolve(helixDir, ".env.example");
   if (!existsSync(envExamplePath)) {
     writeFileSync(envExamplePath, ENV_EXAMPLE, "utf-8");
-    console.log("✓ wrote .env.example");
+    console.log("✓ wrote .helix/.env.example");
   }
 
   console.log("");
   console.log("Next steps:");
-  console.log("  1. Copy .env.example → .env and set OPENROUTER_API_KEY + HELIX_MODEL");
+  console.log("  1. Copy .helix/.env.example → .helix/.env and set OPENROUTER_API_KEY + HELIX_MODEL");
   console.log("  2. Edit .helix/agents/*.md to match your project's needs");
   console.log("  3. Run:  helix run --title \"your task\"");
 }

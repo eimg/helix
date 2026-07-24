@@ -167,6 +167,10 @@ export interface RunContinuation {
   instruction: string;
   externalEventId: string;
   trigger: string;
+  /** Prefer updating this Acme Issues PR instead of opening a new one. */
+  pullRequestId?: number;
+  /** Prefer continuing on this head branch when it still exists locally. */
+  pullRequestHeadBranch?: string;
 }
 
 /** LLM provider abstraction. v1: OpenRouter. Tests: FakeProvider. */

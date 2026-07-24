@@ -23,7 +23,8 @@ test("init: scaffolds implementation and PR-control specialists separately", () 
   assert.ok(existsSync(join(dir, ".helix", "pr-agents", "verifier.md")));
   assert.ok(existsSync(join(dir, ".helix", "skills", "typescript", "SKILL.md")));
   assert.ok(existsSync(join(dir, ".helix", "runs")));
-  assert.ok(existsSync(join(dir, ".env.example")));
+  assert.ok(existsSync(join(dir, ".helix", ".env.example")));
+  assert.ok(!existsSync(join(dir, ".env.example")));
 
   const config = JSON.parse(readFileSync(join(dir, ".helix", "config.json"), "utf-8"));
   assert.deepEqual(config.orchestrator.workflow, ["planner", "dev"]);
@@ -33,18 +34,20 @@ test("init: scaffolds implementation and PR-control specialists separately", () 
   assert.ok(!config.inheritPi);
   assert.ok(!config.orchestrator.model);
 
-  const envExample = readFileSync(join(dir, ".env.example"), "utf-8");
+  const envExample = readFileSync(join(dir, ".helix", ".env.example"), "utf-8");
   assert.match(envExample, /OPENROUTER_API_KEY/);
   assert.match(envExample, /HELIX_MODEL=/);
+  assert.match(envExample, /repo-root \.env/);
 });
 
-test("init: writes .gitignore with SQLite, legacy runs, and .env", () => {
+test("init: writes .gitignore with SQLite, legacy runs, and env files", () => {
   const dir = withTempCwd();
   init({});
   const gi = readFileSync(join(dir, ".gitignore"), "utf-8");
   assert.match(gi, /\.helix\/runs\//);
   assert.match(gi, /\.helix\/runs\.db\*/);
   assert.match(gi, /\.helix\/pr-reviews\.db\*/);
+  assert.match(gi, /\.helix\/\.env/);
   assert.match(gi, /^\.env$/m);
 });
 

@@ -3,13 +3,13 @@
  *
  * Config is **wiring only**: workflow, merge gate, triggers,
  * deliverable, extensions, repoContext. Essentials (API key, model) come from
- * `.env` or the operator's global pi install — see `config/env.ts` and
+ * `.helix/.env` or the operator's global pi install — see `config/env.ts` and
  * `providers/openrouter.ts`.
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { RepoContextOptions } from "./context/bootstrap.js";
-import { loadProjectEnv, repoRootFromHelixDir } from "./config/env.js";
+import { loadHelixEnv } from "./config/env.js";
 import { normalizeInceptionRoles, type InceptionRole } from "./inception/roles.js";
 
 export interface HelixConfig {
@@ -73,7 +73,7 @@ const DEFAULTS: Partial<HelixConfig> = {
 };
 
 export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixConfig {
-  loadProjectEnv(repoRootFromHelixDir(helixDir));
+  loadHelixEnv(helixDir);
 
   const raw = readFileSync(resolve(helixDir, "config.json"), "utf-8");
   const parsed = JSON.parse(raw) as Partial<HelixConfig> & {

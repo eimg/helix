@@ -15,7 +15,7 @@ import { getWorkspaceStatus, runBootstrap } from "../src/inception/service.js";
 import { resolveInceptionSkills } from "../src/inception/skills.js";
 import { resolveAdditionalSkillPaths } from "../src/agents/loaderBuilder.js";
 import { createInceptionSpecialistFactory } from "../src/inception/specialists.js";
-import { PiSpecialistSessionFactory } from "../src/agents/session.js";
+import { PiSpecialistSessionFactory, type PiSpecialistFactoryOptions } from "../src/agents/session.js";
 import request from "supertest";
 import { createApp } from "../src/server/app.js";
 import { createRunContext } from "../src/run/bootstrap.js";
@@ -25,11 +25,24 @@ import { StubSpecialistFactory } from "../src/agents/stubSession.js";
 import { ScriptedOrchestrator } from "../src/orchestrator/scripted.js";
 import { NoOpDeliverablePipeline } from "../src/deliverable/pipeline.js";
 import { loadSpecialists } from "../src/agents/loader.js";
-import type { OrchestratorDecision } from "../src/engine/types.js";
+import type { OrchestratorDecision, SpecialistDefinition } from "../src/engine/types.js";
+import type { PiProvider } from "../src/providers/openrouter.js";
 import { validateDraftsForApply } from "../src/manage/validate.js";
 import { loadManageInventory } from "../src/manage/inventory.js";
 import { parseManageResponse } from "../src/manage/parseResponse.js";
 import { loadConfig } from "../src/config.js";
+
+function inceptionStubFactory(
+  _provider: PiProvider,
+  definitions: SpecialistDefinition[],
+  _opts?: Omit<PiSpecialistFactoryOptions, "skillPack">,
+) {
+  return new StubSpecialistFactory(definitions, {
+    architect: "# Foundation plan\n- layout\n- tooling\n",
+    scaffolder: "Created README and src stubs.",
+    validator: "PASS — foundation matches export.",
+  });
+}
 
 function writeExportFixture(dir: string): string {
   mkdirSync(join(dir, "documents"), { recursive: true });
@@ -296,27 +309,33 @@ test("materializeBootstrap refuses foreign non-empty workspace without force", (
   rmSync(exportDir, { recursive: true, force: true });
 });
 
-test("runBootstrapCommand works in empty non-git folder", () => {
+test("runBootstrapCommand works in empty non-git folder", async () => {
   const target = mkdtempSync(join(tmpdir(), "helix-bootstrap-empty-"));
   const exportDir = writeExportFixture(join(tmpdir(), "helix-export-cmd-"));
 
-  runBootstrapCommand({
+  await runBootstrapCommand({
     exportPath: exportDir,
     targetDir: target,
     dryRun: true,
+    runAgents: false,
     force: false,
     cwd: target,
   });
 
-  runBootstrapCommand({
+  await runBootstrapCommand({
     exportPath: exportDir,
     targetDir: target,
     dryRun: false,
+    runAgents: false,
     force: false,
     cwd: target,
+    provider: new FakeProvider(),
+    createSpecialistFactory: inceptionStubFactory,
   });
   assert.ok(hasOwnGitDir(target));
   assert.ok(existsSync(join(target, ".helix", "agents", "planner.md")));
+  assert.ok(existsSync(join(target, "docs", "inception", "FOUNDATION_PLAN.md")));
+  assert.equal(getWorkspaceStatus(target).bootstrap.state, "completed");
 
   rmSync(target, { recursive: true, force: true });
   rmSync(exportDir, { recursive: true, force: true });
@@ -326,6 +345,10 @@ test("getWorkspaceStatus disables bootstrap on git and PR on non-git", () => {
   const empty = mkdtempSync(join(tmpdir(), "helix-ws-empty-"));
   const emptyStatus = getWorkspaceStatus(empty);
   assert.equal(emptyStatus.bootstrap.available, true);
+  assert.equal(emptyStatus.bootstrap.visible, true);
+  assert.equal(emptyStatus.bootstrap.hasArtifacts, false);
+  assert.equal(emptyStatus.bootstrap.state, "ready");
+  assert.equal(emptyStatus.bootstrap.completed, false);
   assert.equal(emptyStatus.prReviews.available, false);
   assert.ok(emptyStatus.inception.skills.some((s) => s.name === "foundation"));
   assert.equal(emptyStatus.inception.skills[0]?.source, "built_in");
@@ -334,10 +357,63 @@ test("getWorkspaceStatus disables bootstrap on git and PR on non-git", () => {
   gitInitHost(gitDir);
   const gitStatus = getWorkspaceStatus(gitDir);
   assert.equal(gitStatus.bootstrap.available, false);
+  assert.equal(gitStatus.bootstrap.visible, false);
+  assert.equal(gitStatus.bootstrap.hasArtifacts, false);
+  assert.equal(gitStatus.bootstrap.state, "blocked");
+  assert.equal(gitStatus.bootstrap.completed, false);
   assert.equal(gitStatus.prReviews.available, true);
+  assert.match(gitStatus.bootstrap.reason ?? "", /without Helix bootstrap artifacts/);
 
   rmSync(empty, { recursive: true, force: true });
   rmSync(gitDir, { recursive: true, force: true });
+});
+
+test("getWorkspaceStatus marks awaiting_agents after materialize-only", () => {
+  const target = mkdtempSync(join(tmpdir(), "helix-ws-completed-"));
+  const exportDir = writeExportFixture(join(tmpdir(), "helix-export-completed-"));
+  materializeBootstrap({
+    pickup: loadBootstrapManifest(exportDir),
+    targetDir: target,
+  });
+  const status = getWorkspaceStatus(target);
+  assert.equal(status.bootstrap.available, false);
+  assert.equal(status.bootstrap.visible, true);
+  assert.equal(status.bootstrap.hasArtifacts, true);
+  assert.equal(status.bootstrap.completed, false);
+  assert.equal(status.bootstrap.state, "awaiting_agents");
+  assert.equal(status.bootstrap.canRunAgents, true);
+  assert.match(status.bootstrap.reason ?? "", /inception agents have not finished/);
+  assert.equal(status.prReviews.available, true);
+
+  rmSync(target, { recursive: true, force: true });
+  rmSync(exportDir, { recursive: true, force: true });
+});
+
+test("getWorkspaceStatus marks completed after agents succeed", async () => {
+  const target = mkdtempSync(join(tmpdir(), "helix-ws-agents-done-"));
+  const exportDir = writeExportFixture(join(tmpdir(), "helix-export-agents-done-"));
+  await runBootstrap({
+    exportPath: exportDir,
+    targetDir: target,
+    execute: true,
+    provider: new FakeProvider(),
+    createSpecialistFactory: inceptionStubFactory,
+  });
+  const status = getWorkspaceStatus(target);
+  assert.equal(status.bootstrap.available, false);
+  assert.equal(status.bootstrap.visible, true);
+  assert.equal(status.bootstrap.hasArtifacts, true);
+  assert.equal(status.bootstrap.completed, true);
+  assert.equal(status.bootstrap.canRunAgents, false);
+  assert.equal(status.bootstrap.state, "completed");
+  assert.match(status.bootstrap.reason ?? "", /Bootstrap finished/);
+  assert.match(
+    execFileSync("git", ["log", "-1", "--pretty=%s"], { cwd: target, encoding: "utf8" }),
+    /Helix bootstrap foundation/,
+  );
+
+  rmSync(target, { recursive: true, force: true });
+  rmSync(exportDir, { recursive: true, force: true });
 });
 
 test("resolveAdditionalSkillPaths loads inception skills for bootstrap sessions", () => {
@@ -369,7 +445,7 @@ test("createInceptionSpecialistFactory uses the inception skill pack", () => {
   assert.ok(paths.some((p) => p.includes("inception-skills")));
 });
 
-test("bootstrap HTTP API dry-run and execute in empty workspace", async () => {
+test("bootstrap HTTP API dry-run, execute, and runAgents", async () => {
   const target = mkdtempSync(join(tmpdir(), "helix-http-bootstrap-"));
   ensureInceptionScaffold(target);
   const exportDir = writeExportFixture(join(tmpdir(), "helix-export-http-"));
@@ -384,7 +460,7 @@ test("bootstrap HTTP API dry-run and execute in empty workspace", async () => {
     createOrchestrator: () => new ScriptedOrchestrator([{ kind: "done", reason: "ok" } satisfies OrchestratorDecision]),
     createSpecialistFactory: () => new StubSpecialistFactory(specialists, { planner: "ok", dev: "ok" }),
   });
-  const app = createApp({ ctx });
+  const app = createApp({ ctx, createBootstrapSpecialistFactory: inceptionStubFactory });
 
   const workspace = await request(app).get("/workspace");
   assert.equal(workspace.status, 200);
@@ -400,12 +476,22 @@ test("bootstrap HTTP API dry-run and execute in empty workspace", async () => {
   assert.ok(dry.body.skills.some((s: { name: string }) => s.name === "foundation"));
 
   const exec = await request(app).post("/bootstrap").send({ exportPath: exportDir, execute: true });
-  assert.equal(exec.status, 201);
+  assert.equal(exec.status, 202);
   assert.equal(exec.body.dryRun, false);
+  assert.equal(exec.body.accepted, true);
   assert.ok(hasOwnGitDir(target));
 
-  const after = await request(app).get("/workspace");
+  // Poll until agents finish (stub is sync-fast)
+  let after = await request(app).get("/workspace");
+  for (let i = 0; i < 40 && after.body.bootstrap.state === "running"; i++) {
+    await new Promise((r) => setTimeout(r, 25));
+    after = await request(app).get("/workspace");
+  }
   assert.equal(after.body.bootstrap.available, false);
+  assert.equal(after.body.bootstrap.visible, true);
+  assert.equal(after.body.bootstrap.hasArtifacts, true);
+  assert.equal(after.body.bootstrap.completed, true);
+  assert.equal(after.body.bootstrap.state, "completed");
   assert.equal(after.body.prReviews.available, true);
 
   const blocked = await request(app).post("/bootstrap").send({ exportPath: exportDir, dryRun: true });
@@ -415,17 +501,17 @@ test("bootstrap HTTP API dry-run and execute in empty workspace", async () => {
   rmSync(exportDir, { recursive: true, force: true });
 });
 
-test("runBootstrap dry-run returns preview without writing git", () => {
+test("runBootstrap dry-run returns preview without writing git", async () => {
   const target = mkdtempSync(join(tmpdir(), "helix-svc-dry-"));
   const exportDir = writeExportFixture(join(tmpdir(), "helix-export-svc-"));
-  const preview = runBootstrap({ exportPath: exportDir, targetDir: target, dryRun: true });
+  const preview = await runBootstrap({ exportPath: exportDir, targetDir: target, dryRun: true });
   assert.equal(preview.dryRun, true);
   assert.equal(hasOwnGitDir(target), false);
   rmSync(target, { recursive: true, force: true });
   rmSync(exportDir, { recursive: true, force: true });
 });
 
-test("ensureInceptionScaffold creates .helix without git", () => {
+test("ensureInceptionScaffold creates .helix without git", async () => {
   const target = mkdtempSync(join(tmpdir(), "helix-scaffold-"));
   const result = ensureInceptionScaffold(target);
   assert.equal(result.created, true);
@@ -434,14 +520,18 @@ test("ensureInceptionScaffold creates .helix without git", () => {
 
   // Bootstrap execute still allowed after serve scaffold
   const exportDir = writeExportFixture(join(tmpdir(), "helix-export-scaffold-"));
-  runBootstrapCommand({
+  await runBootstrapCommand({
     exportPath: exportDir,
     targetDir: target,
     dryRun: false,
+    runAgents: false,
     force: false,
     cwd: target,
+    provider: new FakeProvider(),
+    createSpecialistFactory: inceptionStubFactory,
   });
   assert.ok(hasOwnGitDir(target));
+  assert.equal(getWorkspaceStatus(target).bootstrap.state, "completed");
 
   rmSync(target, { recursive: true, force: true });
   rmSync(exportDir, { recursive: true, force: true });

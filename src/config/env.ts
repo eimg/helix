@@ -1,8 +1,11 @@
 /**
- * Project-local `.env` loading + model resolution for Helix.
+ * Helix-owned env loading + model resolution.
  *
- * Loaded from the repo root (parent of `.helix/`). Values are applied to
- * `process.env` only when not already set — shell exports win.
+ * Essentials live in `.helix/.env` (not the app’s repo-root `.env`). Values are
+ * applied to `process.env` only when not already set — shell exports win.
+ *
+ * Compat: if `.helix/.env` is missing, fall back to repo-root `.env` so older
+ * workspaces keep working until operators migrate.
  *
  * Default model: `HELIX_MODEL` in env, else the shipped Helix default.
  * Used for orchestrator, manage, and any specialist without frontmatter `model:`.
@@ -56,17 +59,45 @@ export function repoRootFromHelixDir(helixDir: string): string {
   return resolve(helixDir, "..");
 }
 
-/** Load `.env` from the repo root into `process.env` (non-destructive). */
-export function loadProjectEnv(repoRoot: string): void {
-  const envPath = resolve(repoRoot, ".env");
-  if (!existsSync(envPath)) return;
+/** Absolute path to Helix’s env file (`.helix/.env`). */
+export function helixEnvPath(helixDir: string): string {
+  return resolve(helixDir, ".env");
+}
 
+/** Absolute path to Helix’s example env file (`.helix/.env.example`). */
+export function helixEnvExamplePath(helixDir: string): string {
+  return resolve(helixDir, ".env.example");
+}
+
+/** Apply one dotenv file into `process.env` without overriding existing keys. */
+export function applyEnvFile(envPath: string): boolean {
+  if (!existsSync(envPath)) return false;
   const parsed = parseEnvFile(readFileSync(envPath, "utf-8"));
   for (const [key, value] of Object.entries(parsed)) {
     if (process.env[key] === undefined) {
       process.env[key] = value;
     }
   }
+  return true;
+}
+
+/**
+ * Load Helix essentials into `process.env` (non-destructive).
+ * Prefers `.helix/.env`; falls back to repo-root `.env` only when Helix’s file
+ * is absent (migration compatibility).
+ */
+export function loadHelixEnv(helixDir: string): void {
+  const primary = helixEnvPath(helixDir);
+  if (applyEnvFile(primary)) return;
+  applyEnvFile(resolve(repoRootFromHelixDir(helixDir), ".env"));
+}
+
+/**
+ * @deprecated Prefer `loadHelixEnv(helixDir)`. Accepts a repo root and loads
+ * from that root’s `.helix/` directory.
+ */
+export function loadProjectEnv(repoRoot: string): void {
+  loadHelixEnv(resolve(repoRoot, ".helix"));
 }
 
 /**
@@ -82,6 +113,6 @@ export function resolveModelRef(): ResolvedModel {
   return {
     value: HELIX_DEFAULT_MODEL,
     source: "default",
-    detail: "Helix shipped default (set HELIX_MODEL in .env to override)",
+    detail: "Helix shipped default (set HELIX_MODEL in .helix/.env to override)",
   };
 }

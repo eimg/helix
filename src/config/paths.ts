@@ -2,11 +2,12 @@
  * Path resolution for essentials fallback.
  *
  * Essentials (API key, model definitions) resolve in two steps only:
- *   1. Project `.env` / process env (always wins for the API key)
+ *   1. `.helix/.env` / process env (always wins for the API key)
  *   2. Operator's global pi dir (`~/.pi/agent/`) — auth.json + models.json
  *
  * There is no Helix-owned `~/.helix/` secrets/models home. Repo-local
- * `.helix/` is for wiring (config, agents, skills) only.
+ * `.helix/` holds wiring (config, agents, skills) plus Helix secrets
+ * (`.helix/.env`). Repo-root `.env` is for the application.
  */
 
 import { existsSync } from "node:fs";

@@ -1,32 +1,47 @@
 /**
- * `helix bootstrap --export <path> [--target <dir>] [--dry-run|--execute]`
+ * `helix bootstrap --export <path> [--target <dir>] [--dry-run|--execute|--run-agents]`
  *
  * Empty-workspace entry: run from (or target) a folder that is not yet a git
  * project. Execute creates a new git repository in place, copies the Prelude
- * export, and runs `helix init`.
+ * export, runs `helix init`, then runs inception agents (architect → scaffolder
+ * → validator) with auto-loaded inception skills.
  */
 import { resolve } from "node:path";
-import { runBootstrap, type BootstrapExecuteResult, type BootstrapPreview } from "./service.js";
+import type { PiProvider } from "../providers/openrouter.js";
+import { OpenRouterProvider } from "../providers/openrouter.js";
+import {
+  runBootstrap,
+  type BootstrapAcceptedResult,
+  type BootstrapExecuteResult,
+  type BootstrapPreview,
+} from "./service.js";
+import type { CreateBootstrapSpecialistFactory } from "./runner.js";
 
 export interface BootstrapCommandOptions {
-  exportPath: string;
+  exportPath?: string;
   /** New project directory. Defaults to `process.cwd()`. */
   targetDir: string;
   dryRun: boolean;
+  /** Resume inception agents on an already-materialized workspace. */
+  runAgents: boolean;
   force: boolean;
   preset?: string;
   helixDir?: string;
   cwd?: string;
+  provider?: PiProvider;
+  createSpecialistFactory?: CreateBootstrapSpecialistFactory;
 }
 
 export function parseBootstrapArgs(args: string[], cwd = process.cwd()): BootstrapCommandOptions {
   let exportPath: string | undefined;
   let targetDir: string | undefined;
   let dryRun = true;
+  let runAgents = false;
   let force = false;
   let preset: string | undefined;
   let sawExecute = false;
   let sawDryRun = false;
+  let sawRunAgents = false;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -38,6 +53,10 @@ export function parseBootstrapArgs(args: string[], cwd = process.cwd()): Bootstr
     } else if (a === "--execute") {
       dryRun = false;
       sawExecute = true;
+    } else if (a === "--run-agents") {
+      dryRun = false;
+      runAgents = true;
+      sawRunAgents = true;
     } else if (a === "--force") force = true;
     else if (a === "--preset") preset = args[++i];
     else {
@@ -45,10 +64,11 @@ export function parseBootstrapArgs(args: string[], cwd = process.cwd()): Bootstr
     }
   }
 
-  if (sawDryRun && sawExecute) {
-    throw new Error("Use either --dry-run or --execute, not both");
+  const modeCount = [sawDryRun, sawExecute, sawRunAgents].filter(Boolean).length;
+  if (modeCount > 1) {
+    throw new Error("Use only one of --dry-run, --execute, or --run-agents");
   }
-  if (!exportPath?.trim()) {
+  if (!runAgents && !exportPath?.trim()) {
     throw new Error("helix bootstrap requires --export <prelude-export-dir>");
   }
   if (targetDir !== undefined && !targetDir.trim()) {
@@ -56,26 +76,31 @@ export function parseBootstrapArgs(args: string[], cwd = process.cwd()): Bootstr
   }
 
   return {
-    exportPath: exportPath.trim(),
+    exportPath: exportPath?.trim(),
     targetDir: resolve(cwd, targetDir?.trim() || cwd),
     dryRun,
+    runAgents,
     force,
     preset,
     cwd,
   };
 }
 
-export function runBootstrapCommand(opts: BootstrapCommandOptions): void {
+export async function runBootstrapCommand(opts: BootstrapCommandOptions): Promise<void> {
   const cwd = resolve(opts.cwd ?? process.cwd());
-  const result = runBootstrap({
+  const provider = opts.provider ?? new OpenRouterProvider();
+  const result = await runBootstrap({
     exportPath: opts.exportPath,
     targetDir: opts.targetDir,
     dryRun: opts.dryRun,
-    execute: !opts.dryRun,
+    execute: !opts.dryRun && !opts.runAgents,
+    runAgents: opts.runAgents,
     force: opts.force,
     preset: opts.preset,
     helixDir: opts.helixDir,
     cwd,
+    provider,
+    createSpecialistFactory: opts.createSpecialistFactory,
   });
 
   printPreview(result.dryRun ? result : result.preview, cwd);
@@ -104,7 +129,7 @@ function printPreview(preview: BootstrapPreview, cwd: string): void {
   console.log("");
   console.log("Empty-workspace target");
   console.log(`  target:     ${targetDir}${resolve(targetDir) === resolve(cwd) ? " (current folder)" : ""}`);
-  console.log(`  git:        ${assessment.hasGit ? "present (blocked)" : "will create on execute"}`);
+  console.log(`  git:        ${assessment.hasGit ? "present" : "will create on execute"}`);
   console.log(`  helix:      ${assessment.hasHelixConfig ? "scaffold present" : "will create on execute"}`);
   console.log("");
   console.log("Inception specialists (fixed roles)");
@@ -128,17 +153,31 @@ function printPreview(preview: BootstrapPreview, cwd: string): void {
   console.log("");
 }
 
-function printExecute(result: BootstrapExecuteResult): void {
-  const { materialize } = result;
-  console.log("Materialized new project in place");
+function printExecute(result: BootstrapExecuteResult | BootstrapAcceptedResult): void {
+  const { materialize, job } = result;
+  console.log("Materialized project scaffold");
   console.log(`  target:     ${materialize.targetDir}`);
-  console.log(`  git:        initialized (new repository)`);
+  console.log(`  git:        initialized`);
   console.log(`  documents:  ${materialize.documentsWritten}`);
   console.log(`  artifacts:  ${materialize.artifactsWritten}`);
   console.log(`  primer:     ${materialize.primerNotesWritten}`);
   console.log(`  helix:      initialized (.helix/)`);
   console.log("");
-  console.log("Next: configure .env, then helix run --title \"…\" (or keep using helix serve)");
+  console.log("Inception agents");
+  console.log(`  job:        ${job.id}`);
+  console.log(`  status:     ${job.status}`);
+  for (const role of job.roles) {
+    const detail = role.error ? ` — ${role.error}` : role.status === "done" ? " ✓" : "";
+    console.log(`  - ${role.role}: ${role.status}${detail}`);
+  }
+  if (job.status === "completed") {
+    console.log("");
+    console.log("Bootstrap complete. Next: helix run --title \"…\" (or keep using helix serve)");
+  } else if (job.status === "failed") {
+    console.log("");
+    console.log(`Bootstrap agents failed: ${job.error ?? "unknown error"}`);
+    console.log("Retry with: helix bootstrap --run-agents [--export …]");
+  }
 }
 
 function summarize(text: string, max: number): string {

@@ -55,10 +55,10 @@ This creates `.helix/` with specialists, skills, and config.
 ### 2. Configure
 
 ```bash
-cp .env.example .env
+cp .helix/.env.example .helix/.env
 ```
 
-Set your OpenRouter API key and model in `.env`. For `config.json`, specialist models, and other options, see [Config](#config).
+Set your OpenRouter API key and model in `.helix/.env`. Keep app/runtime secrets in the repo-root `.env` (not Helix’s file). For `config.json`, specialist models, and other options, see [Config](#config).
 
 ## Quick run
 
@@ -208,7 +208,7 @@ helix serve
 |--------|-----|--------|
 | Run console | `/` | Form, live log, cached run history, and delete |
 | PR Reviews | `/reviews` | Active exact-SHA reviews, durable history, lifecycle progress, findings, and checks; nav disabled until git exists |
-| Bootstrap | `/bootstrap` | Empty-workspace Prelude pickup (dry-run / execute); shows specialists and auto-loaded skills; nav disabled once git exists |
+| Bootstrap | `/bootstrap` | Empty-workspace execute, or read-only receipt when the repo has Helix bootstrap artifacts; nav disabled on plain existing git |
 | Manage | `/manage` | Experimental authoring for run, PR, and bootstrap agents/skills plus default-workflow ordering (web/API only) |
 | Config | `/config` | Resolved runtime settings including workflow, PR control, and bootstrap resources/provenance |
 | API | `/runs`, `/runs/:id/events`, … | JSON + SSE |
@@ -297,7 +297,7 @@ See [`docs/inception-bootstrap.md`](./docs/inception-bootstrap.md).
 
 Useful knobs:
 
-- **`.env`** — essentials: `OPENROUTER_API_KEY`, `HELIX_MODEL` (default: `openrouter/xiaomi/mimo-v2.5-pro`). Loaded from project root; shell exports win. If the API key is unset, Helix falls back to `~/.pi/agent/auth.json`.
+- **`.helix/.env`** — Helix essentials: `OPENROUTER_API_KEY`, `HELIX_MODEL` (default: `openrouter/xiaomi/mimo-v2.5-pro`). Loaded from `.helix/`; shell exports win. If the API key is unset, Helix falls back to `~/.pi/agent/auth.json`. Repo-root `.env` is for the application (and is only used as a migration fallback when `.helix/.env` is missing).
 - **`config.json`** — wiring only: `workflow`, `inception.roles`, `maxIterations`, `mergeGate`, `deliverable`, `triggers`, `repoContext`, `extensions`
 - The Manage tab can author workflow agents, PR-review agents, bootstrap agents, and both skill packs. It can also add, remove, and reorder agents in the default implementation workflow; PR control remains the fixed concurrent `reviewer + verifier` pair; bootstrap uses the fixed role set with optional `inception.roles` order. New runs and reviews reload saved definitions without restarting the server.
 - **`agents/*.md`** — optional per-specialist `model:` in frontmatter (overrides the default for that agent only)

@@ -23,6 +23,8 @@ export interface DeliverableFinalizeContext {
   branch?: string;
   baseBranch?: string;
   baseSha?: string;
+  /** When set, update this Acme Issues PR instead of creating a new one. */
+  existingPullRequestId?: number;
 }
 
 export interface DeliverablePipelineDeps {

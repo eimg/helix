@@ -91,7 +91,7 @@ The smallest important interfaces live in [`src/engine/types.ts`](./src/engine/t
 4. Subscribe web clients before execution can emit events, and preserve late-attach snapshots when changing streaming.
 5. Keep browser rendering bounded: one collapsible block per invocation, buffered text updates, and no DOM row per token.
 6. Use dependency injection and fakes for tests. Normal test runs must not need network access, provider credentials, GitHub, or an LLM.
-7. Treat `.env`, `.helix/runs.db*`, `.helix/pr-reviews.db*`, `dist/`, and installed dependencies as local/generated state. Never commit secrets or runtime databases.
+7. Treat `.helix/.env`, repo-root `.env`, `.helix/runs.db*`, `.helix/pr-reviews.db*`, `dist/`, and installed dependencies as local/generated state. Never commit secrets or runtime databases. Helix secrets belong in `.helix/.env`; application secrets belong in repo-root `.env`.
 8. Preserve unrelated user changes. Do not silently broaden a focused fix into an architecture rewrite.
 9. Update `docs/plan.md` for roadmap/status changes and `docs/architecture.md` for changed ownership or substrate decisions. Keep README claims limited to shipped user behavior.
 

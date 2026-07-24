@@ -1,15 +1,16 @@
 /**
  * Read-only observability snapshot of the active Helix runtime config.
  *
- * Essentials resolve in two steps: `.env` / process env, then the operator's
- * global pi install. `.helix/config.json` is wiring only (workflow, gates, …).
+ * Essentials resolve in two steps: `.helix/.env` / process env, then the
+ * operator's global pi install. `.helix/config.json` is wiring only
+ * (workflow, gates, …).
  */
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { HelixConfig } from "../config.js";
 import { githubPrEnabled, localPrEnabled } from "../config.js";
 import { OPENROUTER_API_KEY_ENV } from "./defaults.js";
-import { HELIX_MODEL_ENV, resolveModelRef, repoRootFromHelixDir } from "./env.js";
+import { helixEnvPath, HELIX_MODEL_ENV, resolveModelRef } from "./env.js";
 import {
   getPiAgentDir,
   resolveAuthFile,
@@ -125,7 +126,7 @@ export interface ConfigSnapshot {
 
 export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
   const paths = resolvePaths();
-  const envFile = resolve(repoRootFromHelixDir(ctx.helixDir), ".env");
+  const envFile = helixEnvPath(ctx.helixDir);
   const helixModelEnvSet = Boolean(process.env[HELIX_MODEL_ENV]?.trim());
   const resolvedModel = resolveModelRef();
 

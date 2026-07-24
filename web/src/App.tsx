@@ -153,10 +153,17 @@ function PageShell({
     queryFn: () => api<WorkspaceStatus>("/workspace"),
     staleTime: 5_000,
   });
-  const bootstrapAvailable = workspace.data?.bootstrap.available !== false;
+  const bootstrapVisible = workspace.data?.bootstrap.visible === true;
+  const bootstrapCompleted = workspace.data?.bootstrap.completed === true;
+  const bootstrapState = workspace.data?.bootstrap.state;
+  const bootstrapInProgress =
+    bootstrapState === "awaiting_agents" ||
+    bootstrapState === "running" ||
+    bootstrapState === "failed";
   const prAvailable = workspace.data?.prReviews.available === true;
-  // While loading, show both enabled until we know (avoid flicker-disable on git projects).
-  const bootstrapDisabled = workspace.isSuccess && !bootstrapAvailable;
+  // Empty ready OR existing repo with Helix bootstrap artifacts → visible.
+  // Plain existing git without artifacts → disabled.
+  const bootstrapDisabled = workspace.isSuccess && !bootstrapVisible;
   const prDisabled = workspace.isSuccess && !prAvailable;
 
   return (
@@ -180,7 +187,18 @@ function PageShell({
             Bootstrap
           </span>
         ) : (
-          <a className={`nav-link ${active === "bootstrap" ? "active" : ""}`} href="/bootstrap">Bootstrap</a>
+          <a
+            className={`nav-link ${active === "bootstrap" ? "active" : ""}`}
+            href="/bootstrap"
+            title={
+              bootstrapCompleted || bootstrapInProgress
+                ? workspace.data?.bootstrap.reason
+                : undefined
+            }
+          >
+            Bootstrap
+            {bootstrapCompleted ? " · done" : bootstrapInProgress ? " · agents" : ""}
+          </a>
         )}
         {prDisabled ? (
           <span

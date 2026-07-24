@@ -82,35 +82,72 @@ export class LocalPullRequestDeliverablePipeline implements DeliverablePipeline 
         throw new Error("Local PR has no committed change relative to its base");
       }
 
-      const url = `${external.trackerUrl.replace(/\/$/, "")}/api/pull-requests`;
-      const response = await this.fetchFn(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Helix-Run-Id": run.id },
-        body: JSON.stringify({
-          issueId: external.issueId,
-          title: run.issue.title,
-          description: buildDescription(run),
-          repositoryPath,
-          baseBranch,
-          baseSha,
-          headBranch,
-          headSha,
-          author: "helix",
-          origin: "helix",
-        }),
-      });
-      if (!response.ok) {
-        throw new Error(`Acme Issues rejected local PR creation (HTTP ${response.status})`);
+      const trackerBase = external.trackerUrl.replace(/\/$/, "");
+      const existingId = context?.existingPullRequestId;
+      const description = buildDescription(run);
+      let pullRequestId: number;
+      let responseBranch = headBranch;
+
+      if (existingId !== undefined) {
+        const url = `${trackerBase}/api/pull-requests/${existingId}`;
+        const response = await this.fetchFn(url, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", "X-Helix-Run-Id": run.id },
+          body: JSON.stringify({
+            description,
+            baseBranch,
+            baseSha,
+            headBranch,
+            headSha,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(`Acme Issues rejected local PR update (HTTP ${response.status})`);
+        }
+        const updated = await response.json() as CreatedLocalPullRequest;
+        if (!Number.isInteger(updated.id) || updated.id <= 0) {
+          throw new Error("Acme Issues returned an invalid local PR response");
+        }
+        pullRequestId = updated.id;
+        if (typeof updated.headBranch === "string" && updated.headBranch.trim()) {
+          responseBranch = updated.headBranch;
+        }
+      } else {
+        const url = `${trackerBase}/api/pull-requests`;
+        const response = await this.fetchFn(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Helix-Run-Id": run.id },
+          body: JSON.stringify({
+            issueId: external.issueId,
+            title: run.issue.title,
+            description,
+            repositoryPath,
+            baseBranch,
+            baseSha,
+            headBranch,
+            headSha,
+            author: "helix",
+            origin: "helix",
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(`Acme Issues rejected local PR creation (HTTP ${response.status})`);
+        }
+        const created = await response.json() as CreatedLocalPullRequest;
+        if (!Number.isInteger(created.id) || created.id <= 0) {
+          throw new Error("Acme Issues returned an invalid local PR response");
+        }
+        pullRequestId = created.id;
+        if (typeof created.headBranch === "string" && created.headBranch.trim()) {
+          responseBranch = created.headBranch;
+        }
       }
-      const created = await response.json() as CreatedLocalPullRequest;
-      if (!Number.isInteger(created.id) || created.id <= 0) {
-        throw new Error("Acme Issues returned an invalid local PR response");
-      }
+
       run.pullRequest = {
-        number: created.id,
-        branch: headBranch,
+        number: pullRequestId,
+        branch: responseBranch,
         draft: true,
-        url: `${external.trackerUrl.replace(/\/$/, "")}/?pr=${created.id}`,
+        url: `${trackerBase}/?pr=${pullRequestId}`,
       };
       // Readiness and the human merge record live in Acme Issues PR control,
       // not in Helix's provisional GitHub approve/merge endpoints.

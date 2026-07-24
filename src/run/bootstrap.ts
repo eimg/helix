@@ -3,7 +3,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { loadConfig, type HelixConfig } from "../config.js";
+import { loadConfig, localPrEnabled, type HelixConfig } from "../config.js";
 import { resolveModelRef } from "../config/env.js";
 import { runIssue, type EngineDeps } from "../engine/engine.js";
 import { EventStream } from "../engine/eventStream.js";
@@ -18,9 +18,11 @@ import type { RunStore } from "../state/runStore.js";
 import { SqliteRunStore } from "../state/runStore.js";
 import type { DeliverablePipeline } from "../deliverable/pipeline.js";
 import { NoOpDeliverablePipeline } from "../deliverable/pipeline.js";
+import { LocalPullRequestDeliverablePipeline } from "../deliverable/localPullRequest.js";
 import { notifyIssueTracker } from "../callbacks/issueTracker.js";
 import { buildRepoBootstrap } from "../context/bootstrap.js";
-import type { PreparedRunWorkspace, RunWorkspaceManager } from "./workspace.js";
+import { hasCommit, hasOwnGitDir } from "../inception/git.js";
+import { GitRunWorkspaceManager, type PreparedRunWorkspace, type RunWorkspaceManager } from "./workspace.js";
 
 export interface RunContext {
   helixDir: string;
@@ -88,6 +90,28 @@ export function refreshRunContextResources(ctx: RunContext): void {
   ctx.config = loadConfig(ctx.helixDir);
   ctx.workflow = loadWorkflow(ctx.config);
   ctx.specialists = loadSpecialists(resolve(ctx.helixDir, "agents"));
+  // Inception may create `.git` after `helix serve` started. Upgrade NoOp → local
+  // PR wiring so the first implementation run does not write straight to cwd.
+  maybeWireLocalPullRequest(ctx);
+}
+
+/**
+ * When local PR mode is enabled and the workspace now has a usable base commit,
+ * replace a stale NoOp deliverable with isolated worktree + Acme PR registration.
+ */
+export function maybeWireLocalPullRequest(ctx: RunContext): void {
+  if (!localPrEnabled(ctx.config)) return;
+  if (!(ctx.deliverable instanceof NoOpDeliverablePipeline)) return;
+  if (ctx.workspace) return;
+  if (!hasOwnGitDir(ctx.cwd)) return;
+  const baseBranch = ctx.config.deliverable?.baseBranch ?? "main";
+  if (!hasCommit(ctx.cwd, baseBranch) && !hasCommit(ctx.cwd, "HEAD")) return;
+
+  ctx.deliverable = new LocalPullRequestDeliverablePipeline({
+    cwd: ctx.cwd,
+    baseBranch,
+  });
+  ctx.workspace = new GitRunWorkspaceManager(ctx.cwd, baseBranch);
 }
 
 export interface ActiveRun {
@@ -118,9 +142,21 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
   const eventStream = opts.eventStream ?? new EventStream();
   const promise = (async (): Promise<Run> => {
     let workspace: PreparedRunWorkspace | undefined;
+    const parent = opts.parentRunId ? ctx.store.load(opts.parentRunId) : undefined;
+    const reuseBranch =
+      opts.continuation?.pullRequestHeadBranch?.trim()
+      || parent?.pullRequest?.branch?.trim()
+      || undefined;
+    const existingPullRequestId =
+      opts.continuation?.pullRequestId
+      ?? parent?.pullRequest?.number;
     if (!opts.skipDeliverable && issue.external && ctx.workspace) {
       try {
-        workspace = await ctx.workspace.prepare({ runId, issue });
+        workspace = await ctx.workspace.prepare({
+          runId,
+          issue,
+          ...(reuseBranch ? { reuseBranch } : {}),
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const now = Date.now();
@@ -180,7 +216,9 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
       ? [
           "",
           "## Helix-managed implementation workspace",
-          `You are already on feature branch \`${workspace.branch}\` in an isolated worktree.`,
+          reuseBranch && workspace.branch === reuseBranch
+            ? `You are continuing on existing feature branch \`${workspace.branch}\` in an isolated worktree.`
+            : `You are already on feature branch \`${workspace.branch}\` in an isolated worktree.`,
           "Do not create, rename, or switch branches. Implement and run the required self-checks here; Helix will commit any remaining changes before PR registration.",
         ].join("\n")
       : "";
@@ -219,6 +257,9 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
         branch: workspace?.branch,
         baseBranch: workspace?.baseBranch,
         baseSha: workspace?.baseSha,
+        ...(existingPullRequestId !== undefined
+          ? { existingPullRequestId }
+          : {}),
       });
     }
     if (workspace && run.pullRequest) {

@@ -12,6 +12,7 @@
  * GET  /pr-reviews     list PR-control reviews
  * GET  /pr-reviews/:id inspect one PR-control review
  * GET  /pr-reviews/:id/events stream durable PR-review lifecycle events
+ * POST /local-prs/merge  human-initiated local Git merge for a reviewed head
  *
  * Manage (experimental):
  * POST /manage/sessions, GET /manage/sessions/:id, SSE events, apply, discard
@@ -39,6 +40,7 @@ import { EventStream } from "../engine/eventStream.js";
 import { inlineIssue } from "../triggers/inline.js";
 import { GitHubTrigger } from "../triggers/github.js";
 import { approveRun, rejectRun } from "../deliverable/pipeline.js";
+import { mergeLocalPullRequest } from "../deliverable/localMerge.js";
 import type { PullRequestCreator } from "../deliverable/pr.js";
 import { HELIX_DEFAULT_PORT } from "../config/defaults.js";
 import { buildConfigSnapshot } from "../config/snapshot.js";
@@ -50,7 +52,14 @@ import { buildContinuationIssue } from "../run/continuation.js";
 import type { RunStore } from "../state/runStore.js";
 import type { PullRequestControlService } from "../pr-control/service.js";
 import type { PullRequestReviewEvent, PullRequestReviewRequest } from "../pr-control/types.js";
-import { getWorkspaceStatus, runBootstrap } from "../inception/service.js";
+import {
+  getWorkspaceStatus,
+  runBootstrap,
+  type BootstrapAcceptedResult,
+  type BootstrapExecuteResult,
+  type BootstrapPreview,
+} from "../inception/service.js";
+import type { CreateBootstrapSpecialistFactory } from "../inception/runner.js";
 
 export interface CreateAppOptions {
   ctx: RunContext;
@@ -58,6 +67,8 @@ export interface CreateAppOptions {
   githubRepo?: string;
   manage?: ManageService;
   prControl?: PullRequestControlService;
+  /** Inject inception specialist sessions (tests). */
+  createBootstrapSpecialistFactory?: CreateBootstrapSpecialistFactory;
 }
 
 interface ActiveRunEntry {
@@ -81,6 +92,7 @@ const reactIndex = existsSync(join(reactDir, "index.html"))
 
 export function createApp(opts: CreateAppOptions): Express {
   const { ctx, pr, githubRepo } = opts;
+  const createBootstrapSpecialistFactory = opts.createBootstrapSpecialistFactory;
   const manage = opts.manage ?? new ManageService({
     helixDir: ctx.helixDir,
     config: ctx.config,
@@ -184,7 +196,16 @@ export function createApp(opts: CreateAppOptions): Express {
 
     const rootId = parent.rootRunId ?? parent.id;
     const root = ctx.store.load(rootId) ?? parent;
-    const continuation: RunContinuation = { instruction, externalEventId, trigger };
+    const pullRequestId = parsePositiveInt(body.pullRequestId);
+    const pullRequestHeadBranch =
+      typeof body.pullRequestHeadBranch === "string" ? body.pullRequestHeadBranch.trim() : "";
+    const continuation: RunContinuation = {
+      instruction,
+      externalEventId,
+      trigger,
+      ...(pullRequestId !== undefined ? { pullRequestId } : {}),
+      ...(pullRequestHeadBranch ? { pullRequestHeadBranch } : {}),
+    };
     try {
       const issue = buildContinuationIssue(parent, root, instruction);
       const runId = launchRun(issue, { parentRunId: parent.id, rootRunId: rootId, continuation });
@@ -527,36 +548,100 @@ export function createApp(opts: CreateAppOptions): Express {
     res.json(getWorkspaceStatus(ctx.cwd));
   });
 
-  app.post("/bootstrap", (req: Request, res: Response) => {
+  app.post("/local-prs/merge", async (req: Request, res: Response) => {
+    const body = (req.body ?? {}) as { pullRequest?: Record<string, unknown> };
+    const pr = body.pullRequest;
+    if (!pr || typeof pr !== "object") {
+      res.status(400).json({ error: "pullRequest is required" });
+      return;
+    }
+    const id = Number(pr.id);
+    const title = typeof pr.title === "string" ? pr.title.trim() : "";
+    const repositoryPath = typeof pr.repositoryPath === "string" ? pr.repositoryPath.trim() : "";
+    const baseBranch = typeof pr.baseBranch === "string" ? pr.baseBranch.trim() : "";
+    const headBranch = typeof pr.headBranch === "string" ? pr.headBranch.trim() : "";
+    const headSha = typeof pr.headSha === "string" ? pr.headSha.trim() : "";
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "pullRequest.id must be a positive integer" });
+      return;
+    }
+    if (!title || !baseBranch || !headBranch || !headSha) {
+      res.status(400).json({ error: "pullRequest title, baseBranch, headBranch, and headSha are required" });
+      return;
+    }
+    try {
+      const result = await mergeLocalPullRequest(ctx.cwd, {
+        id,
+        title,
+        repositoryPath: repositoryPath || ctx.cwd,
+        baseBranch,
+        headBranch,
+        headSha,
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(422).json({
+        error: err instanceof Error ? err.message : String(err),
+        repositoryPath: resolve(ctx.cwd),
+      });
+    }
+  });
+
+  app.post("/bootstrap", async (req: Request, res: Response) => {
     try {
       const body = (req.body ?? {}) as {
         exportPath?: unknown;
         dryRun?: unknown;
         execute?: unknown;
+        runAgents?: unknown;
         force?: unknown;
         preset?: unknown;
       };
-      if (typeof body.exportPath !== "string" || !body.exportPath.trim()) {
+      const runAgents = body.runAgents === true;
+      const execute = !runAgents && (body.execute === true || body.dryRun === false);
+      const dryRun = !execute && !runAgents;
+      const exportPath =
+        typeof body.exportPath === "string" && body.exportPath.trim()
+          ? body.exportPath.trim()
+          : undefined;
+
+      if (!runAgents && !exportPath) {
         res.status(400).json({ error: "exportPath is required" });
         return;
       }
-      const execute = body.execute === true || body.dryRun === false;
+
       const status = getWorkspaceStatus(ctx.cwd);
-      if (!status.bootstrap.available) {
+      if (runAgents) {
+        if (!status.bootstrap.canRunAgents && status.bootstrap.state !== "running") {
+          res.status(409).json({ error: status.bootstrap.reason ?? "Bootstrap agents unavailable" });
+          return;
+        }
+      } else if (!status.bootstrap.available) {
         res.status(409).json({ error: status.bootstrap.reason ?? "Bootstrap unavailable" });
         return;
       }
-      const result = runBootstrap({
-        exportPath: body.exportPath.trim(),
+
+      const result = await runBootstrap({
+        exportPath,
         targetDir: ctx.cwd,
         cwd: ctx.cwd,
         helixDir: ctx.helixDir,
         execute,
-        dryRun: !execute,
+        runAgents,
+        dryRun,
         force: body.force === true,
         preset: typeof body.preset === "string" ? body.preset : undefined,
+        provider: ctx.provider,
+        createSpecialistFactory: createBootstrapSpecialistFactory,
+        detachAgents: execute || runAgents,
       });
-      res.status(execute ? 201 : 200).json(result);
+
+      if (dryRun) {
+        res.status(200).json(result as BootstrapPreview);
+        return;
+      }
+      const accepted = result as BootstrapExecuteResult | BootstrapAcceptedResult;
+      res.status(202).json(accepted);
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -699,6 +784,12 @@ function parseLimit(value: unknown, fallback: number): number {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return fallback;
   return Math.min(Math.floor(n), 200);
+}
+
+function parsePositiveInt(value: unknown): number | undefined {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(n) || n <= 0) return undefined;
+  return n;
 }
 
 function findContinuationByEvent(

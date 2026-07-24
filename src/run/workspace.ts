@@ -16,8 +16,15 @@ export interface PreparedRunWorkspace {
   cleanup(): Promise<void>;
 }
 
+export interface PrepareRunWorkspaceInput {
+  runId: string;
+  issue: Issue;
+  /** When set and the branch still exists, continue from its tip instead of branching from main. */
+  reuseBranch?: string;
+}
+
 export interface RunWorkspaceManager {
-  prepare(input: { runId: string; issue: Issue }): Promise<PreparedRunWorkspace>;
+  prepare(input: PrepareRunWorkspaceInput): Promise<PreparedRunWorkspace>;
 }
 
 /**
@@ -33,26 +40,53 @@ export class GitRunWorkspaceManager implements RunWorkspaceManager {
     this.baseBranch = baseBranch;
   }
 
-  async prepare(input: { runId: string; issue: Issue }): Promise<PreparedRunWorkspace> {
+  async prepare(input: PrepareRunWorkspaceInput): Promise<PreparedRunWorkspace> {
     await assertRepository(this.repositoryPath);
     const baseSha = await git(this.repositoryPath, [
       "rev-parse",
       "--verify",
       `${this.baseBranch}^{commit}`,
     ]);
-    const branch = buildBranchName(input.issue, input.runId);
     const temporaryRoot = await mkdtemp(join(tmpdir(), "helix-run-"));
     const cwd = join(temporaryRoot, "repo");
 
+    const reuseBranch = input.reuseBranch?.trim();
+    let branch = buildBranchName(input.issue, input.runId);
+    let startPoint = baseSha;
+    let createBranch = true;
+
+    if (reuseBranch) {
+      try {
+        startPoint = await git(this.repositoryPath, [
+          "rev-parse",
+          "--verify",
+          `${reuseBranch}^{commit}`,
+        ]);
+        branch = reuseBranch;
+        createBranch = false;
+      } catch {
+        // Branch was pruned or never local; fall back to a fresh feature branch.
+      }
+    }
+
     try {
-      await git(this.repositoryPath, [
-        "worktree",
-        "add",
-        "-b",
-        branch,
-        cwd,
-        baseSha,
-      ]);
+      if (createBranch) {
+        await git(this.repositoryPath, [
+          "worktree",
+          "add",
+          "-b",
+          branch,
+          cwd,
+          startPoint,
+        ]);
+      } else {
+        await git(this.repositoryPath, [
+          "worktree",
+          "add",
+          cwd,
+          branch,
+        ]);
+      }
     } catch (error) {
       await rm(temporaryRoot, { recursive: true, force: true });
       throw error;

@@ -91,7 +91,7 @@ The shipped local PR reviewer is **not** a sandbox for hostile contributions. A 
 2. **Fail closed for side effects** — PR, merge, webhooks off unless enabled.
 3. **Same policy for CLI and serve** — one policy object.
 4. **Observable** — emit `gate_blocked` / `policy_denied` (or structured escalation), not silent stalls.
-5. **Layered config** — essentials (`.env` / pi) separate from wiring (`.helix/config.json`) → optional per-run override later.
+5. **Layered config** — essentials (`.helix/.env` / pi) separate from wiring (`.helix/config.json`) and from app secrets (repo-root `.env`) → optional per-run override later.
 
 ### Suggested config sketch (future)
 

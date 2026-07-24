@@ -6,10 +6,11 @@
  * slashes (OpenRouter ids look like `anthropic/claude-sonnet-4`).
  *
  * Essentials resolve in two steps:
- *   1. env / project `.env` (`OPENROUTER_API_KEY`) — always wins
+ *   1. env / `.helix/.env` (`OPENROUTER_API_KEY`) — always wins
  *   2. `~/.pi/agent/auth.json` + `models.json` — operator's global pi install
  *
- * There is no Helix-owned `~/.helix/` secrets/models home.
+ * There is no Helix-owned `~/.helix/` secrets/models home. Repo-root `.env` is
+ * for the application, not Helix.
  */
 import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";

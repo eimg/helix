@@ -2,7 +2,7 @@
 /**
  * helix init [--preset <name>] [--force] [--list]
  * helix run <issue-number> | --title "..." [--body "..."] | --stdin
- * helix bootstrap --export <path> [--target <dir>] [--dry-run|--execute]  # empty-workspace inception
+ * helix bootstrap --export <path> [--target <dir>] [--dry-run|--execute|--run-agents]
  * helix serve [--port 8319]   # M2: HTTP API + web UI + optional GitHub poll
  */
 import { existsSync } from "node:fs";
@@ -46,7 +46,7 @@ function usage(): never {
   helix run <issue-number>                    # fetch from GitHub
   helix run --title "..." [--body "..."]      # inline issue
   helix run --stdin [--title "..."]           # body from stdin
-  helix bootstrap --export <path> [--target <dir>] [--dry-run|--execute]
+  helix bootstrap --export <path> [--target <dir>] [--dry-run|--execute|--run-agents]
                                               # empty-workspace inception; execute creates git + .helix in place
   helix serve [--port <n>]                    # HTTP API + web UI (default 8319; scaffolds empty dirs)`);
   process.exit(2);
@@ -156,7 +156,7 @@ async function cmdRun(args: string[]): Promise<void> {
   const provider = new OpenRouterProvider();
   if (!provider.hasAuth()) {
     console.error(
-      `No OpenRouter API key found. Set OPENROUTER_API_KEY in .env, or configure openrouter in ~/.pi/agent/auth.json.`
+      `No OpenRouter API key found. Set OPENROUTER_API_KEY in .helix/.env, or configure openrouter in ~/.pi/agent/auth.json.`
     );
     process.exit(1);
   }
@@ -279,7 +279,7 @@ async function cmdServe(args: string[]): Promise<void> {
 
   if (!ctx.provider.hasAuth()) {
     console.error(
-      `No OpenRouter API key found. Set OPENROUTER_API_KEY in .env, or configure openrouter in ~/.pi/agent/auth.json.`
+      `No OpenRouter API key found. Set OPENROUTER_API_KEY in .helix/.env, or configure openrouter in ~/.pi/agent/auth.json.`
     );
     process.exit(1);
   }
@@ -354,7 +354,7 @@ async function main(): Promise<void> {
 
   if (args[0] === "bootstrap") {
     try {
-      runBootstrapCommand(parseBootstrapArgs(args.slice(1)));
+      await runBootstrapCommand(parseBootstrapArgs(args.slice(1)));
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exit(1);

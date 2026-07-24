@@ -23,7 +23,7 @@ End-to-end orchestration of a GitHub issue (or inline terminal task) through spe
 | Area | Files |
 |---|---|
 | Engine core | `src/engine/{engine,eventStream,consoleLogger,types}.ts` — `runIssue(issue, deps)` loop; typed `RunEvent` stream; console logger |
-| Config | `src/config.ts` (wiring loader) + `src/config/{env,paths,defaults}.ts` (`.env` + pi essentials) |
+| Config | `src/config.ts` (wiring loader) + `src/config/{env,paths,defaults}.ts` (`.helix/.env` + pi essentials) |
 | Provider | `src/providers/openrouter.ts` — pi `AuthStorage`/`ModelRegistry`; env then `~/.pi/` |
 | Specialists | `src/agents/loader.ts` (frontmatter), `session.ts` (in-process pi sessions), `loaderBuilder.ts` (isolated, run-scoped specialist lanes) |
 | Orchestrator | `src/orchestrator/{workflow,driver,gates,scripted}.ts` — workflow rails + LLM driver (JSON decisions) + deterministic gates |
@@ -37,7 +37,7 @@ End-to-end orchestration of a GitHub issue (or inline terminal task) through spe
 ### Key decisions made during M1 (beyond the original plan)
 
 - **Inline trigger path** — `helix run --title/--stdin` constructs an `Issue` directly, bypassing `Trigger.fetchIssue()`. Proved orchestrator and trigger are independent; automated producers are just other `Issue` sources.
-- **Two-step essentials** — API key and model come from `.env` (wins) or the operator's global pi install (`~/.pi/agent/`). No Helix-owned `~/.helix/` secrets/models home; `config.json` is wiring only.
+- **Two-step essentials** — API key and model come from `.helix/.env` (wins) or the operator's global pi install (`~/.pi/agent/`). Repo-root `.env` is for the app (legacy root `.env` is only a migration fallback). `config.json` is wiring only.
 - **Session isolation** — specialists + orchestrator always set `noExtensions`/`noSkills`/`noContextFiles`/`noThemes`/`noPromptTemplates`. Built-in tools unaffected. Auth/models may still resolve from pi.
 - **LLM orchestrator output contract** — single JSON object (`run`/`done`/`escalate`), parsed defensively; unparseable → escalate (never silently mis-route).
 
@@ -92,7 +92,7 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 | **Config observability** | Config tab + `GET /config/snapshot` — resolved essentials provenance, separate workflow/PR-control agents, delivery-gate activity, and wiring |
 | **Local PR delivery** | Acme-linked successful runs use a host-created isolated worktree/branch; Helix safely commits remaining implementation changes and registers a draft local PR; no push or merge |
 | **Independent local PR control** | Helix-created and trusted external PRs share the separate `/pr-reviews` API, `.helix/pr-reviews.db`, durable lifecycle events, exact-head temporary worktree, concurrent reviewer/verifier, fail-closed host policy, and structured readiness callback |
-| **Inception bootstrap (empty workspace)** | Fixed inception roles/skills, Manage + Config, Prelude pickup, empty-folder entry, CLI + `GET /workspace` / `POST /bootstrap` + Bootstrap UI; nav disables Bootstrap on git and PR Reviews on non-git. Specialist execution next. [→](./inception-bootstrap.md) |
+| **Inception bootstrap (empty workspace)** | Fixed inception roles/skills, Manage + Config, Prelude pickup, empty-folder entry, CLI + `GET /workspace` / `POST /bootstrap` + Bootstrap UI; materialize then architect → scaffolder → validator with job status. [→](./inception-bootstrap.md) |
 
 ---
 

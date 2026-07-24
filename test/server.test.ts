@@ -114,6 +114,8 @@ test("POST /runs/:id/continuations starts a linked fresh run and deduplicates ev
     instruction: "Also cover the regression case",
     externalEventId: "comment:2",
     trigger: "issue.comment",
+    pullRequestId: 44,
+    pullRequestHeadBranch: "helix/issue-1-fix",
   });
   assert.equal(started.status, 202);
   assert.equal(started.body.parentRunId, "parent-run");
@@ -128,6 +130,8 @@ test("POST /runs/:id/continuations starts a linked fresh run and deduplicates ev
     instruction: "Also cover the regression case",
     externalEventId: "comment:2",
     trigger: "issue.comment",
+    pullRequestId: 44,
+    pullRequestHeadBranch: "helix/issue-1-fix",
   });
   assert.match(child?.issue.body ?? "", /Original acceptance criteria/);
   assert.match(child?.issue.body ?? "", /parent result/);

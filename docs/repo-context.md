@@ -42,7 +42,7 @@ Helix intentionally keeps specialists **isolated** (own session, no inter-specia
 
 - Per-issue independence and auditability
 - Stale assumptions after refactors
-- Portability (essentials in `.env` / pi; sessions always isolated)
+- Portability (essentials in `.helix/.env` / pi; app secrets in root `.env`; sessions always isolated)
 
 **Preferred direction:** inject **deterministic or curated artifacts** before the first specialist tool call, and optionally **accumulate** learnings into version-controlled files under `.helix/` — not resume opaque session state.
 

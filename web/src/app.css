@@ -88,6 +88,29 @@ a { color: var(--accent); }
   color: var(--green);
   background: color-mix(in srgb, var(--green) 7%, transparent);
 }
+.agent-run-box {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+.agent-run-box .field { margin: 0; }
+.agent-run-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.agent-run-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.agent-run-row .btn {
+  flex: none;
+  align-self: stretch;
+  white-space: nowrap;
+}
 .bootstrap-kv .kv-row:first-child { border-top: 0; padding-top: 0; }
 .bootstrap-specialists { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
 .bootstrap-specialist-list {
@@ -154,10 +177,40 @@ input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px
 .empty-row { padding: 18px 8px; color: var(--muted); text-align: center; font-size: 12px; }
 
 .status-pill { width: fit-content; min-height: 20px; border: 1px solid var(--border); border-radius: 999px; padding: 2px 7px; color: var(--muted); font: 10px/1.4 var(--mono); text-transform: lowercase; display: inline-flex; align-items: center; white-space: nowrap; }
+.status-pill.pending, .status-pill.skipped, .status-pill.idle { color: var(--muted); border-color: var(--border); background: color-mix(in srgb, var(--muted) 6%, transparent); }
 .status-pill.running, .status-pill.live, .status-pill.reviewing { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); background: var(--accent-soft); }
 .status-pill.done, .status-pill.ready_to_merge, .status-pill.pass, .status-pill.passed { color: var(--green); border-color: color-mix(in srgb, var(--green) 36%, var(--border)); background: color-mix(in srgb, var(--green) 7%, transparent); }
 .status-pill.escalated, .status-pill.interrupted, .status-pill.blocked { color: var(--yellow); border-color: color-mix(in srgb, var(--yellow) 36%, var(--border)); background: color-mix(in srgb, var(--yellow) 7%, transparent); }
 .status-pill.error, .status-pill.changes_requested, .status-pill.fail, .status-pill.failed { color: var(--red); border-color: color-mix(in srgb, var(--red) 36%, var(--border)); background: color-mix(in srgb, var(--red) 7%, transparent); }
+
+.job-role-label { min-width: 0; display: inline-flex; align-items: center; gap: 7px; }
+.job-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+.job-dot-pending,
+.job-dot-skipped {
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+}
+.job-dot-done {
+  background: color-mix(in srgb, var(--green) 70%, transparent);
+}
+.job-dot-failed {
+  background: color-mix(in srgb, var(--red) 75%, transparent);
+}
+.job-pulse {
+  background: var(--accent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: job-pulse 1.4s ease-out infinite;
+}
+@keyframes job-pulse {
+  0% { transform: scale(0.92); box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  70% { transform: scale(1); box-shadow: 0 0 0 8px transparent; }
+  100% { transform: scale(0.92); box-shadow: 0 0 0 0 transparent; }
+}
 
 .log-panel { overflow: hidden; }
 .log-panel > .panel-heading { margin: 0; padding: 14px 17px; border-bottom: 1px solid var(--border); }

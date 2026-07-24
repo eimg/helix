@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { loadConfig } from "../src/config.js";
 import {
   HELIX_MODEL_ENV,
-  loadProjectEnv,
+  loadHelixEnv,
   parseEnvFile,
   resolveModelRef,
 } from "../src/config/env.js";
@@ -28,11 +28,13 @@ QUOTED='single quoted'
   assert.equal(parsed.QUOTED, "single quoted");
 });
 
-test("loadProjectEnv: loads .env into process.env without overriding existing", () => {
+test("loadHelixEnv: loads .helix/.env into process.env without overriding existing", () => {
   const dir = mkdtempSync(join(tmpdir(), "helix-env-"));
+  const helixDir = join(dir, ".helix");
+  mkdirSync(helixDir, { recursive: true });
   writeFileSync(
-    join(dir, ".env"),
-    `OPENROUTER_API_KEY=from-dotenv\nHELIX_MODEL=openrouter/test/model\n`
+    join(helixDir, ".env"),
+    `OPENROUTER_API_KEY=from-dotenv\nHELIX_MODEL=openrouter/test/model\n`,
   );
 
   const priorKey = process.env.OPENROUTER_API_KEY;
@@ -40,7 +42,7 @@ test("loadProjectEnv: loads .env into process.env without overriding existing", 
   process.env.OPENROUTER_API_KEY = "from-shell";
 
   try {
-    loadProjectEnv(dir);
+    loadHelixEnv(helixDir);
     assert.equal(process.env.OPENROUTER_API_KEY, "from-shell");
     assert.equal(process.env[HELIX_MODEL_ENV], "openrouter/test/model");
   } finally {
@@ -51,23 +53,65 @@ test("loadProjectEnv: loads .env into process.env without overriding existing", 
   }
 });
 
-test("resolveModelRef: HELIX_MODEL from .env wins over shipped default", () => {
+test("loadHelixEnv: falls back to repo-root .env when .helix/.env is missing", () => {
+  const dir = mkdtempSync(join(tmpdir(), "helix-env-fallback-"));
+  const helixDir = join(dir, ".helix");
+  mkdirSync(helixDir, { recursive: true });
+  writeFileSync(join(dir, ".env"), "HELIX_MODEL=openrouter/legacy/root-env\n");
+
+  const priorModel = process.env[HELIX_MODEL_ENV];
+  delete process.env[HELIX_MODEL_ENV];
+
+  try {
+    loadHelixEnv(helixDir);
+    assert.equal(process.env[HELIX_MODEL_ENV], "openrouter/legacy/root-env");
+  } finally {
+    if (priorModel === undefined) delete process.env[HELIX_MODEL_ENV];
+    else process.env[HELIX_MODEL_ENV] = priorModel;
+  }
+});
+
+test("loadHelixEnv: prefers .helix/.env over repo-root .env", () => {
+  const dir = mkdtempSync(join(tmpdir(), "helix-env-prefer-"));
+  const helixDir = join(dir, ".helix");
+  mkdirSync(helixDir, { recursive: true });
+  writeFileSync(join(dir, ".env"), "HELIX_MODEL=openrouter/root/should-not-win\nPORT=3000\n");
+  writeFileSync(join(helixDir, ".env"), "HELIX_MODEL=openrouter/helix/wins\n");
+
+  const priorModel = process.env[HELIX_MODEL_ENV];
+  const priorPort = process.env.PORT;
+  delete process.env[HELIX_MODEL_ENV];
+  delete process.env.PORT;
+
+  try {
+    loadHelixEnv(helixDir);
+    assert.equal(process.env[HELIX_MODEL_ENV], "openrouter/helix/wins");
+    assert.equal(process.env.PORT, undefined);
+  } finally {
+    if (priorModel === undefined) delete process.env[HELIX_MODEL_ENV];
+    else process.env[HELIX_MODEL_ENV] = priorModel;
+    if (priorPort === undefined) delete process.env.PORT;
+    else process.env.PORT = priorPort;
+  }
+});
+
+test("resolveModelRef: HELIX_MODEL from .helix/.env wins over shipped default", () => {
   const dir = mkdtempSync(join(tmpdir(), "helix-env-cfg-"));
   const helixDir = join(dir, ".helix");
   mkdirSync(helixDir, { recursive: true });
-  writeFileSync(join(dir, ".env"), "HELIX_MODEL=openrouter/anthropic/claude-sonnet-4\n");
+  writeFileSync(join(helixDir, ".env"), "HELIX_MODEL=openrouter/anthropic/claude-sonnet-4\n");
   writeFileSync(
     join(helixDir, "config.json"),
     JSON.stringify({
       orchestrator: { workflow: ["dev"] },
-    })
+    }),
   );
 
   const priorModel = process.env[HELIX_MODEL_ENV];
   delete process.env[HELIX_MODEL_ENV];
 
   try {
-    loadConfig(helixDir); // loads .env
+    loadConfig(helixDir);
     const resolved = resolveModelRef();
     assert.equal(resolved.value, "openrouter/anthropic/claude-sonnet-4");
     assert.equal(resolved.source, "env");
@@ -84,7 +128,6 @@ test("specialists without frontmatter model inherit default; explicit model is k
   try {
     const fixtureDir = join(import.meta.dirname, "..", "examples", "ts", ".helix");
     const defs = loadSpecialists(join(fixtureDir, "agents"));
-    // presets no longer set model: — they inherit default at session time
     assert.equal(defs.find((d) => d.name === "planner")?.model, undefined);
 
     const withExplicit = [
