@@ -4,14 +4,23 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { resolveInceptionSpecialists } from "../inception/loader.js";
 import { resolvePullRequestSpecialists } from "../pr-control/loader.js";
-import type { ManageInventory, ManageInventoryAgent, ManageInventoryPrAgent, ManageInventorySkill } from "./types.js";
+import type {
+  ManageInventory,
+  ManageInventoryAgent,
+  ManageInventoryInceptionAgent,
+  ManageInventoryPrAgent,
+  ManageInventorySkill,
+} from "./types.js";
 
 export function loadManageInventory(helixDir: string): ManageInventory {
   return {
     agents: listAgents(helixDir),
     prAgents: listPullRequestAgents(helixDir),
-    skills: listSkills(helixDir),
+    inceptionAgents: listInceptionAgents(helixDir),
+    skills: listSkills(helixDir, "skills"),
+    inceptionSkills: listSkills(helixDir, "inception-skills"),
   };
 }
 
@@ -56,8 +65,18 @@ function listPullRequestAgents(helixDir: string): ManageInventoryPrAgent[] {
   }));
 }
 
-function listSkills(helixDir: string): ManageInventorySkill[] {
-  const skillsDir = resolve(helixDir, "skills");
+function listInceptionAgents(helixDir: string): ManageInventoryInceptionAgent[] {
+  return resolveInceptionSpecialists(helixDir).map(({ definition, source }) => ({
+    name: definition.name,
+    description: definition.description,
+    relativePath: join("inception-agents", `${definition.name}.md`),
+    source,
+    model: definition.model,
+  }));
+}
+
+function listSkills(helixDir: string, rootDir: "skills" | "inception-skills"): ManageInventorySkill[] {
+  const skillsDir = resolve(helixDir, rootDir);
   const out: ManageInventorySkill[] = [];
   if (!existsSync(skillsDir)) return out;
 
@@ -71,7 +90,7 @@ function listSkills(helixDir: string): ManageInventorySkill[] {
   }
 
   for (const name of entries) {
-    const relativePath = join("skills", name, "SKILL.md");
+    const relativePath = join(rootDir, name, "SKILL.md");
     if (!existsSync(resolve(helixDir, relativePath))) continue;
     out.push({ name, relativePath });
   }
@@ -91,5 +110,28 @@ export function formatInventoryForPrompt(inventory: ManageInventory): string {
     inventory.prAgents.length === 0
       ? "(none)"
       : inventory.prAgents.map((a) => `- ${a.name}: ${a.description || "(no description)"} [${a.relativePath}; source=${a.source}]`).join("\n");
-  return `## Current workflow agents\n${agentLines}\n\n## Current PR review agents\n${prAgentLines}\n\n## Current skills\n${skillLines}`;
+  const inceptionAgentLines =
+    inventory.inceptionAgents.length === 0
+      ? "(none)"
+      : inventory.inceptionAgents
+          .map((a) => `- ${a.name}: ${a.description || "(no description)"} [${a.relativePath}; source=${a.source}]`)
+          .join("\n");
+  const inceptionSkillLines =
+    inventory.inceptionSkills.length === 0
+      ? "(none)"
+      : inventory.inceptionSkills.map((s) => `- ${s.name} [${s.relativePath}]`).join("\n");
+  return `## Current workflow agents
+${agentLines}
+
+## Current PR review agents
+${prAgentLines}
+
+## Current bootstrap agents (inception-agents)
+${inceptionAgentLines}
+
+## Current skills
+${skillLines}
+
+## Current bootstrap skills (inception-skills)
+${inceptionSkillLines}`;
 }

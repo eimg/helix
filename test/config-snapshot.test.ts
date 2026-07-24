@@ -53,13 +53,25 @@ test("buildConfigSnapshot reports resolved models and provenance", () => {
       ["reviewer", "project"],
       ["verifier", "project"],
     ]);
+    assert.deepEqual(snap.models.inceptionSpecialists.map((item) => [item.name, item.definitionSource]), [
+      ["architect", "project"],
+      ["scaffolder", "project"],
+      ["validator", "project"],
+    ]);
+    assert.deepEqual(snap.inception.roles, ["architect", "scaffolder", "validator"]);
+    assert.equal(snap.inception.skillsAutoLoad, true);
+    assert.ok(snap.inception.skills.some((item) => item.name === "foundation" && item.source === "project"));
+    assert.ok(snap.inception.skillPaths.some((path) => path.endsWith("inception-skills")));
     assert.ok(snap.models.prSpecialists.every((item) => item.model.value === HELIX_DEFAULT_MODEL));
+    assert.ok(snap.models.inceptionSpecialists.every((item) => item.model.value === HELIX_DEFAULT_MODEL));
     assert.ok(snap.workflow.steps.includes("planner"));
     assert.equal(typeof snap.flags.extensionsEnabled, "boolean");
     assert.equal(snap.flags.deliverableLocalPr, true);
     assert.ok(!("inheritPi" in snap.flags));
     assert.ok(!("helixHome" in snap.paths));
     assert.equal(snap.resources.prAgentsDir, resolve(fixtureDir, "pr-agents"));
+    assert.equal(snap.resources.inceptionAgentsDir, resolve(fixtureDir, "inception-agents"));
+    assert.equal(snap.resources.inceptionSkillsDir, resolve(fixtureDir, "inception-skills"));
   } finally {
     if (prev === undefined) delete process.env[HELIX_MODEL_ENV];
     else process.env[HELIX_MODEL_ENV] = prev;
@@ -104,6 +116,14 @@ test("GET /config serves UI and GET /config/snapshot returns JSON", async () => 
   assert.ok(snap.body.models.orchestrator.value);
   assert.ok(Array.isArray(snap.body.models.specialists));
   assert.deepEqual(snap.body.models.prSpecialists.map((item: { name: string }) => item.name), ["reviewer", "verifier"]);
+  assert.deepEqual(
+    snap.body.models.inceptionSpecialists.map((item: { name: string }) => item.name),
+    ["architect", "scaffolder", "validator"],
+  );
+  assert.equal(snap.body.inception.skillsAutoLoad, true);
+  assert.ok(Array.isArray(snap.body.inception.skills));
+  assert.ok(snap.body.inception.skills.some((item: { name: string }) => item.name === "foundation"));
+  assert.ok(Array.isArray(snap.body.inception.skillPaths));
   assert.ok(snap.body.workflow.steps.length >= 1);
   assert.equal(snap.body.provider.apiKeyEnv, "OPENROUTER_API_KEY");
   assert.equal(typeof snap.body.provider.authConfigured, "boolean");
@@ -114,7 +134,7 @@ test("all primary web routes serve the React shell", async () => {
   const ctx = testCtx();
   const app = createApp({ ctx });
 
-  for (const path of ["/", "/reviews", "/manage", "/config"]) {
+  for (const path of ["/", "/bootstrap", "/reviews", "/manage", "/config"]) {
     const page = await request(app).get(path);
     assert.equal(page.status, 200);
     assert.match(page.text, /id="root"/);

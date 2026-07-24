@@ -8,14 +8,26 @@ import type { ManageDraft, ManageDeletion } from "./types.js";
 
 const AGENT_PATH = /^agents\/[a-z0-9-]+\.md$/;
 const PR_AGENT_PATH = /^pr-agents\/(reviewer|verifier)\.md$/;
+const INCEPTION_AGENT_PATH = /^inception-agents\/(architect|scaffolder|validator)\.md$/;
 const SKILL_PATH = /^skills\/[a-z0-9-]+\/SKILL\.md$/;
+const INCEPTION_SKILL_PATH = /^inception-skills\/[a-z0-9-]+\/SKILL\.md$/;
 
-export { AGENT_PATH, PR_AGENT_PATH, SKILL_PATH };
+export { AGENT_PATH, PR_AGENT_PATH, INCEPTION_AGENT_PATH, SKILL_PATH, INCEPTION_SKILL_PATH };
 
 export function validateDraft(draft: ManageDraft, _helixDir: string): string | undefined {
-  if (draft.kind === "agent" || draft.kind === "pr-agent") {
-    const pathPattern = draft.kind === "pr-agent" ? PR_AGENT_PATH : AGENT_PATH;
-    const expectedPath = draft.kind === "pr-agent" ? "pr-agents/(reviewer|verifier).md" : "agents/<name>.md";
+  if (draft.kind === "agent" || draft.kind === "pr-agent" || draft.kind === "inception-agent") {
+    const pathPattern =
+      draft.kind === "pr-agent"
+        ? PR_AGENT_PATH
+        : draft.kind === "inception-agent"
+          ? INCEPTION_AGENT_PATH
+          : AGENT_PATH;
+    const expectedPath =
+      draft.kind === "pr-agent"
+        ? "pr-agents/(reviewer|verifier).md"
+        : draft.kind === "inception-agent"
+          ? "inception-agents/(architect|scaffolder|validator).md"
+          : "agents/<name>.md";
     if (!pathPattern.test(draft.relativePath)) {
       return `Invalid ${draft.kind} path "${draft.relativePath}" (expected ${expectedPath})`;
     }
@@ -29,12 +41,23 @@ export function validateDraft(draft: ManageDraft, _helixDir: string): string | u
         return `PR agent ${draft.relativePath} must use frontmatter name "${role}"`;
       }
     }
+    if (draft.kind === "inception-agent") {
+      const role = draft.relativePath.match(INCEPTION_AGENT_PATH)?.[1];
+      if (frontmatter.name.trim() !== role) {
+        return `Inception agent ${draft.relativePath} must use frontmatter name "${role}"`;
+      }
+    }
     return undefined;
   }
 
-  if (draft.kind === "skill") {
-    if (!SKILL_PATH.test(draft.relativePath)) {
-      return `Invalid skill path "${draft.relativePath}" (expected skills/<name>/SKILL.md)`;
+  if (draft.kind === "skill" || draft.kind === "inception-skill") {
+    const pathPattern = draft.kind === "inception-skill" ? INCEPTION_SKILL_PATH : SKILL_PATH;
+    const expectedPath =
+      draft.kind === "inception-skill"
+        ? "inception-skills/<name>/SKILL.md"
+        : "skills/<name>/SKILL.md";
+    if (!pathPattern.test(draft.relativePath)) {
+      return `Invalid ${draft.kind} path "${draft.relativePath}" (expected ${expectedPath})`;
     }
     if (!draft.content.trim()) return `Skill ${draft.relativePath} is empty`;
     return undefined;
@@ -93,8 +116,14 @@ export function validateDeletion(deletion: ManageDeletion): string | undefined {
   if (deletion.kind === "pr-agent" && !PR_AGENT_PATH.test(deletion.relativePath)) {
     return `Invalid pr-agent delete path "${deletion.relativePath}"`;
   }
+  if (deletion.kind === "inception-agent" && !INCEPTION_AGENT_PATH.test(deletion.relativePath)) {
+    return `Invalid inception-agent delete path "${deletion.relativePath}"`;
+  }
   if (deletion.kind === "skill" && !SKILL_PATH.test(deletion.relativePath)) {
     return `Invalid skill delete path "${deletion.relativePath}"`;
+  }
+  if (deletion.kind === "inception-skill" && !INCEPTION_SKILL_PATH.test(deletion.relativePath)) {
+    return `Invalid inception-skill delete path "${deletion.relativePath}"`;
   }
   return undefined;
 }

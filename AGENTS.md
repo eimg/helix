@@ -9,7 +9,7 @@ This file is an entrypoint, not the full specification. Follow the linked docs w
 | Project | Local path | Responsibility |
 |---|---|---|
 | Primer | `~/Desktop/acme/primer` | Knowledge product and fictional Acme evidence corpus; outside the Issues → Helix runtime loop. |
-| Prelude | `~/Desktop/acme/prelude` | Project inception drafting and bootstrap artifact export for a future Helix empty-workspace runtime. |
+| Prelude | `~/Desktop/acme/prelude` | Project inception drafting and bootstrap artifact export for Helix empty-workspace bootstrap. |
 | Helix | `~/Desktop/acme/helix` | Agent workflow control plane that receives work and orchestrates changes. |
 | Acme Issues | `~/Desktop/acme/acme-issues` | Local issue and PR management surface that triggers Helix and receives callbacks. |
 | Acme Projects | `~/Desktop/acme/acme-projects` | Feature-idea and collaboration board for existing Helix repos; can manually create non-triggering issues through Acme Issues. |
@@ -19,7 +19,7 @@ Existing-repo runtime flow: Acme Issues → Helix → Acme Todo, followed by a H
 
 Manual feature handoff: Acme Projects ready card → linked Acme Issues issue without the configured trigger label; a human adds that label in Acme Issues to start Helix. Automatic trigger and later PR/card projections remain planned. Acme Projects does not call Helix directly; see the Project-board handoff in [`docs/vision.md`](./docs/vision.md#project-board-handoff).
 
-New-project path: Prelude drafts inception and exports `prelude.bootstrap.v1` under its local data directory. Helix will own future bootstrap execution that consumes those exports; do not add a Prelude → Helix trigger path today.
+New-project path: Prelude drafts inception and exports `prelude.bootstrap.v1`. Helix owns empty-workspace inception (`helix bootstrap --export … --execute` or `helix serve` then bootstrap): no prior git host; target defaults to cwd; execute creates git + `.helix` in place. Fixed `architect` / `scaffolder` / `validator` under `.helix/inception-agents/` (package presets until overrides exist). Do not add a Prelude → Helix trigger. See [`docs/inception-bootstrap.md`](./docs/inception-bootstrap.md).
 
 ## Read first
 
@@ -30,6 +30,7 @@ New-project path: Prelude drafts inception and exports `prelude.bootstrap.v1` un
 - [`docs/guardrails.md`](./docs/guardrails.md) — current safety mechanisms and the proposed policy/escalation model.
 - [`docs/repo-context.md`](./docs/repo-context.md) — repository bootstrap, run-scoped session reuse, structured handoffs, and future memory work.
 - [`docs/manage.md`](./docs/manage.md) — the separate experimental agent/skill authoring surface.
+- [`docs/inception-bootstrap.md`](./docs/inception-bootstrap.md) — empty-workspace bootstrap from Prelude exports (fixed roles; first pass).
 
 Read only the relevant detailed docs, but read `architecture.md` before changing runtimes, session ownership, persistence, tools, orchestration, or deployment assumptions.
 
@@ -40,6 +41,7 @@ Read only the relevant detailed docs, but read `architecture.md` before changing
 - **Own the control plane, not the agent loop:** Helix owns product modes, orchestration, gates, policy, identity/channel mapping, memory strategy, durable jobs, and presentation. Pi owns provider/model execution, tool continuation, sessions, transcripts, compaction, skills, extensions, and resource loading.
 - **Two product modes:** coding workflow runs are goal-oriented and may use isolated specialists; assistant conversations are long-lived Pi threads and should use specialists only when decomposition is genuinely useful.
 - **Separate PR lifecycle:** local implementation workflows use `planner → dev`, register a clean committed feature branch as an Acme local PR, and stop. Independent PR control uses `.helix/pr-agents/{reviewer,verifier}.md`, exact-SHA temporary worktrees, its own SQLite state, and structured callbacks for both Helix-created and external PRs. It reports readiness; humans merge. The GitHub auto-merge pipeline remains provisional.
+- **Separate inception bootstrap:** empty-workspace work uses `.helix/inception-agents/{architect,scaffolder,validator}.md` and `.helix/inception-skills/` (auto-loaded into bootstrap sessions), not implementation or PR specialists. Optional order is `config.inception.roles`.
 - **Explicit safety:** prompt instructions are not hard guardrails. Enforce consequential restrictions at engine, session/tool, deliverable, or host boundaries.
 
 ## Current runtime invariants
@@ -48,7 +50,7 @@ Read only the relevant detailed docs, but read `architecture.md` before changing
 - The engine is independent of Express; CLI and server are consumers of the same run API.
 - The orchestrator combines workflow rails, an LLM decision, and deterministic gates.
 - Specialists are isolated from one another. Each named specialist lane reuses one in-memory Pi session within a run; compact `RunKnowledgeEntry` values cross lane boundaries.
-- Global Pi skills, extensions, context files, prompts, and themes are not inherited. Repo-local `.helix/skills/` are loaded explicitly; `.helix/extensions/` are opt-in.
+- Global Pi skills, extensions, context files, prompts, and themes are not inherited. Repo-local `.helix/skills/` load into run/PR sessions; `.helix/inception-skills/` load into bootstrap sessions; `.helix/extensions/` are opt-in.
 - Default run state is SQLite at `.helix/runs.db`; legacy JSON runs are import-only compatibility state.
 - Full completed orchestrator and specialist responses are durable. High-volume token deltas are live-only.
 - Web runs stream orchestrator and specialist output through SSE. The direct CLI intentionally remains a compact event/preview renderer unless an explicit streaming mode is added.

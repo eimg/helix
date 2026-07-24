@@ -15,7 +15,7 @@ Helix is one of six related projects. They remain separate products with separat
 | Project | Role |
 |---|---|
 | **[Primer](https://github.com/eimg/primer)** | Knowledge product and fictional Acme evidence corpus; not currently part of the Issues → Helix runtime loop. |
-| **[Prelude](https://github.com/eimg/prelude)** | Project inception workspace; drafts freeform docs and exports bootstrap artifacts for a future Helix empty-workspace runtime. |
+| **[Prelude](https://github.com/eimg/prelude)** | Project inception workspace; drafts freeform docs and exports bootstrap artifacts for Helix empty-workspace bootstrap. |
 | **[Helix](https://github.com/eimg/helix)** | Agent workflow control plane that receives work and orchestrates changes. |
 | **[Acme Issues](https://github.com/eimg/acme-issues)** | Local issue and PR management surface that triggers Helix and receives callbacks. |
 | **[Acme Projects](https://github.com/eimg/acme-projects)** | Feature-idea and collaboration board for existing Helix repos; can manually create non-triggering issues through Acme Issues. |
@@ -23,7 +23,7 @@ Helix is one of six related projects. They remain separate products with separat
 
 Existing-repo exercise: Acme Issues triggers Helix, Helix works on Acme Todo, and Helix callbacks update Acme Issues. Acme Projects can create a thin linked issue without triggering Helix; a human adds the configured trigger label to start that flow. Automatic trigger and card lifecycle callbacks remain planned. Acme Projects will not call Helix directly; see [`docs/vision.md`](./docs/vision.md#project-board-handoff).
 
-New-project path: Prelude owns inception drafting and exports `prelude.bootstrap.v1` artifacts under its local data directory. A future Helix bootstrap capability will consume those exports; Prelude does not call Helix today. Primer may supply evidence to Prelude over HTTP and remains outside the Issues → Helix loop.
+New-project path: Prelude owns inception drafting and exports `prelude.bootstrap.v1` artifacts. Helix owns empty-workspace bootstrap (`helix bootstrap --export …` dry-run/execute, or `helix serve` then Bootstrap UI): creates git + `.helix` in place with fixed `architect` / `scaffolder` / `validator` specialists; inception skills auto-load into bootstrap sessions. Specialist LLM execution after materialize is next. Prelude does not call Helix. Primer may supply evidence to Prelude over HTTP and remains outside the Issues → Helix loop.
 
 ## Requirements
 
@@ -207,9 +207,10 @@ helix serve
 | Surface | URL | Notes |
 |--------|-----|--------|
 | Run console | `/` | Form, live log, cached run history, and delete |
-| PR Reviews | `/reviews` | Active exact-SHA reviews, durable history, lifecycle progress, findings, and checks |
-| Manage | `/manage` | Experimental agent/skill authoring and default-workflow ordering (web/API only) |
-| Config | `/config` | Resolved runtime settings, workflow and PR-control resources, and provenance |
+| PR Reviews | `/reviews` | Active exact-SHA reviews, durable history, lifecycle progress, findings, and checks; nav disabled until git exists |
+| Bootstrap | `/bootstrap` | Empty-workspace Prelude pickup (dry-run / execute); shows specialists and auto-loaded skills; nav disabled once git exists |
+| Manage | `/manage` | Experimental authoring for run, PR, and bootstrap agents/skills plus default-workflow ordering (web/API only) |
+| Config | `/config` | Resolved runtime settings including workflow, PR control, and bootstrap resources/provenance |
 | API | `/runs`, `/runs/:id/events`, … | JSON + SSE |
 
 Default port **8319** (phone-keypad mnemonic for HELIX). Override with `--port` or `PORT`.
@@ -268,23 +269,37 @@ The parent must be `done` or `escalated`. Helix returns the existing child for a
 
 ```
 .helix/
-  config.json       # workflow wiring, triggers, mergeGate, repoContext
-  agents/*.md       # implementation specialists (default: planner, dev)
-  pr-agents/*.md    # independent PR specialists (default: reviewer, verifier)
+  config.json              # workflow wiring, inception roles, triggers, mergeGate, repoContext
+  agents/*.md              # implementation specialists (default: planner, dev)
+  pr-agents/*.md           # independent PR specialists (default: reviewer, verifier)
+  inception-agents/*.md    # empty-workspace specialists (architect, scaffolder, validator)
   skills/*/SKILL.md
-  context/*.md      # optional curated notes (Phase A bootstrap)
-  runs.db           # SQLite run state (gitignored)
-  pr-reviews.db     # SQLite PR-control state (gitignored)
-  runs/             # legacy JSON import source (gitignored)
+  inception-skills/*/SKILL.md
+  context/*.md             # optional curated notes (Phase A bootstrap)
+  runs.db                  # SQLite run state (gitignored)
+  pr-reviews.db            # SQLite PR-control state (gitignored)
+  runs/                    # legacy JSON import source (gitignored)
 ```
 
-The `reviewer` and `verifier` files are copied from Helix’s shipped PR presets during initialization. Config and Manage therefore report them as `project` definitions once copied. If a project-local PR definition is absent, Helix resolves the corresponding shipped `built in` fallback instead.
+The `reviewer` / `verifier` and inception `architect` / `scaffolder` / `validator` files are copied from Helix’s shipped presets during initialization. Config and Manage therefore report them as `project` definitions once copied. If a project-local definition is absent, Helix resolves the corresponding shipped `built in` fallback instead. Bootstrap sessions auto-load `.helix/inception-skills/` (package presets when the project pack is empty); run/PR sessions load `.helix/skills/`.
+
+Inception bootstrap (empty-workspace entry — no prior git required; target
+defaults to the current folder; `--execute` creates git + `.helix` in place):
+
+```bash
+mkdir my-app && cd my-app
+helix bootstrap --export /path/to/prelude/data/exports/<id>/v<n> --dry-run
+helix bootstrap --export /path/to/prelude/data/exports/<id>/v<n> --execute
+# or: helix serve   # scaffolds .helix; then bootstrap --execute for git
+```
+
+See [`docs/inception-bootstrap.md`](./docs/inception-bootstrap.md).
 
 Useful knobs:
 
 - **`.env`** — essentials: `OPENROUTER_API_KEY`, `HELIX_MODEL` (default: `openrouter/xiaomi/mimo-v2.5-pro`). Loaded from project root; shell exports win. If the API key is unset, Helix falls back to `~/.pi/agent/auth.json`.
-- **`config.json`** — wiring only: `workflow`, `maxIterations`, `mergeGate`, `deliverable`, `triggers`, `repoContext`, `extensions`
-- The Manage tab can author workflow agents, PR-review agents, and skills. It can also add, remove, and reorder agents in the default implementation workflow; PR control remains the fixed concurrent `reviewer + verifier` pair. New runs and reviews reload saved definitions without restarting the server.
+- **`config.json`** — wiring only: `workflow`, `inception.roles`, `maxIterations`, `mergeGate`, `deliverable`, `triggers`, `repoContext`, `extensions`
+- The Manage tab can author workflow agents, PR-review agents, bootstrap agents, and both skill packs. It can also add, remove, and reorder agents in the default implementation workflow; PR control remains the fixed concurrent `reviewer + verifier` pair; bootstrap uses the fixed role set with optional `inception.roles` order. New runs and reviews reload saved definitions without restarting the server.
 - **`agents/*.md`** — optional per-specialist `model:` in frontmatter (overrides the default for that agent only)
 - `repoContext.enabled` (default `true`) — deterministic repo bootstrap injected once into every cold specialist session
 - `deliverable.localPr` (default `true`) — create an isolated implementation branch/worktree, safely finalize its commit, and register a draft PR with the linked local tracker
@@ -292,7 +307,7 @@ Useful knobs:
 - `deliverable.pr` (default `false`) — opt into GitHub PR create/merge via `gh` after successful runs
 - `mergeGate` — size-based GitHub delivery thresholds (only applies when `deliverable.pr` is true; it does not perform verification)
 
-Vision: [`docs/vision.md`](./docs/vision.md) · architecture: [`docs/architecture.md`](./docs/architecture.md) · milestones: [`docs/plan.md`](./docs/plan.md) · Manage: [`docs/manage.md`](./docs/manage.md) · cold-start: [`docs/repo-context.md`](./docs/repo-context.md) · guardrails/escalation: [`docs/guardrails.md`](./docs/guardrails.md)
+Vision: [`docs/vision.md`](./docs/vision.md) · architecture: [`docs/architecture.md`](./docs/architecture.md) · milestones: [`docs/plan.md`](./docs/plan.md) · Manage: [`docs/manage.md`](./docs/manage.md) · inception: [`docs/inception-bootstrap.md`](./docs/inception-bootstrap.md) · cold-start: [`docs/repo-context.md`](./docs/repo-context.md) · guardrails/escalation: [`docs/guardrails.md`](./docs/guardrails.md)
 
 ## GitHub paths (optional)
 

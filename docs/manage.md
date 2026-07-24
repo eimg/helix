@@ -15,7 +15,9 @@ Manage is a separate surface from the issue orchestration loop (`helix run` / Ru
 | **Manage (HTTP API)** | Shipped | `POST /manage/sessions`, … |
 | **Manage (CLI)** | **Not implemented** | — |
 
-Manage never executes the implementation workflow (`planner → dev`) or the separate PR-control workflow (`reviewer + verifier`).
+Manage never executes the implementation workflow (`planner → dev`), the separate
+PR-control workflow (`reviewer + verifier`), or inception bootstrap
+(`architect → scaffolder → validator`).
 
 ---
 
@@ -30,13 +32,14 @@ Capabilities today:
 
 - Create or update `.helix/agents/*.md`
 - Create or update `.helix/pr-agents/*.md` for the fixed PR-control `reviewer` and `verifier` roles
-- Create or update `.helix/skills/<name>/SKILL.md`
-- Propose deletions (skills and project PR agents anytime; workflow agents only with force)
-- List workflow agents, effective PR-review agents, and skills in the inventory panel
+- Create or update `.helix/inception-agents/*.md` for the fixed bootstrap `architect`, `scaffolder`, and `validator` roles
+- Create or update `.helix/skills/<name>/SKILL.md` and `.helix/inception-skills/<name>/SKILL.md`
+- Propose deletions (skills and project PR/bootstrap agents anytime; workflow agents only with force)
+- List workflow agents, PR review agents, bootstrap agents, and skills in the inventory panel (same authoring path for all three specialist families)
 - Add any repo agent to the default workflow, remove it, or move it up/down
 - Save the workflow directly to `.helix/config.json`; new runs reload workflow and agent files without a server restart
 
-The workflow editor intentionally exposes only the ordered default implementation sequence. PR control has no configurable workflow today: it resolves the fixed `reviewer` and `verifier` roles and runs them concurrently. The inventory shows whether each effective PR role comes from a project definition or the built-in fallback. `helix init` copies the shipped PR presets into `.helix/pr-agents/`, so newly initialized projects report those active copies as `project`; deleting a project copy exposes the corresponding `built in` fallback. Asking Manage to change a built-in PR role creates a project override under `.helix/pr-agents/`.
+The workflow editor intentionally exposes only the ordered default implementation sequence. PR control has no free-form workflow today: it resolves the fixed `reviewer` and `verifier` roles and runs them concurrently. Bootstrap likewise uses fixed roles; optional order lives in `config.json` `inception.roles` (not a Manage drag-and-drop editor yet). The inventory shows whether each effective PR or bootstrap role comes from a project definition or the built-in fallback. `helix init` copies the shipped PR and bootstrap presets into `.helix/`, so newly initialized projects report those active copies as `project`; deleting a project copy exposes the corresponding `built in` fallback. Asking Manage to change a built-in PR or bootstrap role creates a project override under the matching directory. Bootstrap specialist sessions auto-load `.helix/inception-skills/` (package presets when the project pack is empty).
 
 GitHub delivery thresholds and delivery policy remain advanced wiring in `config.json`. They do not perform verification. The implementation sequence is a rail: the orchestrator may still skip, reorder, retry, or parallelize specialists when appropriate; `maxIterations` is the hard bound on recovery attempts.
 
@@ -52,7 +55,9 @@ Workflow editing is local and needs no model credentials. Prompt-based agent/ski
 |--------|------|---------|
 | `GET` | `/manage/agents` | List workflow agents |
 | `GET` | `/manage/pr-agents` | List effective PR-review agents and their source |
-| `GET` | `/manage/skills` | List skills |
+| `GET` | `/manage/inception-agents` | List effective bootstrap agents and their source |
+| `GET` | `/manage/skills` | List run skills |
+| `GET` | `/manage/inception-skills` | List bootstrap skills |
 | `GET` | `/manage/workflow` | Read the ordered default workflow |
 | `PUT` | `/manage/workflow` | Replace it with `{ "steps": ["planner", "dev"] }` |
 | `POST` | `/manage/sessions` | `{ "prompt": "..." }` → start session |
@@ -92,7 +97,7 @@ The CLI should call the same `ManageService` / API as the web UI — no second c
 
 - Meta agent **proposes** changes as JSON (`drafts`, `deletions`); it does not write or delete directly.
 - Operator must click **Apply** (web) or `POST .../apply` (API).
-- Paths restricted to `.helix/agents/`, `.helix/pr-agents/`, and `.helix/skills/`.
+- Paths restricted to `.helix/agents/`, `.helix/pr-agents/`, `.helix/inception-agents/`, `.helix/skills/`, and `.helix/inception-skills/`.
 - Agents listed in `config.orchestrator.workflow` cannot be deleted unless `force: true`; normally remove them in the workflow editor first.
 - Workflow saves require at least one unique agent and reject names without a matching repo agent definition.
 - Each run captures its starting workflow/resources. Manage changes affect new runs, not runs already in progress.

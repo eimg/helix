@@ -1,14 +1,30 @@
 {
-  "extensions": { "enabled": false },
-  "repoContext": { "enabled": true },
-  "deliverable": { "pr": false },
+  "extensions": {
+    "enabled": false
+  },
+  "repoContext": {
+    "enabled": true
+  },
+  "deliverable": {
+    "pr": false
+  },
   "orchestrator": {
-    "workflow": ["planner", "dev"],
+    "workflow": [
+      "planner",
+      "dev"
+    ],
     "maxIterations": 6
   },
   "mergeGate": {
     "autoMerge": true,
     "maxDiffLines": 300,
     "maxFiles": 10
+  },
+  "inception": {
+    "roles": [
+      "architect",
+      "scaffolder",
+      "validator"
+    ]
   }
 }

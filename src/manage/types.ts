@@ -24,7 +24,7 @@ export interface ManageMessage {
 }
 
 export interface ManageDraft {
-  kind: "agent" | "pr-agent" | "skill";
+  kind: "agent" | "pr-agent" | "inception-agent" | "skill" | "inception-skill";
   /** Path relative to `.helix/` — e.g. `agents/dev.md`, `pr-agents/verifier.md`, or `skills/foo/SKILL.md`. */
   relativePath: string;
   content: string;
@@ -32,7 +32,7 @@ export interface ManageDraft {
 
 /** Explicit delete proposal — applied only after operator confirms Apply. */
 export interface ManageDeletion {
-  kind: "agent" | "pr-agent" | "skill";
+  kind: "agent" | "pr-agent" | "inception-agent" | "skill" | "inception-skill";
   /** Path relative to `.helix/` — same rules as drafts. */
   relativePath: string;
 }
@@ -65,10 +65,17 @@ export interface ManageInventoryPrAgent extends ManageInventoryAgent {
   model?: string;
 }
 
+export interface ManageInventoryInceptionAgent extends ManageInventoryAgent {
+  source: "project" | "built_in";
+  model?: string;
+}
+
 export interface ManageInventory {
   agents: ManageInventoryAgent[];
   prAgents: ManageInventoryPrAgent[];
+  inceptionAgents: ManageInventoryInceptionAgent[];
   skills: ManageInventorySkill[];
+  inceptionSkills: ManageInventorySkill[];
 }
 
 export interface ManageAuthorTurn {

@@ -10,11 +10,19 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { RepoContextOptions } from "./context/bootstrap.js";
 import { loadProjectEnv, repoRootFromHelixDir } from "./config/env.js";
+import { normalizeInceptionRoles, type InceptionRole } from "./inception/roles.js";
 
 export interface HelixConfig {
   orchestrator: {
     workflow: string[]; // specialist names, default order
     maxIterations?: number;
+  };
+  /**
+   * Empty-workspace inception bootstrap. Fixed roles may be reordered only;
+   * Manage edits prompts under `.helix/inception-agents/`.
+   */
+  inception?: {
+    roles: InceptionRole[];
   };
   /**
    * Repo-local extensions (arbitrary in-process code). OFF by default for
@@ -58,6 +66,7 @@ export interface HelixConfig {
 
 const DEFAULTS: Partial<HelixConfig> = {
   orchestrator: { workflow: ["planner", "dev"], maxIterations: 6 },
+  inception: { roles: normalizeInceptionRoles(undefined) },
   extensions: { enabled: false },
   repoContext: { enabled: true },
   deliverable: { pr: false, localPr: true, baseBranch: "main" },
@@ -78,6 +87,13 @@ export function loadConfig(helixDir = resolve(process.cwd(), ".helix")): HelixCo
     orchestrator: {
       workflow: parsed.orchestrator?.workflow ?? DEFAULTS.orchestrator!.workflow!,
       maxIterations: parsed.orchestrator?.maxIterations ?? DEFAULTS.orchestrator!.maxIterations,
+    },
+    inception: {
+      roles: normalizeInceptionRoles(
+        parsed.inception && typeof parsed.inception === "object"
+          ? (parsed.inception as { roles?: unknown }).roles
+          : undefined,
+      ),
     },
     extensions: {
       enabled: parsed.extensions?.enabled ?? DEFAULTS.extensions!.enabled!,

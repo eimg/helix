@@ -14,7 +14,7 @@ export function applyDeletions(
     const abs = resolveDraftPath(helixDir, deletion.relativePath);
     if (!abs) return { ok: false, errors: [`Path escapes .helix/: ${deletion.relativePath}`] };
 
-    if (deletion.kind === "skill") {
+    if (deletion.kind === "skill" || deletion.kind === "inception-skill") {
       const skillDir = dirname(abs);
       rmSync(skillDir, { recursive: true, force: true });
       deleted.push(deletion.relativePath.replace(/\/SKILL\.md$/, "/"));

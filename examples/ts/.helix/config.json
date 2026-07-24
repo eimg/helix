@@ -1,9 +1,20 @@
 {
-  "extensions": { "enabled": false },
-  "repoContext": { "enabled": true },
-  "deliverable": { "pr": false, "localPr": true, "baseBranch": "main" },
+  "extensions": {
+    "enabled": false
+  },
+  "repoContext": {
+    "enabled": true
+  },
+  "deliverable": {
+    "pr": false,
+    "localPr": true,
+    "baseBranch": "main"
+  },
   "orchestrator": {
-    "workflow": ["planner", "dev"],
+    "workflow": [
+      "planner",
+      "dev"
+    ],
     "maxIterations": 6
   },
   "triggers": {
@@ -18,5 +29,12 @@
     "autoMerge": true,
     "maxDiffLines": 300,
     "maxFiles": 10
+  },
+  "inception": {
+    "roles": [
+      "architect",
+      "scaffolder",
+      "validator"
+    ]
   }
 }

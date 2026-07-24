@@ -22,6 +22,8 @@ export interface InitOptions {
   preset?: string; // stack skill to copy (default "typescript")
   force?: boolean;
   list?: boolean;
+  /** Project root to scaffold. Defaults to `process.cwd()`. */
+  cwd?: string;
 }
 
 const PRESETS = ["typescript", "express", "react", "react-native", "expo"];
@@ -33,6 +35,9 @@ const CONFIG_TEMPLATE = `{
   "orchestrator": {
     "workflow": ["planner", "dev"],
     "maxIterations": 6
+  },
+  "inception": {
+    "roles": ["architect", "scaffolder", "validator"]
   },
   "mergeGate": {
     "autoMerge": true,
@@ -67,7 +72,7 @@ export function init(opts: InitOptions = {}): void {
     throw new Error(`Unknown preset: ${preset}. Available: ${PRESETS.join(", ")}`);
   }
 
-  const cwd = process.cwd();
+  const cwd = resolve(opts.cwd ?? process.cwd());
   const helixDir = resolve(cwd, ".helix");
   const configPath = resolve(helixDir, "config.json");
 
@@ -108,6 +113,27 @@ export function init(opts: InitOptions = {}): void {
     prAgentCount++;
   }
   console.log(`✓ wrote .helix/pr-agents/ (${prAgentCount} PR-control specialists)`);
+
+  // Inception bootstrap specialists (fixed roles; separate from run + PR).
+  const inceptionAgentsSrc = resolve(pkgRoot, "presets", "inception-agents");
+  const inceptionAgentsDir = resolve(helixDir, "inception-agents");
+  mkdirSync(inceptionAgentsDir, { recursive: true });
+  let inceptionAgentCount = 0;
+  for (const name of ["architect.md", "scaffolder.md", "validator.md"]) {
+    const src = join(inceptionAgentsSrc, name);
+    if (!existsSync(src)) continue;
+    copyFileSync(src, join(inceptionAgentsDir, name));
+    inceptionAgentCount++;
+  }
+  console.log(`✓ wrote .helix/inception-agents/ (${inceptionAgentCount} inception specialists)`);
+
+  const inceptionSkillSrc = resolve(pkgRoot, "presets", "inception-skills", "foundation", "SKILL.md");
+  const inceptionSkillDstDir = resolve(helixDir, "inception-skills", "foundation");
+  if (existsSync(inceptionSkillSrc)) {
+    mkdirSync(inceptionSkillDstDir, { recursive: true });
+    copyFileSync(inceptionSkillSrc, resolve(inceptionSkillDstDir, "SKILL.md"));
+    console.log("✓ wrote .helix/inception-skills/foundation/SKILL.md");
+  }
 
   // 3. skills/<preset>/SKILL.md
   const skillDst = resolve(helixDir, "skills", preset);

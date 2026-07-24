@@ -2,8 +2,10 @@
 /**
  * helix init [--preset <name>] [--force] [--list]
  * helix run <issue-number> | --title "..." [--body "..."] | --stdin
+ * helix bootstrap --export <path> [--target <dir>] [--dry-run|--execute]  # empty-workspace inception
  * helix serve [--port 8319]   # M2: HTTP API + web UI + optional GitHub poll
  */
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadConfig, githubPrEnabled, localPrEnabled } from "./config.js";
 import { resolveModelRef } from "./config/env.js";
@@ -35,6 +37,8 @@ import { GitPullRequestWorkspace } from "./pr-control/workspace.js";
 import { LocalPullRequestDeliverablePipeline } from "./deliverable/localPullRequest.js";
 import { GitRunWorkspaceManager } from "./run/workspace.js";
 import { loadPullRequestSpecialists } from "./pr-control/loader.js";
+import { parseBootstrapArgs, runBootstrapCommand } from "./inception/command.js";
+import { ensureInceptionScaffold } from "./inception/workspace.js";
 
 function usage(): never {
   console.error(`Usage:
@@ -42,7 +46,9 @@ function usage(): never {
   helix run <issue-number>                    # fetch from GitHub
   helix run --title "..." [--body "..."]      # inline issue
   helix run --stdin [--title "..."]           # body from stdin
-  helix serve [--port <n>]                    # HTTP API + web UI (default 8319)`);
+  helix bootstrap --export <path> [--target <dir>] [--dry-run|--execute]
+                                              # empty-workspace inception; execute creates git + .helix in place
+  helix serve [--port <n>]                    # HTTP API + web UI (default 8319; scaffolds empty dirs)`);
   process.exit(2);
 }
 
@@ -207,36 +213,54 @@ async function cmdRun(args: string[]): Promise<void> {
 
 async function cmdServe(args: string[]): Promise<void> {
   const { port } = parseServeArgs(args);
-  const helixDir = findHelixDir();
+  const cwd = process.cwd();
+  let helixDir = findHelixDir(cwd);
+
+  // Empty-workspace inception entry: scaffold .helix from presets (no git yet).
+  if (!existsSync(resolve(helixDir, "config.json"))) {
+    try {
+      const scaffold = ensureInceptionScaffold(cwd);
+      helixDir = scaffold.helixDir;
+      if (scaffold.created) {
+        console.log(`Inception: scaffolded ${helixDir} in empty workspace (git is created by helix bootstrap --execute).`);
+      }
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+  }
+
   const config = loadConfig(helixDir);
   const repo = config.triggers?.github?.repo;
   const prEnabled = githubPrEnabled(config);
   const localPullRequestEnabled = localPrEnabled(config);
+  const gitReady = existsSync(resolve(cwd, ".git"));
 
   if (prEnabled && !repo) {
     console.error('config: deliverable.pr is true but triggers.github.repo is missing.');
     process.exit(1);
   }
 
-  const pr = prEnabled ? new GhPullRequestCreator({ cwd: process.cwd(), repo }) : undefined;
+  const pr = prEnabled ? new GhPullRequestCreator({ cwd, repo }) : undefined;
   const deliverable = prEnabled && pr
     ? new DefaultDeliverablePipeline({
-        git: new ShellGitContext({ cwd: process.cwd() }),
+        git: new ShellGitContext({ cwd }),
         pr,
         repo,
       })
-    : localPullRequestEnabled
+    : localPullRequestEnabled && gitReady
       ? new LocalPullRequestDeliverablePipeline({
-          cwd: process.cwd(),
+          cwd,
           baseBranch: config.deliverable?.baseBranch,
         })
     : new NoOpDeliverablePipeline();
 
   const ctx = createRunContext({
     helixDir,
+    cwd,
     deliverable,
-    workspace: localPullRequestEnabled
-      ? new GitRunWorkspaceManager(process.cwd(), config.deliverable?.baseBranch)
+    workspace: localPullRequestEnabled && gitReady
+      ? new GitRunWorkspaceManager(cwd, config.deliverable?.baseBranch)
       : undefined,
   });
   const prControlSpecialists = loadPullRequestSpecialists(helixDir);
@@ -244,9 +268,9 @@ async function cmdServe(args: string[]): Promise<void> {
     store: new SqlitePullRequestReviewStore(resolve(helixDir, "pr-reviews.db")),
     workspace: new GitPullRequestWorkspace(ctx.cwd),
     specialists: prControlSpecialists,
-    createSessionFactory: (cwd) =>
+    createSessionFactory: (sessionCwd) =>
       new PiSpecialistSessionFactory(ctx.provider, prControlSpecialists, {
-        cwd,
+        cwd: sessionCwd,
         helixDir: ctx.helixDir,
         defaultModel: ctx.model,
         extensions: ctx.config.extensions,
@@ -266,11 +290,16 @@ async function cmdServe(args: string[]): Promise<void> {
   }
 
   startServer({ ctx, pr, githubRepo: repo, prControl, port, host: "127.0.0.1" });
+  if (!gitReady) {
+    console.log("Inception mode: workspace has no git yet. Run helix bootstrap --export … --execute to create the project repo.");
+  }
   if (!prEnabled) {
     console.log(
-      localPullRequestEnabled
+      localPullRequestEnabled && gitReady
         ? "Deliverable: Acme-linked runs register a local PR; merge remains human-only."
-        : "Deliverable: PR creation disabled.",
+        : localPullRequestEnabled
+          ? "Deliverable: local PR registration waits until git exists (after bootstrap --execute)."
+          : "Deliverable: PR creation disabled.",
     );
   }
 
@@ -320,6 +349,16 @@ async function main(): Promise<void> {
 
   if (args[0] === "serve") {
     await cmdServe(args.slice(1));
+    return;
+  }
+
+  if (args[0] === "bootstrap") {
+    try {
+      runBootstrapCommand(parseBootstrapArgs(args.slice(1)));
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
     return;
   }
 

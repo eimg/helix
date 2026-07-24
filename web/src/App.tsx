@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { WorkspaceStatus } from "../../src/inception/service";
 import { api, timeAgo, timeOnly } from "./api";
 import { ReviewsPage } from "./ReviewsPage";
 import { ManagePage } from "./ManagePage";
 import { ConfigPage } from "./ConfigPage";
+import { BootstrapPage } from "./BootstrapPage";
 
 type RunStatus = "running" | "done" | "escalated" | "error";
 
@@ -61,6 +63,7 @@ interface LogBlock {
 
 export function App() {
   const path = location.pathname;
+  if (path === "/bootstrap") return <PageShell active="bootstrap"><BootstrapPage /></PageShell>;
   if (path === "/reviews") return <PageShell active="reviews"><ReviewsPage /></PageShell>;
   if (path === "/manage") return <PageShell active="manage"><ManagePage /></PageShell>;
   if (path === "/config") return <PageShell active="config"><ConfigPage /></PageShell>;
@@ -138,7 +141,24 @@ function RunPage() {
   );
 }
 
-function PageShell({ active, children }: { active: "run" | "reviews" | "manage" | "config"; children: ReactNode }) {
+function PageShell({
+  active,
+  children,
+}: {
+  active: "run" | "bootstrap" | "reviews" | "manage" | "config";
+  children: ReactNode;
+}) {
+  const workspace = useQuery({
+    queryKey: ["workspace"],
+    queryFn: () => api<WorkspaceStatus>("/workspace"),
+    staleTime: 5_000,
+  });
+  const bootstrapAvailable = workspace.data?.bootstrap.available !== false;
+  const prAvailable = workspace.data?.prReviews.available === true;
+  // While loading, show both enabled until we know (avoid flicker-disable on git projects).
+  const bootstrapDisabled = workspace.isSuccess && !bootstrapAvailable;
+  const prDisabled = workspace.isSuccess && !prAvailable;
+
   return (
     <div className="app-shell">
     <header className="app-header">
@@ -151,7 +171,28 @@ function PageShell({ active, children }: { active: "run" | "reviews" | "manage" 
       </div>
       <nav className="site-nav" aria-label="Workspace">
         <a className={`nav-link ${active === "run" ? "active" : ""}`} href="/">Run</a>
-        <a className={`nav-link ${active === "reviews" ? "active" : ""}`} href="/reviews">PR Reviews</a>
+        {bootstrapDisabled ? (
+          <span
+            className={`nav-link disabled ${active === "bootstrap" ? "active" : ""}`}
+            title={workspace.data?.bootstrap.reason ?? "Bootstrap unavailable"}
+            aria-disabled="true"
+          >
+            Bootstrap
+          </span>
+        ) : (
+          <a className={`nav-link ${active === "bootstrap" ? "active" : ""}`} href="/bootstrap">Bootstrap</a>
+        )}
+        {prDisabled ? (
+          <span
+            className={`nav-link disabled ${active === "reviews" ? "active" : ""}`}
+            title={workspace.data?.prReviews.reason ?? "PR Reviews unavailable"}
+            aria-disabled="true"
+          >
+            PR Reviews
+          </span>
+        ) : (
+          <a className={`nav-link ${active === "reviews" ? "active" : ""}`} href="/reviews">PR Reviews</a>
+        )}
         <a className={`nav-link ${active === "manage" ? "active" : ""}`} href="/manage">Manage</a>
         <a className={`nav-link ${active === "config" ? "active" : ""}`} href="/config">Config</a>
       </nav>

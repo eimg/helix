@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { WorkspaceStatus } from "../../src/inception/service";
 import type { PullRequestReview } from "../../src/pr-control/types";
 import { api, timeAgo } from "./api";
 
@@ -9,11 +10,35 @@ export function ReviewsPage() {
   const client = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const workspace = useQuery({
+    queryKey: ["workspace"],
+    queryFn: () => api<WorkspaceStatus>("/workspace"),
+  });
   const reviews = useQuery({
     queryKey: ["pr-reviews"],
     queryFn: () => api<Review[]>("/pr-reviews?limit=100"),
+    enabled: workspace.data?.prReviews.available === true,
     refetchInterval: (query) => query.state.data?.some((item) => item.live) ? 2_000 : 10_000,
   });
+
+  if (workspace.isSuccess && !workspace.data.prReviews.available) {
+    return (
+      <main className="workspace review-workspace">
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">PR control</span>
+              <h2>Pull request reviews</h2>
+            </div>
+          </div>
+          <p className="empty-row">{workspace.data.prReviews.reason}</p>
+          <p className="inventory-note">
+            Open <a href="/bootstrap">Bootstrap</a> in this empty workspace to create the project git repository first.
+          </p>
+        </section>
+      </main>
+    );
+  }
   useEffect(() => {
     if (!selectedId && reviews.data?.length) setSelectedId(reviews.data.find((item) => item.live)?.id ?? reviews.data[0].id);
   }, [reviews.data, selectedId]);

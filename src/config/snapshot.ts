@@ -21,6 +21,9 @@ import { DEFAULT_CONTEXT_FILES } from "../context/bootstrap.js";
 import type { RunContext } from "../run/bootstrap.js";
 import type { SpecialistDefinition } from "../engine/types.js";
 import { loadManageInventory } from "../manage/inventory.js";
+import { resolveInceptionSkills } from "../inception/skills.js";
+import { resolveAdditionalSkillPaths } from "../agents/loaderBuilder.js";
+import { DEFAULT_INCEPTION_ROLES } from "../inception/roles.js";
 
 export type ConfigSource =
   | "env"
@@ -68,6 +71,12 @@ export interface ConfigSnapshot {
       description: string;
       definitionSource: "project" | "built_in";
     }>;
+    inceptionSpecialists: Array<{
+      name: string;
+      model: ResolvedValue<string | null>;
+      description: string;
+      definitionSource: "project" | "built_in";
+    }>;
   };
   flags: {
     extensionsEnabled: boolean;
@@ -80,6 +89,20 @@ export interface ConfigSnapshot {
     steps: string[];
     maxIterations: number;
   };
+  inception: {
+    /** Fixed role order for bootstrap specialists. */
+    roles: string[];
+    /** Effective skills auto-loaded into bootstrap sessions (project pack or built-in presets). */
+    skills: Array<{
+      name: string;
+      relativePath: string;
+      source: "project" | "built_in";
+    }>;
+    /** Directories passed to the session loader for the inception skill pack. */
+    skillPaths: string[];
+    /** Always true — bootstrap specialists load inception skills, not run skills. */
+    skillsAutoLoad: true;
+  };
   mergeGate: HelixConfig["mergeGate"];
   triggers: HelixConfig["triggers"];
   repoContext: {
@@ -88,9 +111,13 @@ export interface ConfigSnapshot {
   };
   resources: {
     skills: Array<{ name: string; relativePath: string }>;
+    /** Project-local inventory only (Manage). Prefer inception.skills for effective bootstrap load. */
+    inceptionSkills: Array<{ name: string; relativePath: string }>;
     agentsDir: string;
     prAgentsDir: string;
+    inceptionAgentsDir: string;
     skillsDir: string;
+    inceptionSkillsDir: string;
   };
   /** Raw merged wiring config (no secrets). */
   config: HelixConfig;
@@ -160,6 +187,22 @@ export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
         description: specialist.description,
         definitionSource: specialist.source,
       })),
+      inceptionSpecialists: inventory.inceptionAgents.map((specialist) => ({
+        name: specialist.name,
+        model: specialist.model
+          ? {
+              value: specialist.model,
+              source: "agent",
+              detail: specialist.relativePath,
+            }
+          : {
+              value: resolvedModel.value,
+              source: resolvedModel.source,
+              detail: resolvedModel.detail,
+            },
+        description: specialist.description,
+        definitionSource: specialist.source,
+      })),
     },
     flags: {
       extensionsEnabled: ctx.config.extensions?.enabled === true,
@@ -175,6 +218,12 @@ export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
       steps: workflowSteps,
       maxIterations: ctx.workflow.maxIterations,
     },
+    inception: {
+      roles: [...(ctx.config.inception?.roles ?? DEFAULT_INCEPTION_ROLES)],
+      skills: resolveInceptionSkills(ctx.helixDir),
+      skillPaths: resolveAdditionalSkillPaths(ctx.helixDir, "inception"),
+      skillsAutoLoad: true,
+    },
     mergeGate: ctx.config.mergeGate,
     triggers: ctx.config.triggers,
     repoContext: {
@@ -186,9 +235,12 @@ export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
     },
     resources: {
       skills: inventory.skills,
+      inceptionSkills: inventory.inceptionSkills,
       agentsDir: resolve(ctx.helixDir, "agents"),
       prAgentsDir: resolve(ctx.helixDir, "pr-agents"),
+      inceptionAgentsDir: resolve(ctx.helixDir, "inception-agents"),
       skillsDir: resolve(ctx.helixDir, "skills"),
+      inceptionSkillsDir: resolve(ctx.helixDir, "inception-skills"),
     },
     config: ctx.config,
   };

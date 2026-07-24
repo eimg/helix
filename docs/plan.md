@@ -81,7 +81,7 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 
 | Item | Status |
 |---|---|
-| **Manage** | Experimental web UI + HTTP API for authoring `.helix/agents` and `.helix/skills`, plus a simple ordered default-workflow editor. No CLI yet. [→](./manage.md) |
+| **Manage** | Experimental web UI + HTTP API for authoring workflow, PR, and bootstrap agents/skills, plus a simple ordered default-workflow editor. No CLI yet. [→](./manage.md) |
 | **Repo context Phase A** | Deterministic bootstrap + context allowlist injected into the initial orchestrator turn and every cold specialist session. [→](./repo-context.md) |
 | **Within-run context reuse** | One Pi session per specialist lane per run + bounded structured handoffs (`RunKnowledgeEntry`) |
 | **Web-native streaming** | Orchestrator and specialist responses share started → live buffered deltas → durable full finished output; token deltas stay ephemeral |
@@ -92,6 +92,7 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 | **Config observability** | Config tab + `GET /config/snapshot` — resolved essentials provenance, separate workflow/PR-control agents, delivery-gate activity, and wiring |
 | **Local PR delivery** | Acme-linked successful runs use a host-created isolated worktree/branch; Helix safely commits remaining implementation changes and registers a draft local PR; no push or merge |
 | **Independent local PR control** | Helix-created and trusted external PRs share the separate `/pr-reviews` API, `.helix/pr-reviews.db`, durable lifecycle events, exact-head temporary worktree, concurrent reviewer/verifier, fail-closed host policy, and structured readiness callback |
+| **Inception bootstrap (empty workspace)** | Fixed inception roles/skills, Manage + Config, Prelude pickup, empty-folder entry, CLI + `GET /workspace` / `POST /bootstrap` + Bootstrap UI; nav disables Bootstrap on git and PR Reviews on non-git. Specialist execution next. [→](./inception-bootstrap.md) |
 
 ---
 
@@ -119,5 +120,6 @@ PR lifecycle ownership is now separated for the local Acme path: implementation 
 - **First-class webhook trigger** in Helix core (today: HTTP `POST /runs` + external acme-issues)
 - **Subprocess isolation** for untrusted specialists
 - **Manage CLI** (`helix manage`) parity
+- **Inception bootstrap specialists** — durable job/SSE, run fixed-role specialists after materialize, conflict report back to Prelude, optional Issues seed. [→](./inception-bootstrap.md)
 - **Settings UI/API** — edit wiring/secrets without hand-editing files (related to guardrail presets)
 - **pi settings** — explicit `SettingsManager.inMemory(...)` Helix defaults for isolated sessions

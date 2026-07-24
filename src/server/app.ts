@@ -15,12 +15,17 @@
  *
  * Manage (experimental):
  * POST /manage/sessions, GET /manage/sessions/:id, SSE events, apply, discard
- * GET  /manage/agents | /manage/pr-agents | /manage/skills | /manage/workflow
+ * GET  /manage/agents | /manage/pr-agents | /manage/inception-agents
+ * GET  /manage/skills | /manage/inception-skills | /manage/workflow
  * PUT  /manage/workflow   update the ordered default workflow
  *
  * Config (observability):
  * GET  /config            Config tab UI
  * GET  /config/snapshot   resolved runtime config + provenance
+ *
+ * Workspace / inception:
+ * GET  /workspace         git/empty status + bootstrap/PR availability
+ * POST /bootstrap         dry-run or execute Prelude empty-workspace bootstrap
  */
 import express, { type Express, type Request, type Response } from "express";
 import { fileURLToPath } from "node:url";
@@ -45,6 +50,7 @@ import { buildContinuationIssue } from "../run/continuation.js";
 import type { RunStore } from "../state/runStore.js";
 import type { PullRequestControlService } from "../pr-control/service.js";
 import type { PullRequestReviewEvent, PullRequestReviewRequest } from "../pr-control/types.js";
+import { getWorkspaceStatus, runBootstrap } from "../inception/service.js";
 
 export interface CreateAppOptions {
   ctx: RunContext;
@@ -381,8 +387,16 @@ export function createApp(opts: CreateAppOptions): Express {
     res.json(manage.getInventory().prAgents);
   });
 
+  app.get("/manage/inception-agents", (_req, res) => {
+    res.json(manage.getInventory().inceptionAgents);
+  });
+
   app.get("/manage/skills", (_req, res) => {
     res.json(manage.getInventory().skills);
+  });
+
+  app.get("/manage/inception-skills", (_req, res) => {
+    res.json(manage.getInventory().inceptionSkills);
   });
 
   app.get("/manage/workflow", (_req, res) => {
@@ -509,12 +523,51 @@ export function createApp(opts: CreateAppOptions): Express {
     res.json(buildConfigSnapshot(ctx));
   });
 
+  app.get("/workspace", (_req, res) => {
+    res.json(getWorkspaceStatus(ctx.cwd));
+  });
+
+  app.post("/bootstrap", (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as {
+        exportPath?: unknown;
+        dryRun?: unknown;
+        execute?: unknown;
+        force?: unknown;
+        preset?: unknown;
+      };
+      if (typeof body.exportPath !== "string" || !body.exportPath.trim()) {
+        res.status(400).json({ error: "exportPath is required" });
+        return;
+      }
+      const execute = body.execute === true || body.dryRun === false;
+      const status = getWorkspaceStatus(ctx.cwd);
+      if (!status.bootstrap.available) {
+        res.status(409).json({ error: status.bootstrap.reason ?? "Bootstrap unavailable" });
+        return;
+      }
+      const result = runBootstrap({
+        exportPath: body.exportPath.trim(),
+        targetDir: ctx.cwd,
+        cwd: ctx.cwd,
+        helixDir: ctx.helixDir,
+        execute,
+        dryRun: !execute,
+        force: body.force === true,
+        preset: typeof body.preset === "string" ? body.preset : undefined,
+      });
+      res.status(execute ? 201 : 200).json(result);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   app.get("/health", (_req, res) => {
     res.json({ ok: true });
   });
 
   app.use(express.static(reactDir, { index: false }));
-  app.get(["/", "/manage", "/config", "/reviews"], (_req, res) => {
+  app.get(["/", "/manage", "/config", "/reviews", "/bootstrap"], (_req, res) => {
     res.sendFile(reactIndex);
   });
 

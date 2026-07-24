@@ -24,7 +24,7 @@ import type {
   SpecialistSessionFactory,
 } from "../engine/types.js";
 import type { PiProvider } from "../providers/openrouter.js";
-import { buildSessionLoader } from "./loaderBuilder.js";
+import { buildSessionLoader, type SkillPack } from "./loaderBuilder.js";
 
 export interface PiSpecialistFactoryOptions {
   /** Working directory specialists operate in. Default process.cwd(). */
@@ -36,6 +36,11 @@ export interface PiSpecialistFactoryOptions {
    * From HELIX_MODEL / shipped default — never overrides an explicit agent model.
    */
   defaultModel?: string;
+  /**
+   * Skill pack loaded into specialist sessions. Default `run` (`.helix/skills`).
+   * Bootstrap factories pass `inception` so `.helix/inception-skills/` loads.
+   */
+  skillPack?: SkillPack;
   /** Repo-local extension config. Default disabled. */
   extensions?: { enabled?: boolean; paths?: string[] };
 }
@@ -47,6 +52,7 @@ export class PiSpecialistSessionFactory implements SpecialistSessionFactory {
   private readonly cwd: string;
   private readonly helixDir: string;
   private readonly defaultModel: string | undefined;
+  private readonly skillPack: SkillPack;
   private readonly extensions: { enabled?: boolean; paths?: string[] } | undefined;
 
   constructor(provider: PiProvider, definitions: SpecialistDefinition[], opts: PiSpecialistFactoryOptions = {}) {
@@ -55,6 +61,7 @@ export class PiSpecialistSessionFactory implements SpecialistSessionFactory {
     this.cwd = opts.cwd ?? process.cwd();
     this.helixDir = opts.helixDir ?? resolve(this.cwd, ".helix");
     this.defaultModel = opts.defaultModel;
+    this.skillPack = opts.skillPack ?? "run";
     this.extensions = opts.extensions;
   }
 
@@ -70,6 +77,7 @@ export class PiSpecialistSessionFactory implements SpecialistSessionFactory {
     const loader = buildSessionLoader({
       cwd: this.cwd,
       helixDir: this.helixDir,
+      skillPack: this.skillPack,
       extensions: this.extensions,
       systemPromptOverride: def.systemPrompt,
     });

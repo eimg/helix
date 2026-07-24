@@ -235,6 +235,55 @@ test("ManageService applies a project PR-agent override", async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+test("ManageService applies a project bootstrap-agent override", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "helix-manage-bootstrap-agent-"));
+  const config = loadConfig(fixtureDir);
+  const service = new ManageService({
+    helixDir: dir,
+    config,
+    model: "openrouter/test/model",
+    provider: new FakeProvider(),
+    store: new MemoryManageStore(),
+    createAuthor: () => new FakeManageAuthor(() => ({
+      message: "Drafted an architect override.",
+      drafts: [{
+        kind: "inception-agent",
+        relativePath: "inception-agents/architect.md",
+        content: "---\nname: architect\ndescription: Project architect\n---\n\nPlan the foundation carefully.\n",
+      }],
+      deletions: [],
+    })),
+  });
+
+  const { id, promise } = service.startSession("update the bootstrap architect");
+  await promise;
+  const applied = service.applySession(id, false);
+  assert.equal(applied.status, "applied");
+  assert.match(readFileSync(join(dir, "inception-agents/architect.md"), "utf-8"), /Project architect/);
+  assert.equal(service.getInventory().inceptionAgents.find((item) => item.name === "architect")?.source, "project");
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("FakeManageAuthor drafts bootstrap agents from natural language", async () => {
+  const author = new FakeManageAuthor();
+  const turn = await author.complete(
+    "Tighten the bootstrap scaffolder prompt",
+    [],
+    {
+      agents: [],
+      prAgents: [],
+      inceptionAgents: [
+        { name: "scaffolder", description: "Scaffold", relativePath: "inception-agents/scaffolder.md", source: "built_in" },
+      ],
+      skills: [],
+      inceptionSkills: [],
+    },
+  );
+  assert.equal(turn.drafts[0]?.kind, "inception-agent");
+  assert.equal(turn.drafts[0]?.relativePath, "inception-agents/scaffolder.md");
+});
+
 test("manage API: session, events, apply", async () => {
   const dir = mkdtempSync(join(tmpdir(), "helix-manage-api-"));
   const config = loadConfig(fixtureDir);
@@ -261,6 +310,17 @@ test("manage API: session, events, apply", async () => {
   assert.equal(prAgents.status, 200);
   assert.deepEqual(prAgents.body.map((item: { name: string }) => item.name), ["reviewer", "verifier"]);
   assert.ok(prAgents.body.every((item: { source: string }) => item.source === "built_in"));
+
+  const inceptionAgents = await request(app).get("/manage/inception-agents");
+  assert.equal(inceptionAgents.status, 200);
+  assert.deepEqual(
+    inceptionAgents.body.map((item: { name: string }) => item.name),
+    ["architect", "scaffolder", "validator"],
+  );
+
+  const inceptionSkills = await request(app).get("/manage/inception-skills");
+  assert.equal(inceptionSkills.status, 200);
+  assert.ok(Array.isArray(inceptionSkills.body));
 
   const start = await request(app).post("/manage/sessions").send({ prompt: "create an agent" });
   assert.equal(start.status, 202);
