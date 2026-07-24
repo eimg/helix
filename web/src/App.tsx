@@ -357,7 +357,7 @@ function LogEntry({ block }: { block: LogBlock }) {
     );
   }
   return (
-    <details className={`agent-block ${block.kind}`} open={block.status === "running"}>
+    <details className={`agent-block ${block.kind}`}>
       <summary>
         <time>{timeOnly(block.ts)}</time>
         <span className="agent-name">{block.kind === "orchestrator" ? "Orchestrator" : block.title}</span>

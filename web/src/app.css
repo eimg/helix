@@ -225,10 +225,10 @@ input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px
 .event-row.warning .event-tag { color: var(--yellow); }
 .event-row.danger .event-tag { color: var(--red); }
 .agent-block { margin: 7px 0; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); overflow: hidden; }
-.agent-block summary { min-height: 39px; padding: 8px 11px; display: grid; grid-template-columns: 68px minmax(0, 1fr) auto; align-items: center; gap: 7px; cursor: pointer; list-style: none; }
+.agent-block summary { position: relative; min-height: 39px; padding: 8px 11px; display: grid; grid-template-columns: 68px minmax(0, 1fr) auto; align-items: center; gap: 7px; cursor: pointer; list-style: none; }
 .agent-block summary::-webkit-details-marker { display: none; }
-.agent-block summary::before { content: "›"; position: absolute; margin-left: -2px; color: var(--muted); transform: rotate(0); transition: transform .15s; }
-.agent-block[open] summary::before { transform: rotate(90deg); }
+.agent-block summary::before { content: "›"; position: absolute; left: 11px; top: 50%; color: var(--muted); line-height: 1; transform: translateY(calc(-50% - 1px)); transition: transform .15s; }
+.agent-block[open] summary::before { transform: translateY(calc(-50% - 1px)) rotate(90deg); }
 .agent-block summary time { padding-left: 12px; }
 .agent-name { font-weight: 700; color: var(--text); }
 .agent-status { color: var(--muted); font-size: 10.5px; }
