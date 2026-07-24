@@ -13,22 +13,24 @@ Related: [`architecture.md`](./architecture.md) · [`plan.md`](./plan.md) · [`g
 Each loop owns one durable work-object type, reacts to explicit events or a bounded schedule, produces evidence and artifacts, and proposes a state transition. The next loop or a human accepts that handoff.
 
 ```text
-knowledge / evidence
+knowledge / evidence (Primer)
         ↓
 opportunity or hypothesis
-        ↓
-planned issue
-        ↓
-implementation run
-        ↓
-pull request
-        ↓
-release candidate
-        ↓
-deployment
-        ↓
-production observation
-        └──────────────→ knowledge / issue
+        ├─ new project → Prelude export → Helix bootstrap → initial issues
+        └─ existing repo → feature card (Acme Projects) or direct issue
+                                ↓
+                          implementation issue (Acme Issues)
+                                ↓
+                          implementation run (Helix)
+                                ↓
+                          pull request
+                                ↓
+                          release candidate
+                                ↓
+                          deployment
+                                ↓
+                          production observation
+                                └──────────────→ knowledge / issue
 ```
 
 The loops may reuse Pi-backed runtime adapters, specialist-session construction, event streaming, persistence patterns, and policy interfaces. They should not share an opaque session or collapse their domain state into the coding-run model.
@@ -38,7 +40,7 @@ The loops may reuse Pi-backed runtime adapters, specialist-session construction,
 | Loop | Durable work object | Primary trigger | Output / handoff | Direction |
 |---|---|---|---|---|
 | Knowledge and discovery | Opportunity or hypothesis | Scheduled scan plus knowledge changes | Brief, RFC, prototype, experiment, proposed issues | Planned |
-| Planning | Milestone or implementation plan | Team cadence, accepted proposal, or new-project request | Prioritized issues or a bootstrap-ready plan | Planned |
+| Planning | Project card, milestone, or implementation plan | Team cadence, accepted proposal, or new-project request | Ready feature card, concrete issue, or Prelude bootstrap export | Partially shipped (Prelude inception drafting; Helix bootstrap executor planned) |
 | Implementation | Issue | Create, reopen, or command comment | Self-checked repository change delivered as a new PR | Partially shipped |
 | PR control | Pull request at a head SHA | Local review request; later PR, CI, and review events plus reconciliation | Review evidence and merge-readiness decision | Partially shipped |
 | Release readiness | Release candidate | Merged changes, milestone, or release schedule | Changelog, risk analysis, rollout and rollback plan | Planned |
@@ -97,19 +99,77 @@ interface KnowledgeProposal {
 
 Planning converts accepted opportunities and operational needs into a small, ordered backlog. It should clarify scope, dependencies, acceptance criteria, expected value, and risks. It proposes priorities; product authority remains human unless an explicit policy delegates a narrow class of maintenance work.
 
-For an existing project, an accepted plan creates normal issue objects so implementation begins through the same observable issue-triggered path rather than an internal shortcut. For a new project, the same planning loop iterates with the human until it produces a bootstrap-ready plan covering intent, goals and non-goals, success criteria, architecture, repository structure, verified-command expectations, deployment assumptions, and an initial backlog.
+For an existing project, feature ideas may remain Acme Projects cards while they
+are explored and refined. Actual bugs and already-concrete operational work may
+enter Acme Issues directly. A ready feature still becomes a thin implementation
+issue before Helix runs, so every implementation begins through the same
+observable issue-triggered path rather than an internal shortcut.
 
-The human accepts a specific plan version before bootstrap. Bootstrap is a one-time executor, not another control loop: it creates and validates the repository foundation, baseline knowledge, tooling, and initial issues from the accepted plan. If execution exposes a foundational conflict, it returns evidence to planning for revision instead of silently redesigning the project.
+For a new project, **Prelude** is the inception drafting surface: humans iterate
+on a brief and freeform documents (optionally with Primer evidence), then export
+versioned `prelude.bootstrap.v1` artifacts under Prelude's local data directory.
+That export is the bootstrap-ready plan covering intent, goals and non-goals,
+success criteria, architecture, repository structure, verified-command
+expectations, deployment assumptions, and an initial backlog. Prelude does not
+call Helix today.
+
+The human accepts a specific plan/export version before bootstrap. Bootstrap is
+a one-time Helix executor, not another control loop: it creates and validates
+the repository foundation, baseline knowledge, tooling, and initial issues from
+the accepted Prelude export. If execution exposes a foundational conflict, it
+returns evidence to Prelude/planning for revision instead of silently
+redesigning the project.
 
 ```text
 planning loop
-  ├─ existing project → accepted plan → issues
-  └─ new project → accepted bootstrap plan → bootstrap executor → issues
+  ├─ existing feature → ready Acme Projects card → implementation issue
+  ├─ concrete bug or operational work → Acme Issues
+  └─ new project → Prelude export → Helix bootstrap executor → issues
 ```
+
+### Project-board handoff
+
+The intended Acme workflow keeps feature exploration outside the implementation
+issue lifecycle:
+
+```text
+  Acme Projects card
+  → human marks the card Ready
+  → human selects Submit as issue
+  → Acme Projects asks Acme Issues to create a linked implementation issue
+  → human adds the trigger label in Acme Issues
+  → Acme Issues triggers Helix in the project repository
+  → accepted run moves the card to In progress
+  → Helix registers the PR in Acme Issues
+  → PR creation moves the card to In review
+  → human-recorded merge moves the card to Done
+```
+
+Acme Projects does not call Helix directly. It owns the feature idea,
+collaboration, decisions, open questions, acceptance notes, repository scope,
+and readiness decision. Acme Issues creates a thin execution envelope that
+references the source card and owns the implementation attempt, run lineage,
+continuations, PR record, review history, and human merge record. Helix consumes
+that issue and remains unaware of project-board presentation concerns.
+
+`Ready` is the handoff boundary; `In progress` means Helix accepted a run. The
+current integration requires an explicit Submit action and a human-added trigger
+label in Acme Issues. A later project-level policy may trigger automatically
+when a card enters `Ready`, but a failed request remains ready and requires an
+explicit retry rather than looping.
+
+The manual non-triggering issue handoff is shipped in Acme Projects. Automatic
+triggering and the later card lifecycle projections remain product direction.
 
 ### Implementation
 
-The implementation loop consumes an issue and produces a self-checked change. Issue creation, reopen, and explicit issue command comments are external workflow triggers. Continuations remain fresh linked runs with bounded lineage context. Independent verification begins only after a PR exists and belongs to PR control.
+The implementation loop consumes an issue and produces a self-checked change.
+The issue may be a directly reported bug or a thin implementation issue derived
+from a ready Acme Projects card; Helix receives both through Acme Issues. Issue
+creation, reopen, and explicit issue command comments are external workflow
+triggers. Continuations remain fresh linked runs with bounded lineage context.
+Independent verification begins only after a PR exists and belongs to PR
+control.
 
 The Git behavior is one isolated worktree, one named feature branch, and one new PR for every successful Acme-linked change-producing run. Helix creates the branch from the configured base SHA before agent execution, lets the Dev commit logically, safely commits remaining changes at the host boundary, then registers the exact base/head SHAs as a draft PR in Acme Issues. Successful registration removes the temporary checkout while retaining the branch; failures retain the workspace for diagnosis. Helix delivers the PR and stops; it does not authorize its own merge.
 

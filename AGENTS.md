@@ -8,12 +8,18 @@ This file is an entrypoint, not the full specification. Follow the linked docs w
 
 | Project | Local path | Responsibility |
 |---|---|---|
-| Primer | `~/Desktop/acme/primer` | Knowledge product and fictional Acme evidence corpus; not currently part of the runtime loop. |
+| Primer | `~/Desktop/acme/primer` | Knowledge product and fictional Acme evidence corpus; outside the Issues → Helix runtime loop. |
+| Prelude | `~/Desktop/acme/prelude` | Project inception drafting and bootstrap artifact export for a future Helix empty-workspace runtime. |
 | Helix | `~/Desktop/acme/helix` | Agent workflow control plane that receives work and orchestrates changes. |
 | Acme Issues | `~/Desktop/acme/acme-issues` | Local issue and PR management surface that triggers Helix and receives callbacks. |
+| Acme Projects | `~/Desktop/acme/acme-projects` | Feature-idea and collaboration board for existing Helix repos; can manually create non-triggering issues through Acme Issues. |
 | Acme Todo | `~/Desktop/acme/acme-todo` | Disposable target application used for agent implementation and verification. |
 
-The current local runtime flow is Acme Issues → Helix → Acme Todo, followed by a Helix completion callback to Acme Issues. Primer shares the fictional Acme context but remains a separate knowledge-product and dataset effort.
+Existing-repo runtime flow: Acme Issues → Helix → Acme Todo, followed by a Helix completion callback to Acme Issues. Primer shares the fictional Acme context but remains a separate knowledge-product effort.
+
+Manual feature handoff: Acme Projects ready card → linked Acme Issues issue without the configured trigger label; a human adds that label in Acme Issues to start Helix. Automatic trigger and later PR/card projections remain planned. Acme Projects does not call Helix directly; see the Project-board handoff in [`docs/vision.md`](./docs/vision.md#project-board-handoff).
+
+New-project path: Prelude drafts inception and exports `prelude.bootstrap.v1` under its local data directory. Helix will own future bootstrap execution that consumes those exports; do not add a Prelude → Helix trigger path today.
 
 ## Read first
 

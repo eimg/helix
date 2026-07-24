@@ -10,16 +10,20 @@ Package: [`@eimg/helix`](https://github.com/eimg/helix) · command: `helix`
 
 ## Acme development testbed
 
-Helix is one of four related projects. They remain separate products with separate responsibilities.
+Helix is one of six related projects. They remain separate products with separate responsibilities.
 
 | Project | Role |
 |---|---|
-| **[Primer](https://github.com/eimg/primer)** | Knowledge product and fictional Acme evidence corpus; not currently part of the runtime loop. |
+| **[Primer](https://github.com/eimg/primer)** | Knowledge product and fictional Acme evidence corpus; not currently part of the Issues → Helix runtime loop. |
+| **[Prelude](https://github.com/eimg/prelude)** | Project inception workspace; drafts freeform docs and exports bootstrap artifacts for a future Helix empty-workspace runtime. |
 | **[Helix](https://github.com/eimg/helix)** | Agent workflow control plane that receives work and orchestrates changes. |
 | **[Acme Issues](https://github.com/eimg/acme-issues)** | Local issue and PR management surface that triggers Helix and receives callbacks. |
+| **[Acme Projects](https://github.com/eimg/acme-projects)** | Feature-idea and collaboration board for existing Helix repos; can manually create non-triggering issues through Acme Issues. |
 | **[Acme Todo](https://github.com/eimg/acme-todo)** | Disposable target application used for agent implementation and verification. |
 
-Typical exercise: Acme Issues triggers Helix, Helix works on Acme Todo, and Primer develops the separate knowledge and retrieval side of the same fictional Acme context.
+Existing-repo exercise: Acme Issues triggers Helix, Helix works on Acme Todo, and Helix callbacks update Acme Issues. Acme Projects can create a thin linked issue without triggering Helix; a human adds the configured trigger label to start that flow. Automatic trigger and card lifecycle callbacks remain planned. Acme Projects will not call Helix directly; see [`docs/vision.md`](./docs/vision.md#project-board-handoff).
+
+New-project path: Prelude owns inception drafting and exports `prelude.bootstrap.v1` artifacts under its local data directory. A future Helix bootstrap capability will consume those exports; Prelude does not call Helix today. Primer may supply evidence to Prelude over HTTP and remains outside the Issues → Helix loop.
 
 ## Requirements
 
