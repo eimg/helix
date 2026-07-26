@@ -93,10 +93,7 @@ export function ConfigPage() {
 
       <ConfigSection title="Bootstrap">
         <KV label="Process" value={`${snap.inception.roles.join(" → ")} · fixed roles`} />
-        <KV
-          label="Skills auto-load"
-          value={snap.inception.skillsAutoLoad !== false ? "on · inception skill pack" : "off"}
-        />
+        <KV label="Skills auto-load" value="on · inception skill pack" />
         {snap.models.inceptionSpecialists.map((item) => (
           <KV
             key={item.name}

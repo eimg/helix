@@ -38,8 +38,11 @@ git clone https://github.com/eimg/helix.git
 cd helix
 npm install
 npm run build
-npm link          # exposes the `helix` command globally
+npm link          # exposes `helix` (built) and `helix-dev` (source) globally
 ```
+
+`helix` runs the last build in `dist`. `helix-dev` runs the same CLI straight from
+`src`, so changes to this checkout apply to other projects without rebuilding.
 
 ## Getting started
 
@@ -325,8 +328,12 @@ Needs `gh` auth and a configured `triggers.github.repo`.
 ```bash
 npm test
 npm run typecheck
-npm run dev -- run --title "Smoke test" --body "Hello"
+npm run dev                                     # serve on 8319; restarts on src changes, HMR for web
+helix-dev run --title "Smoke test" --body "Hello"   # source CLI, from any directory
 ```
+
+`npm run dev` and `helix-dev` serve the web UI from `web/` through Vite, so `dist`
+only matters for `npm start`, `npm link`, and publishing.
 
 ## License
 

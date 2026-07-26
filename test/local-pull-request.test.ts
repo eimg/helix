@@ -13,7 +13,6 @@ import { createRunContext, startRun, maybeWireLocalPullRequest } from "../src/ru
 import { MemoryRunStore } from "../src/state/runStore.js";
 import { FakeProvider } from "../src/providers/fake.js";
 import { NoOpDeliverablePipeline } from "../src/deliverable/pipeline.js";
-import { LocalPullRequestDeliverablePipeline } from "../src/deliverable/localPullRequest.js";
 
 test("local deliverable registers a committed feature branch without merging it", async () => {
   const cwd = mkdtempSync(join(tmpdir(), "helix-local-pr-"));
@@ -87,7 +86,7 @@ test("local deliverable registers a committed feature branch without merging it"
     assert.equal(posted?.headBranch, "feature/change");
     assert.equal(execFileSync("git", ["branch", "--show-current"], { cwd, encoding: "utf8" }).trim(), "feature/change");
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
 
@@ -135,7 +134,7 @@ test("run workspace creates an isolated feature branch and preserves it after cl
       new RegExp(workspace.branch.replaceAll("/", "\\/")),
     );
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
 
@@ -195,7 +194,7 @@ test("local deliverable safely commits remaining worktree changes before registr
     );
     await workspace.cleanup();
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
 
@@ -247,7 +246,7 @@ test("local deliverable refuses to auto-commit sensitive paths", async () => {
     );
     await workspace.cleanup();
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
 
@@ -329,7 +328,7 @@ test("local deliverable patches an existing PR on continuation instead of creati
     assert.equal(patched?.headBranch, "helix/issue-3-existing");
     assert.equal(patched?.origin, undefined);
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
 
@@ -371,7 +370,7 @@ test("run workspace reuses an existing PR branch when requested", async () => {
     );
     await workspace.cleanup();
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
 
@@ -410,7 +409,7 @@ test("Helix local merge merges the reviewed head into the base branch", async ()
       /ready/,
     );
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
 
@@ -438,7 +437,7 @@ test("stale NoOp deliverable upgrades to local PR once git has a base commit", (
     assert.ok(ctx.deliverable instanceof LocalPullRequestDeliverablePipeline);
     assert.ok(ctx.workspace);
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
 

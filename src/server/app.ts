@@ -29,10 +29,9 @@
  * POST /bootstrap         dry-run or execute Prelude empty-workspace bootstrap
  */
 import express, { type Express, type Request, type Response } from "express";
-import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { resolve } from "node:path";
+import { attachHmr, webAssets, webFromSource, webIndex } from "./webAssets.js";
 import type { RunContext } from "../run/bootstrap.js";
 import { refreshRunContextResources, startRun } from "../run/bootstrap.js";
 import type { Issue, Run, RunContinuation, RunEvent } from "../engine/types.js";
@@ -81,14 +80,6 @@ interface ActiveRunEntry {
 interface ActiveManageEntry {
   sseClients: Set<Response>;
 }
-
-const bundledReactDir = join(dirname(fileURLToPath(import.meta.url)), "react");
-const reactDir = existsSync(bundledReactDir)
-  ? bundledReactDir
-  : resolve(process.cwd(), "dist/server/react");
-const reactIndex = existsSync(join(reactDir, "index.html"))
-  ? join(reactDir, "index.html")
-  : resolve(process.cwd(), "web/index.html");
 
 export function createApp(opts: CreateAppOptions): Express {
   const { ctx, pr, githubRepo } = opts;
@@ -651,10 +642,8 @@ export function createApp(opts: CreateAppOptions): Express {
     res.json({ ok: true });
   });
 
-  app.use(express.static(reactDir, { index: false }));
-  app.get(["/", "/manage", "/config", "/reviews", "/bootstrap"], (_req, res) => {
-    res.sendFile(reactIndex);
-  });
+  app.use(webAssets());
+  app.get(["/", "/manage", "/config", "/reviews", "/bootstrap"], webIndex());
 
   return app;
 }
@@ -882,7 +871,9 @@ export function startServer(opts: StartServerOptions): ReturnType<Express["liste
   const app = createApp(opts);
   const port = opts.port ?? Number(process.env.PORT ?? HELIX_DEFAULT_PORT);
   const host = opts.host ?? "127.0.0.1";
-  return app.listen(port, host, () => {
-    console.log(`Helix  http://${host}:${port}`);
+  const server = app.listen(port, host, () => {
+    console.log(`Helix  http://${host}:${port}${webFromSource() ? "  (web from source)" : ""}`);
   });
+  attachHmr(server);
+  return server;
 }

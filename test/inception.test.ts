@@ -99,7 +99,7 @@ test("resolveInceptionSpecialists falls back to built-in presets", () => {
       ["validator", "built_in"],
     ],
   );
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("resolveInceptionSpecialists prefers project overrides", () => {
@@ -113,7 +113,7 @@ test("resolveInceptionSpecialists prefers project overrides", () => {
   assert.equal(resolved[0]?.source, "project");
   assert.equal(resolved[0]?.definition.description, "Project architect");
   assert.equal(resolved[1]?.source, "built_in");
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("loadBootstrapManifest validates prelude.bootstrap.v1", () => {
@@ -152,7 +152,7 @@ test("loadBootstrapManifest validates prelude.bootstrap.v1", () => {
   writeFileSync(join(dir, "bootstrap.json"), JSON.stringify({ schemaVersion: "nope" }));
   assert.throws(() => loadBootstrapManifest(dir), /Unsupported schemaVersion/);
 
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("inception-agent validation allows only fixed roles", () => {
@@ -187,7 +187,7 @@ test("inception-agent validation allows only fixed roles", () => {
     false,
   );
   assert.equal(good.ok, true);
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("manage inventory lists inception agents and skills", () => {
@@ -207,7 +207,7 @@ test("manage inventory lists inception agents and skills", () => {
     inventory.inceptionSkills.map((s) => s.relativePath),
     ["inception-skills/foundation/SKILL.md"],
   );
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("parseManageResponse accepts inception draft kinds", () => {
@@ -239,7 +239,7 @@ test("loadConfig reads optional inception.roles order", () => {
   );
   const config = loadConfig(dir);
   assert.deepEqual(config.inception?.roles, ["validator", "architect", "scaffolder"]);
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("examples fixture includes inception presets", () => {
@@ -257,7 +257,7 @@ test("parseBootstrapArgs defaults target to cwd and dry-run", () => {
   const execOpts = parseBootstrapArgs(["--export", "/tmp/export", "--target", "app", "--execute"], cwd);
   assert.equal(execOpts.targetDir, join(cwd, "app"));
   assert.equal(execOpts.dryRun, false);
-  rmSync(cwd, { recursive: true, force: true });
+  rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("materializeBootstrap inits git in an empty folder", () => {
@@ -277,8 +277,8 @@ test("materializeBootstrap inits git in an empty folder", () => {
   assert.ok(existsSync(join(target, ".helix", "context", "inception.md")));
   assert.match(readFileSync(join(target, "README.md"), "utf-8"), /Demo App/);
 
-  rmSync(target, { recursive: true, force: true });
-  rmSync(exportDir, { recursive: true, force: true });
+  rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  rmSync(exportDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("materializeBootstrap refuses a target that already owns .git", () => {
@@ -291,8 +291,8 @@ test("materializeBootstrap refuses a target that already owns .git", () => {
     /already has a Git repository/,
   );
 
-  rmSync(target, { recursive: true, force: true });
-  rmSync(exportDir, { recursive: true, force: true });
+  rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  rmSync(exportDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("materializeBootstrap refuses foreign non-empty workspace without force", () => {
@@ -305,8 +305,8 @@ test("materializeBootstrap refuses foreign non-empty workspace without force", (
     /not an empty workspace/,
   );
 
-  rmSync(target, { recursive: true, force: true });
-  rmSync(exportDir, { recursive: true, force: true });
+  rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  rmSync(exportDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("runBootstrapCommand works in empty non-git folder", async () => {
@@ -337,8 +337,8 @@ test("runBootstrapCommand works in empty non-git folder", async () => {
   assert.ok(existsSync(join(target, "docs", "inception", "FOUNDATION_PLAN.md")));
   assert.equal(getWorkspaceStatus(target).bootstrap.state, "completed");
 
-  rmSync(target, { recursive: true, force: true });
-  rmSync(exportDir, { recursive: true, force: true });
+  rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  rmSync(exportDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("getWorkspaceStatus disables bootstrap on git and PR on non-git", () => {
@@ -364,8 +364,8 @@ test("getWorkspaceStatus disables bootstrap on git and PR on non-git", () => {
   assert.equal(gitStatus.prReviews.available, true);
   assert.match(gitStatus.bootstrap.reason ?? "", /without Helix bootstrap artifacts/);
 
-  rmSync(empty, { recursive: true, force: true });
-  rmSync(gitDir, { recursive: true, force: true });
+  rmSync(empty, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  rmSync(gitDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("getWorkspaceStatus marks awaiting_agents after materialize-only", () => {
@@ -385,8 +385,8 @@ test("getWorkspaceStatus marks awaiting_agents after materialize-only", () => {
   assert.match(status.bootstrap.reason ?? "", /inception agents have not finished/);
   assert.equal(status.prReviews.available, true);
 
-  rmSync(target, { recursive: true, force: true });
-  rmSync(exportDir, { recursive: true, force: true });
+  rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  rmSync(exportDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("getWorkspaceStatus marks completed after agents succeed", async () => {
@@ -412,8 +412,8 @@ test("getWorkspaceStatus marks completed after agents succeed", async () => {
     /Helix bootstrap foundation/,
   );
 
-  rmSync(target, { recursive: true, force: true });
-  rmSync(exportDir, { recursive: true, force: true });
+  rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  rmSync(exportDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("resolveAdditionalSkillPaths loads inception skills for bootstrap sessions", () => {
@@ -433,8 +433,8 @@ test("resolveAdditionalSkillPaths loads inception skills for bootstrap sessions"
   const runPaths = resolveAdditionalSkillPaths(helixDir, "run");
   assert.deepEqual(runPaths, []);
 
-  rmSync(empty, { recursive: true, force: true });
-  rmSync(project, { recursive: true, force: true });
+  rmSync(empty, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  rmSync(project, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("createInceptionSpecialistFactory uses the inception skill pack", () => {
@@ -497,8 +497,8 @@ test("bootstrap HTTP API dry-run, execute, and runAgents", async () => {
   const blocked = await request(app).post("/bootstrap").send({ exportPath: exportDir, dryRun: true });
   assert.equal(blocked.status, 409);
 
-  rmSync(target, { recursive: true, force: true });
-  rmSync(exportDir, { recursive: true, force: true });
+  rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  rmSync(exportDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("runBootstrap dry-run returns preview without writing git", async () => {
@@ -507,8 +507,8 @@ test("runBootstrap dry-run returns preview without writing git", async () => {
   const preview = await runBootstrap({ exportPath: exportDir, targetDir: target, dryRun: true });
   assert.equal(preview.dryRun, true);
   assert.equal(hasOwnGitDir(target), false);
-  rmSync(target, { recursive: true, force: true });
-  rmSync(exportDir, { recursive: true, force: true });
+  rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  rmSync(exportDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("ensureInceptionScaffold creates .helix without git", async () => {
@@ -533,6 +533,6 @@ test("ensureInceptionScaffold creates .helix without git", async () => {
   assert.ok(hasOwnGitDir(target));
   assert.equal(getWorkspaceStatus(target).bootstrap.state, "completed");
 
-  rmSync(target, { recursive: true, force: true });
-  rmSync(exportDir, { recursive: true, force: true });
+  rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  rmSync(exportDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });

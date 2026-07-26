@@ -64,7 +64,7 @@ test("PR-agent validation allows only fixed roles with matching names", () => {
   assert.equal(mismatchedName.ok, false);
   if (!mismatchedName.ok) assert.match(mismatchedName.errors.join("\n"), /frontmatter name "verifier"/);
 
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("applyDrafts writes workflow agent, PR agent, and skill under helix dir", () => {
@@ -98,7 +98,7 @@ test("applyDrafts writes workflow agent, PR agent, and skill under helix dir", (
   assert.match(readFileSync(join(dir, "pr-agents/verifier.md"), "utf-8"), /name: verifier/);
   assert.match(readFileSync(join(dir, "skills/sample/SKILL.md"), "utf-8"), /# Sample/);
 
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("applyDeletions removes skill directory", () => {
@@ -111,7 +111,7 @@ test("applyDeletions removes skill directory", () => {
   assert.equal(result.ok, true);
   assert.equal(existsSync(skillPath), false);
 
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("applyChanges removes a project PR-agent override", () => {
@@ -130,7 +130,7 @@ test("applyChanges removes a project PR-agent override", () => {
   assert.equal(result.ok, true);
   assert.equal(existsSync(prAgentPath), false);
 
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("ManageService session produces drafts and apply writes files", async () => {
@@ -156,7 +156,7 @@ test("ManageService session produces drafts and apply writes files", async () =>
   assert.equal(applied.status, "applied");
   assert.ok(readFileSync(join(dir, "skills/sample/SKILL.md"), "utf-8"));
 
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("ManageService delete skill via apply", async () => {
@@ -184,7 +184,7 @@ test("ManageService delete skill via apply", async () => {
   assert.equal(applied.status, "applied");
   assert.equal(existsSync(join(dir, "skills", "test", "SKILL.md")), false);
 
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("manage inventory resolves project PR agents over built-in fallbacks", () => {
@@ -202,7 +202,7 @@ test("manage inventory resolves project PR agents over built-in fallbacks", () =
   ]);
   assert.equal(inventory.prAgents[0]?.relativePath, "pr-agents/reviewer.md");
 
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("ManageService applies a project PR-agent override", async () => {
@@ -232,7 +232,7 @@ test("ManageService applies a project PR-agent override", async () => {
   assert.match(readFileSync(join(dir, "pr-agents/verifier.md"), "utf-8"), /Project verifier/);
   assert.equal(service.getInventory().prAgents.find((item) => item.name === "verifier")?.source, "project");
 
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("ManageService applies a project bootstrap-agent override", async () => {
@@ -262,7 +262,7 @@ test("ManageService applies a project bootstrap-agent override", async () => {
   assert.match(readFileSync(join(dir, "inception-agents/architect.md"), "utf-8"), /Project architect/);
   assert.equal(service.getInventory().inceptionAgents.find((item) => item.name === "architect")?.source, "project");
 
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("FakeManageAuthor drafts bootstrap agents from natural language", async () => {
@@ -340,7 +340,7 @@ test("manage API: session, events, apply", async () => {
   assert.equal(applied.status, 200);
   assert.equal(applied.body.status, "applied");
 
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("manage workflow API reorders available agents and preserves other config", async () => {
@@ -378,7 +378,7 @@ test("manage workflow API reorders available agents and preserves other config",
   assert.equal(empty.status, 400);
   assert.match(empty.body.error, /at least one agent/);
 
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 test("new runs reload workflow and agents saved while the server is running", async () => {
@@ -415,5 +415,5 @@ test("new runs reload workflow and agents saved while the server is running", as
   assert.deepEqual(observedSteps, ["planner", "reviewer", "dev"]);
   assert.ok(observedAgents.includes("reviewer"));
 
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
