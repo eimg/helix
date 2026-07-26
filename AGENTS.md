@@ -97,12 +97,10 @@ The smallest important interfaces live in [`src/engine/types.ts`](./src/engine/t
 
 ## Validation
 
-Run the checks appropriate to the change; before committing a cross-cutting change, run all three:
+Run the checks appropriate to the change; before committing a cross-cutting change, run:
 
 ```bash
-npm run typecheck
-npm run build
-npm test
+npm run verify
 ```
 
-For server or streaming changes, also exercise the relevant HTTP/SSE path and verify the browser UI when practical. For persistence changes, cover both SQLite reconstruction and legacy import behavior. Do not hard-code the current test count in docs; it changes frequently.
+That runs typecheck, test, and build. For server or streaming changes, also exercise the relevant HTTP/SSE path and verify the browser UI when practical. For persistence changes, cover both SQLite reconstruction and legacy import behavior. Do not hard-code the current test count in docs; it changes frequently.

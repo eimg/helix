@@ -232,6 +232,7 @@ Default port **8319** (phone-keypad mnemonic for HELIX). Override with `--port` 
 | `GET` | `/pr-reviews` | List durable PR-control reviews |
 | `GET` | `/pr-reviews/:id` | Inspect one PR-control review and its evidence |
 | `GET` | `/pr-reviews/:id/events` | SSE stream of durable PR-review lifecycle events |
+| `POST` | `/local-prs/merge` | Human-initiated local Git merge for a reviewed head (used by Acme Issues) |
 | `GET` | `/health` | Health check |
 
 ### `POST /runs` (webhook receiver)
@@ -300,7 +301,7 @@ See [`docs/inception-bootstrap.md`](./docs/inception-bootstrap.md).
 
 Useful knobs:
 
-- **`.helix/.env`** — Helix essentials: `OPENROUTER_API_KEY`, `HELIX_MODEL` (default: `openrouter/xiaomi/mimo-v2.5-pro`). Loaded from `.helix/`; shell exports win. If the API key is unset, Helix falls back to `~/.pi/agent/auth.json`. Repo-root `.env` is for the application (and is only used as a migration fallback when `.helix/.env` is missing).
+- **`.helix/.env`** — Helix essentials: `OPENROUTER_API_KEY`, `HELIX_MODEL` (default: `openrouter/xiaomi/mimo-v2.5-pro`). Loaded from `.helix/`; shell exports win. If the API key is unset, Helix falls back to `~/.pi/agent/auth.json` (override that directory with `PI_AGENT_DIR`). Repo-root `.env` is for the application (and is only used as a migration fallback when `.helix/.env` is missing).
 - **`config.json`** — wiring only: `workflow`, `inception.roles`, `maxIterations`, `mergeGate`, `deliverable`, `triggers`, `repoContext`, `extensions`
 - The Manage tab can author workflow agents, PR-review agents, bootstrap agents, and both skill packs. It can also add, remove, and reorder agents in the default implementation workflow; PR control remains the fixed concurrent `reviewer + verifier` pair; bootstrap uses the fixed role set with optional `inception.roles` order. New runs and reviews reload saved definitions without restarting the server.
 - **`agents/*.md`** — optional per-specialist `model:` in frontmatter (overrides the default for that agent only)
@@ -326,8 +327,7 @@ Needs `gh` auth and a configured `triggers.github.repo`.
 ## Development
 
 ```bash
-npm test
-npm run typecheck
+npm run verify                                  # typecheck + test + build
 npm run dev                                     # serve on 8319; restarts on src changes, HMR for web
 helix-dev run --title "Smoke test" --body "Hello"   # source CLI, from any directory
 ```
