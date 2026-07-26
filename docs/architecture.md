@@ -135,6 +135,8 @@ The GitHub `DefaultDeliverablePipeline` remains provisional because it combines 
 
 For conversational agents, prefer Pi's session transcript as the canonical conversation record and SQLite as the control-plane index. Do not create a competing transcript schema unless multi-process durability or querying requirements justify it. Curated long-term memory is separate from both raw transcript and run history.
 
+Model and provider auth resolve through a single Pi `ModelRuntime` per `PiProvider`, which every Helix session is constructed from. Helix treats the operator's global pi install as read-only essentials: it reads `auth.json` and `models.json`, keeps Pi's dynamic catalog overlay process-local rather than writing into `~/.pi/agent/`, applies the `OPENROUTER_API_KEY` override as a non-persisted runtime key, and resolves models from local catalogs without a network refresh.
+
 ---
 
 ## Landscape notes (what we considered)
