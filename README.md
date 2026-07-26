@@ -27,7 +27,7 @@ New-project path: Prelude owns inception drafting and exports `prelude.bootstrap
 
 ## Requirements
 
-- Node.js ≥ 20
+- Node.js ≥ 22.19 (the pi SDK requires it; Node 24 LTS also works)
 - An [OpenRouter](https://openrouter.ai) API key (see [Getting started](#getting-started))
 - Optional: [`gh`](https://cli.github.com/) only if you use GitHub issue/PR paths
 

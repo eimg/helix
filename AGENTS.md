@@ -46,7 +46,7 @@ Read only the relevant detailed docs, but read `architecture.md` before changing
 
 ## Current runtime invariants
 
-- Node.js 20+, TypeScript, ESM.
+- Node.js 22.19+ (pi's floor; Node 24 LTS supported), TypeScript, ESM.
 - The engine is independent of Express; CLI and server are consumers of the same run API.
 - The orchestrator combines workflow rails, an LLM decision, and deterministic gates.
 - Specialists are isolated from one another. Each named specialist lane reuses one in-memory Pi session within a run; compact `RunKnowledgeEntry` values cross lane boundaries.
