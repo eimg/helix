@@ -40,7 +40,7 @@ export interface RunInceptionAgentsOptions {
 }
 
 export async function runInceptionAgents(opts: RunInceptionAgentsOptions): Promise<InceptionJob> {
-  if (!opts.provider.hasAuth()) {
+  if (!(await opts.provider.hasAuth())) {
     throw new Error(
       "OPENROUTER_API_KEY is required to run bootstrap agents (architect / scaffolder / validator). Set it in .helix/.env and retry.",
     );

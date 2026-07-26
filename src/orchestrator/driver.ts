@@ -79,6 +79,7 @@ export class LlmOrchestrator implements Orchestrator {
   private async ensureSession(): Promise<NonNullable<LlmOrchestrator["session"]>> {
     if (this.session) return this.session;
     const model = await this.provider.resolveModel(this._modelRef);
+    const modelRuntime = await this.provider.modelRuntime();
     const loader = buildSessionLoader({
       cwd: this.cwd,
       helixDir: this.helixDir,
@@ -93,8 +94,7 @@ export class LlmOrchestrator implements Orchestrator {
       tools: [], // pure reasoning — no tools
       resourceLoader: loader,
       sessionManager: SessionManager.inMemory(),
-      authStorage: this.provider.authStorage,
-      modelRegistry: this.provider.modelRegistry,
+      modelRuntime,
     });
     this.session = session;
     return session;

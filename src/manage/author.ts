@@ -80,6 +80,7 @@ export class LlmManageAuthor implements ManageAuthor {
   private async ensureSession() {
     if (this.session) return this.session;
     const model = await this.provider.resolveModel(this.modelRef);
+    const modelRuntime = await this.provider.modelRuntime();
     const loader = buildSessionLoader({
       cwd: this.cwd,
       helixDir: this.helixDir,
@@ -94,8 +95,7 @@ export class LlmManageAuthor implements ManageAuthor {
       tools: ["read", "grep", "find", "ls"],
       resourceLoader: loader,
       sessionManager: SessionManager.inMemory(),
-      authStorage: this.provider.authStorage,
-      modelRegistry: this.provider.modelRegistry,
+      modelRuntime,
     });
     this.session = session;
     return session;

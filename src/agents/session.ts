@@ -73,6 +73,7 @@ export class PiSpecialistSessionFactory implements SpecialistSessionFactory {
         `Specialist "${def.name}" has no model (set frontmatter model: or HELIX_MODEL / default)`
       );
     }
+    const modelRuntime = await this.provider.modelRuntime();
 
     const loader = buildSessionLoader({
       cwd: this.cwd,
@@ -90,8 +91,7 @@ export class PiSpecialistSessionFactory implements SpecialistSessionFactory {
       tools: def.tools && def.tools.length > 0 ? def.tools : ["read", "bash", "edit", "write"],
       resourceLoader: loader,
       sessionManager: SessionManager.inMemory(),
-      authStorage: this.provider.authStorage,
-      modelRegistry: this.provider.modelRegistry,
+      modelRuntime,
     });
 
     return new PiSpecialistSession(def.name, session);
