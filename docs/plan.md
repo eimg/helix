@@ -123,3 +123,4 @@ PR lifecycle ownership is now separated for the local Acme path: implementation 
 - **Inception bootstrap specialists** — durable job/SSE, run fixed-role specialists after materialize, conflict report back to Prelude, optional Issues seed. [→](./inception-bootstrap.md)
 - **Settings UI/API** — edit wiring/secrets without hand-editing files (related to guardrail presets)
 - **pi settings** — explicit `SettingsManager.inMemory(...)` Helix defaults for isolated sessions
+- **Test harness reliability** — `node --test` spawns a worker per file and intermittently fails to deserialize its IPC results (`Unable to deserialize cloned data…`), observed on Node 24 roughly once every few full runs. The upstream workaround, `--test-isolation=none`, currently fails two cwd/git-sensitive tests that assume a private process, so making those independent is a prerequisite

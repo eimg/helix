@@ -23,7 +23,7 @@
   },
   "homepage": "https://github.com/eimg/helix#readme",
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22.19.0"
   },
   "bin": {
     "helix": "./dist/cli.js",
@@ -74,7 +74,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.6",
-    "@types/node": "^20.19.33",
+    "@types/node": "^22.20.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/supertest": "^7.2.0",
