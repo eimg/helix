@@ -24,7 +24,7 @@ End-to-end orchestration of a GitHub issue (or inline terminal task) through spe
 |---|---|
 | Engine core | `src/engine/{engine,eventStream,consoleLogger,types}.ts` — `runIssue(issue, deps)` loop; typed `RunEvent` stream; console logger |
 | Config | `src/config.ts` (wiring loader) + `src/config/{env,paths,defaults}.ts` (`.helix/.env` + pi essentials) |
-| Provider | `src/providers/openrouter.ts` — pi `AuthStorage`/`ModelRegistry`; env then `~/.pi/` |
+| Provider | `src/providers/openrouter.ts` — pi `ModelRuntime`; env then `~/.pi/` |
 | Specialists | `src/agents/loader.ts` (frontmatter), `session.ts` (in-process pi sessions), `loaderBuilder.ts` (isolated, run-scoped specialist lanes) |
 | Orchestrator | `src/orchestrator/{workflow,driver,gates,scripted}.ts` — workflow rails + LLM driver (JSON decisions) + deterministic gates |
 | Triggers | `src/triggers/{github,inline}.ts` — `gh issue view` + inline (terminal) path |

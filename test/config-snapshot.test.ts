@@ -35,12 +35,12 @@ function testCtx() {
   return ctx;
 }
 
-test("buildConfigSnapshot reports resolved models and provenance", () => {
+test("buildConfigSnapshot reports resolved models and provenance", async () => {
   const prev = process.env[HELIX_MODEL_ENV];
   delete process.env[HELIX_MODEL_ENV];
   try {
     const ctx = testCtx();
-    const snap = buildConfigSnapshot(ctx);
+    const snap = await buildConfigSnapshot(ctx);
 
     assert.equal(snap.paths.helixDir, fixtureDir);
     assert.equal(snap.provider.name, "openrouter");
@@ -78,12 +78,12 @@ test("buildConfigSnapshot reports resolved models and provenance", () => {
   }
 });
 
-test("buildConfigSnapshot marks HELIX_MODEL as default source; agent model wins when set", () => {
+test("buildConfigSnapshot marks HELIX_MODEL as default source; agent model wins when set", async () => {
   const prev = process.env[HELIX_MODEL_ENV];
   process.env[HELIX_MODEL_ENV] = "openrouter/test/override-model";
   try {
     const ctx = testCtx();
-    const snap = buildConfigSnapshot(ctx);
+    const snap = await buildConfigSnapshot(ctx);
     assert.equal(snap.models.helixModelEnvSet, true);
     assert.equal(snap.models.orchestrator.source, "env");
     assert.equal(snap.models.orchestrator.value, "openrouter/test/override-model");

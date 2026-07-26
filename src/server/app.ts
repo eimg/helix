@@ -530,9 +530,13 @@ export function createApp(opts: CreateAppOptions): Express {
     }
   });
 
-  app.get("/config/snapshot", (_req, res) => {
+  app.get("/config/snapshot", async (_req, res) => {
     refreshRunContextResources(ctx);
-    res.json(buildConfigSnapshot(ctx));
+    try {
+      res.json(await buildConfigSnapshot(ctx));
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
   });
 
   app.get("/workspace", (_req, res) => {

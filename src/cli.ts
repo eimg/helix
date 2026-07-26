@@ -154,7 +154,7 @@ async function cmdRun(args: string[]): Promise<void> {
   }
 
   const provider = new OpenRouterProvider();
-  if (!provider.hasAuth()) {
+  if (!(await provider.hasAuth())) {
     console.error(
       `No OpenRouter API key found. Set OPENROUTER_API_KEY in .helix/.env, or configure openrouter in ~/.pi/agent/auth.json.`
     );
@@ -277,7 +277,7 @@ async function cmdServe(args: string[]): Promise<void> {
       }),
   });
 
-  if (!ctx.provider.hasAuth()) {
+  if (!(await ctx.provider.hasAuth())) {
     console.error(
       `No OpenRouter API key found. Set OPENROUTER_API_KEY in .helix/.env, or configure openrouter in ~/.pi/agent/auth.json.`
     );

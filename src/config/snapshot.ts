@@ -124,11 +124,12 @@ export interface ConfigSnapshot {
   config: HelixConfig;
 }
 
-export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
+export async function buildConfigSnapshot(ctx: RunContext): Promise<ConfigSnapshot> {
   const paths = resolvePaths();
   const envFile = helixEnvPath(ctx.helixDir);
   const helixModelEnvSet = Boolean(process.env[HELIX_MODEL_ENV]?.trim());
   const resolvedModel = resolveModelRef();
+  const authConfigured = await ctx.provider.hasAuth();
 
   const auth = resolveAuthSource(paths);
   const modelsFilePath = resolveModelsFile(paths);
@@ -159,7 +160,7 @@ export function buildConfigSnapshot(ctx: RunContext): ConfigSnapshot {
     provider: {
       name: "openrouter",
       apiKeyEnv: OPENROUTER_API_KEY_ENV,
-      authConfigured: ctx.provider.hasAuth(),
+      authConfigured,
       authSource: auth.source,
       authDetail: auth.detail,
       modelsFile,

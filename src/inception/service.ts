@@ -294,7 +294,7 @@ export async function runBootstrap(
 
   if (!execute) return preview;
 
-  if (!provider.hasAuth()) {
+  if (!(await provider.hasAuth())) {
     throw new Error(
       "OPENROUTER_API_KEY is required for bootstrap execute (inception agents). Set it in .helix/.env and retry.",
     );
@@ -362,7 +362,7 @@ async function startOrAwaitAgents(opts: {
       skills,
     } satisfies BootstrapPreview);
 
-  if (!opts.provider.hasAuth()) {
+  if (!(await opts.provider.hasAuth())) {
     throw new Error(
       "OPENROUTER_API_KEY is required to run bootstrap agents. Set it in .helix/.env and retry.",
     );
