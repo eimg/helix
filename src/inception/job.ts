@@ -36,6 +36,11 @@ export interface InceptionJob {
   roles: InceptionRoleRun[];
   error?: string;
   materialize?: MaterializeResult;
+  /** Soft catalog provenance — best-effort adopt after agents succeed. */
+  exportSourceKind?: "local" | "package_url" | "catalog";
+  catalogBaseUrl?: string;
+  exportId?: number;
+  packageUrl?: string;
 }
 
 export function inceptionJobPath(helixDir: string): string {

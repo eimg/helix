@@ -28,6 +28,10 @@ import {
 import { DEFAULT_INCEPTION_ROLES, type InceptionRole } from "./roles.js";
 import { resolveInceptionSkills, type ResolvedInceptionSkill } from "./skills.js";
 import { assessInceptionTarget, assertInceptionTarget, type InceptionTargetAssessment } from "./workspace.js";
+import {
+  resolveExportDirectory,
+  type ExportSourceMeta,
+} from "./pickup.js";
 
 export type BootstrapWorkspaceState =
   | "ready"
@@ -112,7 +116,13 @@ export interface BootstrapExecuteResult {
 }
 
 export interface BootstrapRequest {
+  /** Local export directory (mutually exclusive with exportUrl / catalog). */
   exportPath?: string;
+  /** Direct package URL (gzipped tar). */
+  exportUrl?: string;
+  /** Export catalog base URL (soft contract: GET/POST /api/exports…). */
+  exportCatalogUrl?: string;
+  exportId?: number;
   targetDir?: string;
   dryRun?: boolean;
   execute?: boolean;
@@ -130,6 +140,7 @@ export interface BootstrapRequest {
    * Used by HTTP; CLI leaves this false and waits for completion.
    */
   detachAgents?: boolean;
+  fetchFn?: typeof fetch;
 }
 
 export interface BootstrapAcceptedResult {
@@ -275,11 +286,14 @@ export async function runBootstrap(
     );
   }
 
-  if (typeof opts.exportPath !== "string" || !opts.exportPath.trim()) {
-    throw new Error("exportPath is required");
-  }
-
-  const pickup = loadBootstrapManifest(opts.exportPath);
+  const source = await resolveExportDirectory({
+    exportPath: opts.exportPath,
+    exportUrl: opts.exportUrl,
+    exportCatalogUrl: opts.exportCatalogUrl,
+    exportId: opts.exportId,
+    fetchFn: opts.fetchFn,
+  });
+  const pickup = loadBootstrapManifest(source.exportDir);
   const { roles, specialists, skills } = loadInceptionContext(helixDir);
 
   const preview: BootstrapPreview = {
@@ -305,6 +319,7 @@ export async function runBootstrap(
     targetDir,
     preset: opts.preset,
     force: force || assessment.hasHelixConfig,
+    exportSource: source,
   });
 
   return startOrAwaitAgents({
@@ -315,9 +330,11 @@ export async function runBootstrap(
     materialize,
     roles,
     preview,
+    exportSource: source,
     onJobUpdate: opts.onJobUpdate,
     createSpecialistFactory: opts.createSpecialistFactory,
     detach: opts.detachAgents === true,
+    fetchFn: opts.fetchFn,
   });
 }
 
@@ -330,9 +347,11 @@ async function startOrAwaitAgents(opts: {
   materialize?: MaterializeResult;
   roles?: InceptionRole[];
   preview?: BootstrapPreview;
+  exportSource?: ExportSourceMeta;
   onJobUpdate?: (job: InceptionJob) => void;
   createSpecialistFactory?: CreateBootstrapSpecialistFactory;
   detach: boolean;
+  fetchFn?: typeof fetch;
 }): Promise<BootstrapExecuteResult | BootstrapAcceptedResult> {
   const targetDir = resolve(opts.targetDir);
   const helixDir = opts.helixDir;
@@ -393,6 +412,7 @@ async function startOrAwaitAgents(opts: {
   }
 
   const materialize = opts.materialize ?? existing?.materialize ?? fallbackMaterialize(targetDir);
+  const source = opts.exportSource;
   const job: InceptionJob = {
     id: randomUUID(),
     status: "running_agents",
@@ -401,6 +421,10 @@ async function startOrAwaitAgents(opts: {
     startedAt: Date.now(),
     roles: roleList.map((role) => ({ role, status: "pending" })),
     materialize,
+    exportSourceKind: source?.kind ?? existing?.exportSourceKind,
+    catalogBaseUrl: source?.catalogBaseUrl ?? existing?.catalogBaseUrl,
+    exportId: source?.exportId ?? existing?.exportId,
+    packageUrl: source?.packageUrl ?? existing?.packageUrl,
   };
   saveInceptionJob(helixDir, job);
   opts.onJobUpdate?.(job);
@@ -415,6 +439,7 @@ async function startOrAwaitAgents(opts: {
     job,
     onUpdate: opts.onJobUpdate,
     createSpecialistFactory: opts.createSpecialistFactory,
+    fetchFn: opts.fetchFn,
   }).catch((error) => {
     const failed = loadInceptionJob(helixDir) ?? job;
     if (failed.status !== "failed") {

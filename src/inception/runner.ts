@@ -19,6 +19,7 @@ import { DEFAULT_INCEPTION_ROLES, type InceptionRole } from "./roles.js";
 import { createInceptionSpecialistFactory } from "./specialists.js";
 import type { BootstrapPickup } from "./manifest.js";
 import { commitBootstrapTree } from "./git.js";
+import { notifyExportAdopted } from "./adopt.js";
 
 export type CreateBootstrapSpecialistFactory = (
   provider: PiProvider,
@@ -37,6 +38,7 @@ export interface RunInceptionAgentsOptions {
   onUpdate?: (job: InceptionJob) => void;
   /** Inject for tests; defaults to inception skill-pack pi sessions. */
   createSpecialistFactory?: CreateBootstrapSpecialistFactory;
+  fetchFn?: typeof fetch;
 }
 
 export async function runInceptionAgents(opts: RunInceptionAgentsOptions): Promise<InceptionJob> {
@@ -135,6 +137,15 @@ export async function runInceptionAgents(opts: RunInceptionAgentsOptions): Promi
       return job;
     }
     persist(opts.helixDir, job, opts.onUpdate);
+    if (job.catalogBaseUrl && job.exportId !== undefined) {
+      await notifyExportAdopted({
+        catalogBaseUrl: job.catalogBaseUrl,
+        exportId: job.exportId,
+        adoptedBy: "helix",
+        adoptionNote: `Bootstrapped at ${opts.targetDir}`,
+        fetchFn: opts.fetchFn,
+      });
+    }
     return job;
   } catch (error) {
     job.status = "failed";

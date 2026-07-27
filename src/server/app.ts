@@ -26,7 +26,9 @@
  *
  * Workspace / inception:
  * GET  /workspace         git/empty status + bootstrap/PR availability
- * POST /bootstrap         dry-run or execute Prelude empty-workspace bootstrap
+ * GET  /bootstrap/export-catalog  proxy catalog list (soft export contract)
+ * GET  /bootstrap/export-catalog/status  catalog reachability (online/offline)
+ * POST /bootstrap         dry-run or execute empty-workspace bootstrap
  */
 import express, { type Express, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
@@ -58,6 +60,8 @@ import {
   type BootstrapExecuteResult,
   type BootstrapPreview,
 } from "../inception/service.js";
+import { listExportCatalog } from "../inception/pickup.js";
+import { probeExportCatalogStatus } from "../inception/catalogStatus.js";
 import type { CreateBootstrapSpecialistFactory } from "../inception/runner.js";
 
 export interface CreateAppOptions {
@@ -582,10 +586,45 @@ export function createApp(opts: CreateAppOptions): Express {
     }
   });
 
+  app.get("/bootstrap/export-catalog/status", async (req: Request, res: Response) => {
+    try {
+      const baseUrl = typeof req.query.baseUrl === "string" ? req.query.baseUrl.trim() : "";
+      const status = await probeExportCatalogStatus(baseUrl);
+      res.json(status);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/bootstrap/export-catalog", async (req: Request, res: Response) => {
+    try {
+      const baseUrl = typeof req.query.baseUrl === "string" ? req.query.baseUrl.trim() : "";
+      if (!baseUrl) {
+        res.status(400).json({ error: "baseUrl query parameter is required" });
+        return;
+      }
+      const statusRaw = typeof req.query.status === "string" ? req.query.status.trim() : "all";
+      const status =
+        statusRaw === "adopted"
+        || statusRaw === "all"
+        || statusRaw === "available"
+        || statusRaw === "new"
+          ? statusRaw
+          : "all";
+      const items = await listExportCatalog(baseUrl, status);
+      res.json(items);
+    } catch (err) {
+      res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   app.post("/bootstrap", async (req: Request, res: Response) => {
     try {
       const body = (req.body ?? {}) as {
         exportPath?: unknown;
+        exportUrl?: unknown;
+        exportCatalogUrl?: unknown;
+        exportId?: unknown;
         dryRun?: unknown;
         execute?: unknown;
         runAgents?: unknown;
@@ -599,10 +638,41 @@ export function createApp(opts: CreateAppOptions): Express {
         typeof body.exportPath === "string" && body.exportPath.trim()
           ? body.exportPath.trim()
           : undefined;
+      const exportUrl =
+        typeof body.exportUrl === "string" && body.exportUrl.trim()
+          ? body.exportUrl.trim()
+          : undefined;
+      const exportCatalogUrl =
+        typeof body.exportCatalogUrl === "string" && body.exportCatalogUrl.trim()
+          ? body.exportCatalogUrl.trim()
+          : undefined;
+      const exportIdRaw = body.exportId;
+      const exportId =
+        typeof exportIdRaw === "number" && Number.isInteger(exportIdRaw) && exportIdRaw > 0
+          ? exportIdRaw
+          : typeof exportIdRaw === "string" && /^\d+$/.test(exportIdRaw.trim())
+            ? Number(exportIdRaw.trim())
+            : undefined;
 
-      if (!runAgents && !exportPath) {
-        res.status(400).json({ error: "exportPath is required" });
-        return;
+      const sourceCount = [
+        Boolean(exportPath),
+        Boolean(exportUrl),
+        Boolean(exportCatalogUrl && exportId !== undefined),
+      ].filter(Boolean).length;
+
+      if (!runAgents) {
+        if (sourceCount === 0) {
+          res.status(400).json({
+            error: "exportPath, exportUrl, or exportCatalogUrl+exportId is required",
+          });
+          return;
+        }
+        if (sourceCount > 1) {
+          res.status(400).json({
+            error: "Provide only one of exportPath, exportUrl, or exportCatalogUrl+exportId",
+          });
+          return;
+        }
       }
 
       const status = getWorkspaceStatus(ctx.cwd);
@@ -618,6 +688,9 @@ export function createApp(opts: CreateAppOptions): Express {
 
       const result = await runBootstrap({
         exportPath,
+        exportUrl,
+        exportCatalogUrl,
+        exportId,
         targetDir: ctx.cwd,
         cwd: ctx.cwd,
         helixDir: ctx.helixDir,

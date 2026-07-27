@@ -12,6 +12,7 @@ import { parseBootstrapArgs, runBootstrapCommand } from "../src/inception/comman
 import { hasOwnGitDir } from "../src/inception/git.js";
 import { ensureInceptionScaffold } from "../src/inception/workspace.js";
 import { getWorkspaceStatus, runBootstrap } from "../src/inception/service.js";
+import { resolveExportDirectory } from "../src/inception/pickup.js";
 import { resolveInceptionSkills } from "../src/inception/skills.js";
 import { resolveAdditionalSkillPaths } from "../src/agents/loaderBuilder.js";
 import { createInceptionSpecialistFactory } from "../src/inception/specialists.js";
@@ -257,6 +258,17 @@ test("parseBootstrapArgs defaults target to cwd and dry-run", () => {
   const execOpts = parseBootstrapArgs(["--export", "/tmp/export", "--target", "app", "--execute"], cwd);
   assert.equal(execOpts.targetDir, join(cwd, "app"));
   assert.equal(execOpts.dryRun, false);
+  const catalogOpts = parseBootstrapArgs(
+    ["--export-catalog", "http://127.0.0.1:8321", "--export-id", "7", "--execute"],
+    cwd,
+  );
+  assert.equal(catalogOpts.exportCatalogUrl, "http://127.0.0.1:8321");
+  assert.equal(catalogOpts.exportId, 7);
+  assert.equal(catalogOpts.dryRun, false);
+  assert.throws(
+    () => parseBootstrapArgs(["--export", "/tmp/a", "--export-url", "http://x"], cwd),
+    /only one/,
+  );
   rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
@@ -535,4 +547,170 @@ test("ensureInceptionScaffold creates .helix without git", async () => {
 
   rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   rmSync(exportDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+});
+
+test("resolveExportDirectory pulls package URL into a local export tree", async () => {
+  const exportDir = writeExportFixture(mkdtempSync(join(tmpdir(), "helix-pkg-src-")));
+  const archive = join(mkdtempSync(join(tmpdir(), "helix-pkg-arc-")), "export.tgz");
+  execFileSync("tar", ["-czf", archive, "-C", exportDir, "."], { stdio: "ignore" });
+  const bytes = readFileSync(archive);
+  const cacheDir = mkdtempSync(join(tmpdir(), "helix-pkg-cache-"));
+  const source = await resolveExportDirectory({
+    exportUrl: "http://catalog.test/api/exports/3/package",
+    cacheDir,
+    fetchFn: (async () =>
+      new Response(bytes, { status: 200, headers: { "Content-Type": "application/gzip" } })) as typeof fetch,
+  });
+  assert.equal(source.kind, "package_url");
+  assert.ok(existsSync(join(source.exportDir, "bootstrap.json")));
+  const pickup = loadBootstrapManifest(source.exportDir);
+  assert.equal(pickup.manifest.name, "Demo App");
+  rmSync(exportDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  rmSync(cacheDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+});
+
+test("runBootstrap from catalog marks adopt after agents complete", async () => {
+  const target = mkdtempSync(join(tmpdir(), "helix-catalog-boot-"));
+  const exportDir = writeExportFixture(mkdtempSync(join(tmpdir(), "helix-catalog-src-")));
+  const archive = join(mkdtempSync(join(tmpdir(), "helix-catalog-arc-")), "export.tgz");
+  execFileSync("tar", ["-czf", archive, "-C", exportDir, "."], { stdio: "ignore" });
+  const bytes = readFileSync(archive);
+  const adopts: Array<{ url: string; body: unknown }> = [];
+  const fetchFn = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/package")) {
+      return new Response(bytes, { status: 200 });
+    }
+    if (url.endsWith("/adopt") && init?.method === "POST") {
+      adopts.push({ url, body: JSON.parse(String(init.body)) });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+
+  const result = await runBootstrap({
+    exportCatalogUrl: "http://catalog.test",
+    exportId: 9,
+    targetDir: target,
+    execute: true,
+    provider: new FakeProvider(),
+    createSpecialistFactory: inceptionStubFactory,
+    fetchFn,
+  });
+  assert.equal(result.dryRun, false);
+  if (result.dryRun) throw new Error("expected execute");
+  assert.equal(result.job.status, "completed");
+  assert.equal(result.job.catalogBaseUrl, "http://catalog.test");
+  assert.equal(result.job.exportId, 9);
+  assert.equal(adopts.length, 1);
+  assert.match(adopts[0]!.url, /\/api\/exports\/9\/adopt$/);
+  const source = JSON.parse(readFileSync(join(target, "docs", "inception", "SOURCE.json"), "utf-8")) as {
+    sourceKind?: string;
+    exportId?: number;
+  };
+  assert.equal(source.sourceKind, "catalog");
+  assert.equal(source.exportId, 9);
+
+  rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  rmSync(exportDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+});
+
+test("GET /bootstrap/export-catalog proxies soft catalog contract", async () => {
+  const target = mkdtempSync(join(tmpdir(), "helix-catalog-proxy-"));
+  ensureInceptionScaffold(target);
+  const { createServer } = await import("node:http");
+  const catalog = createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify([
+        {
+          id: 4,
+          inceptionId: 2,
+          inceptionName: "Widget",
+          version: 1,
+          createdAt: 1,
+          adoptionStatus: "available",
+          adoptedAt: null,
+          adoptedBy: "",
+          adoptionNote: "",
+          summary: "Widget dashboard for ops.",
+        },
+      ]),
+    );
+  });
+  await new Promise<void>((resolve) => catalog.listen(0, "127.0.0.1", resolve));
+  const addr = catalog.address();
+  if (!addr || typeof addr === "string") throw new Error("expected port");
+  const baseUrl = `http://127.0.0.1:${addr.port}`;
+
+  const specialists = loadSpecialists(join(target, ".helix", "agents"));
+  const ctx = createRunContext({
+    cwd: target,
+    helixDir: join(target, ".helix"),
+    store: new MemoryRunStore(),
+    provider: new FakeProvider(),
+    createOrchestrator: () => new ScriptedOrchestrator([{ kind: "done", reason: "ok" } satisfies OrchestratorDecision]),
+    createSpecialistFactory: () => new StubSpecialistFactory(specialists, { planner: "ok", dev: "ok" }),
+  });
+  const app = createApp({ ctx, createBootstrapSpecialistFactory: inceptionStubFactory });
+  const res = await request(app)
+    .get("/bootstrap/export-catalog")
+    .query({ baseUrl, status: "all" });
+  assert.equal(res.status, 200);
+  assert.equal(res.body[0]?.inceptionName, "Widget");
+  assert.equal(res.body[0]?.summary, "Widget dashboard for ops.");
+  assert.equal(res.body[0]?.id, 4);
+
+  await new Promise<void>((resolve, reject) => catalog.close((err) => (err ? reject(err) : resolve())));
+  rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+});
+
+test("GET /bootstrap/export-catalog/status reports online and offline", async () => {
+  const target = mkdtempSync(join(tmpdir(), "helix-catalog-status-"));
+  ensureInceptionScaffold(target);
+  const { createServer } = await import("node:http");
+  const online = createServer((req, res) => {
+    if (req.url === "/api/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    res.writeHead(404).end();
+  });
+  await new Promise<void>((resolve) => online.listen(0, "127.0.0.1", resolve));
+  const addr = online.address();
+  if (!addr || typeof addr === "string") throw new Error("expected port");
+  const baseUrl = `http://127.0.0.1:${addr.port}`;
+
+  const specialists = loadSpecialists(join(target, ".helix", "agents"));
+  const ctx = createRunContext({
+    cwd: target,
+    helixDir: join(target, ".helix"),
+    store: new MemoryRunStore(),
+    provider: new FakeProvider(),
+    createOrchestrator: () => new ScriptedOrchestrator([{ kind: "done", reason: "ok" } satisfies OrchestratorDecision]),
+    createSpecialistFactory: () => new StubSpecialistFactory(specialists, { planner: "ok", dev: "ok" }),
+  });
+  const app = createApp({ ctx, createBootstrapSpecialistFactory: inceptionStubFactory });
+
+  const up = await request(app).get("/bootstrap/export-catalog/status").query({ baseUrl });
+  assert.equal(up.status, 200);
+  assert.equal(up.body.status, "online");
+  assert.equal(up.body.healthUrl, `${baseUrl}/api/health`);
+
+  const down = await request(app)
+    .get("/bootstrap/export-catalog/status")
+    .query({ baseUrl: "http://127.0.0.1:9" });
+  assert.equal(down.status, 200);
+  assert.equal(down.body.status, "offline");
+
+  const empty = await request(app).get("/bootstrap/export-catalog/status").query({ baseUrl: "" });
+  assert.equal(empty.status, 200);
+  assert.equal(empty.body.status, "unconfigured");
+
+  await new Promise<void>((resolve, reject) => online.close((err) => (err ? reject(err) : resolve())));
+  rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });

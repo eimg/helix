@@ -1,10 +1,10 @@
 /**
- * `helix bootstrap --export <path> [--target <dir>] [--dry-run|--execute|--run-agents]`
+ * `helix bootstrap` — empty-workspace entry from a local export dir, package URL,
+ * or export catalog (soft HTTP contract).
  *
- * Empty-workspace entry: run from (or target) a folder that is not yet a git
- * project. Execute creates a new git repository in place, copies the Prelude
- * export, runs `helix init`, then runs inception agents (architect → scaffolder
- * → validator) with auto-loaded inception skills.
+ * Execute creates a new git repository in place, copies the bootstrap export,
+ * runs `helix init`, then runs inception agents (architect → scaffolder →
+ * validator) with auto-loaded inception skills.
  */
 import { resolve } from "node:path";
 import type { PiProvider } from "../providers/openrouter.js";
@@ -19,6 +19,9 @@ import type { CreateBootstrapSpecialistFactory } from "./runner.js";
 
 export interface BootstrapCommandOptions {
   exportPath?: string;
+  exportUrl?: string;
+  exportCatalogUrl?: string;
+  exportId?: number;
   /** New project directory. Defaults to `process.cwd()`. */
   targetDir: string;
   dryRun: boolean;
@@ -34,6 +37,9 @@ export interface BootstrapCommandOptions {
 
 export function parseBootstrapArgs(args: string[], cwd = process.cwd()): BootstrapCommandOptions {
   let exportPath: string | undefined;
+  let exportUrl: string | undefined;
+  let exportCatalogUrl: string | undefined;
+  let exportId: number | undefined;
   let targetDir: string | undefined;
   let dryRun = true;
   let runAgents = false;
@@ -46,7 +52,16 @@ export function parseBootstrapArgs(args: string[], cwd = process.cwd()): Bootstr
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--export") exportPath = args[++i];
-    else if (a === "--target") targetDir = args[++i];
+    else if (a === "--export-url") exportUrl = args[++i];
+    else if (a === "--export-catalog") exportCatalogUrl = args[++i];
+    else if (a === "--export-id") {
+      const raw = args[++i];
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n <= 0) {
+        throw new Error("--export-id requires a positive integer");
+      }
+      exportId = n;
+    } else if (a === "--target") targetDir = args[++i];
     else if (a === "--dry-run") {
       dryRun = true;
       sawDryRun = true;
@@ -68,8 +83,28 @@ export function parseBootstrapArgs(args: string[], cwd = process.cwd()): Bootstr
   if (modeCount > 1) {
     throw new Error("Use only one of --dry-run, --execute, or --run-agents");
   }
-  if (!runAgents && !exportPath?.trim()) {
-    throw new Error("helix bootstrap requires --export <prelude-export-dir>");
+
+  const sources = [
+    Boolean(exportPath?.trim()),
+    Boolean(exportUrl?.trim()),
+    Boolean(exportCatalogUrl?.trim() && exportId !== undefined),
+  ].filter(Boolean).length;
+
+  if (!runAgents) {
+    if (sources === 0) {
+      throw new Error(
+        "helix bootstrap requires --export <dir>, --export-url <url>, or --export-catalog <base> --export-id <n>",
+      );
+    }
+    if (sources > 1) {
+      throw new Error("Provide only one of --export, --export-url, or --export-catalog/--export-id");
+    }
+    if (exportCatalogUrl?.trim() && exportId === undefined) {
+      throw new Error("--export-catalog requires --export-id");
+    }
+    if (exportId !== undefined && !exportCatalogUrl?.trim()) {
+      throw new Error("--export-id requires --export-catalog");
+    }
   }
   if (targetDir !== undefined && !targetDir.trim()) {
     throw new Error("--target requires a directory path");
@@ -77,6 +112,9 @@ export function parseBootstrapArgs(args: string[], cwd = process.cwd()): Bootstr
 
   return {
     exportPath: exportPath?.trim(),
+    exportUrl: exportUrl?.trim(),
+    exportCatalogUrl: exportCatalogUrl?.trim(),
+    exportId,
     targetDir: resolve(cwd, targetDir?.trim() || cwd),
     dryRun,
     runAgents,
@@ -91,6 +129,9 @@ export async function runBootstrapCommand(opts: BootstrapCommandOptions): Promis
   const provider = opts.provider ?? new OpenRouterProvider();
   const result = await runBootstrap({
     exportPath: opts.exportPath,
+    exportUrl: opts.exportUrl,
+    exportCatalogUrl: opts.exportCatalogUrl,
+    exportId: opts.exportId,
     targetDir: opts.targetDir,
     dryRun: opts.dryRun,
     execute: !opts.dryRun && !opts.runAgents,
@@ -107,7 +148,9 @@ export async function runBootstrapCommand(opts: BootstrapCommandOptions): Promis
 
   if (result.dryRun) {
     console.log("Dry run only — no workspace written.");
-    console.log("Execute with: helix bootstrap --export … [--target <dir>] --execute");
+    console.log(
+      "Execute with: helix bootstrap --export … | --export-url … | --export-catalog … --export-id … [--target <dir>] --execute",
+    );
     return;
   }
 
@@ -116,7 +159,7 @@ export async function runBootstrapCommand(opts: BootstrapCommandOptions): Promis
 
 function printPreview(preview: BootstrapPreview, cwd: string): void {
   const { pickup, assessment, specialists, skills, roles, targetDir } = preview;
-  console.log("Prelude bootstrap pickup");
+  console.log("Bootstrap export pickup");
   console.log(`  schema:     ${pickup.schemaVersion}`);
   console.log(`  inception:  ${pickup.name} (#${pickup.inceptionId})`);
   console.log(`  version:    v${pickup.version}`);

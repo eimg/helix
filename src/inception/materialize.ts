@@ -1,5 +1,5 @@
 /**
- * Deterministic inception materialize: Prelude export → new project directory.
+ * Deterministic inception materialize: bootstrap export → new project directory.
  *
  * Creates a brand-new git repository at the target, copies inception docs /
  * artifacts / Primer notes, then runs `helix init` for Helix wiring.
@@ -17,6 +17,7 @@ import { dirname, join, resolve } from "node:path";
 import { init } from "../init.js";
 import { gitInit } from "./git.js";
 import type { BootstrapPickup } from "./manifest.js";
+import type { ExportSourceMeta } from "./pickup.js";
 import { assertInceptionTarget } from "./workspace.js";
 
 export interface MaterializeOptions {
@@ -26,6 +27,8 @@ export interface MaterializeOptions {
   preset?: string;
   /** Overwrite an existing `.helix/config.json` in the target. */
   force?: boolean;
+  /** How Helix obtained this export (local path, package URL, or catalog). */
+  exportSource?: ExportSourceMeta;
 }
 
 export interface MaterializeResult {
@@ -100,6 +103,7 @@ export function materializeBootstrap(opts: MaterializeOptions): MaterializeResul
     }
   }
 
+  const source = opts.exportSource;
   writeFileSync(
     join(docsRoot, "SOURCE.json"),
     `${JSON.stringify(
@@ -108,9 +112,17 @@ export function materializeBootstrap(opts: MaterializeOptions): MaterializeResul
         inceptionId: manifest.inceptionId,
         name: manifest.name,
         version: manifest.version,
-        exportPath: manifest.exportPath,
+        exportPath: source?.exportDir ?? manifest.exportPath,
         exportedAt: manifest.exportedAt,
         acceptedAt: manifest.acceptedAt,
+        ...(source
+          ? {
+              sourceKind: source.kind,
+              ...(source.packageUrl ? { packageUrl: source.packageUrl } : {}),
+              ...(source.catalogBaseUrl ? { catalogBaseUrl: source.catalogBaseUrl } : {}),
+              ...(source.exportId !== undefined ? { exportId: source.exportId } : {}),
+            }
+          : {}),
       },
       null,
       2,
@@ -122,7 +134,7 @@ export function materializeBootstrap(opts: MaterializeOptions): MaterializeResul
     writeFileSync(
       join(targetDir, "README.md"),
       ensureTrailingNewline(
-        `# ${manifest.name || "New project"}\n\n${manifest.brief.trim() || "Bootstrapped from a Prelude inception export."}\n`,
+        `# ${manifest.name || "New project"}\n\n${manifest.brief.trim() || "Bootstrapped from an inception export."}\n`,
       ),
       "utf-8",
     );
