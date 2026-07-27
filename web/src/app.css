@@ -112,6 +112,20 @@ a { color: var(--accent); }
   white-space: nowrap;
 }
 .bootstrap-kv .kv-row:first-child { border-top: 0; padding-top: 0; }
+.bootstrap-result {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+}
+.bootstrap-result .panel-heading { margin-bottom: 0; }
+.bootstrap-result .bootstrap-banner-success { margin: 0; }
+.bootstrap-result-next {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
 .bootstrap-specialists { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
 .bootstrap-specialist-list {
   list-style: none;
@@ -224,11 +238,18 @@ a { color: var(--accent); }
 .export-picker-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 6px;
   display: grid;
+  align-content: start;
   gap: 8px;
-  max-height: 280px;
+  max-height: min(280px, 42vh);
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface-subtle) 70%, transparent);
+  scrollbar-gutter: stable;
 }
 .export-picker-item {
   width: 100%;

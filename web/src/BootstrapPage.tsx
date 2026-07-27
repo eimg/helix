@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   BootstrapAcceptedResult,
@@ -19,6 +19,7 @@ const CATALOG_URL_KEY = "helix.bootstrap.exportCatalogUrl";
 
 export function BootstrapPage() {
   const client = useQueryClient();
+  const resultRef = useRef<HTMLElement | null>(null);
   const workspace = useQuery({
     queryKey: ["workspace"],
     queryFn: () => api<WorkspaceStatus>("/workspace"),
@@ -42,6 +43,11 @@ export function BootstrapPage() {
   const [force, setForce] = useState(false);
   const [last, setLast] = useState<BootstrapResult | null>(null);
   const [catalogLoaded, setCatalogLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!last) return;
+    resultRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [last]);
 
   useEffect(() => {
     try {
@@ -231,7 +237,7 @@ export function BootstrapPage() {
                     ? "Export is on disk. Run architect → scaffolder → validator to build the project foundation (requires OPENROUTER_API_KEY in .env)."
                     : running
                       ? "Inception agents are building the project foundation…"
-                      : "Pick a bootstrap export, then create git + Helix wiring and run bootstrap specialists with auto-loaded inception skills."}
+                      : "Pick a bootstrap package, then create git + Helix wiring and run bootstrap specialists with auto-loaded inception skills."}
               </p>
             </div>
             <StatusChip label={chipLabel} tone={chipTone} />
@@ -301,7 +307,7 @@ export function BootstrapPage() {
               <div className="bootstrap-source-modes" role="tablist" aria-label="Export source">
                 {(
                   [
-                    ["catalog", "Export catalog"],
+                    ["catalog", "Package catalog"],
                     ["path", "Local path"],
                     ["url", "Package URL"],
                   ] as const
@@ -324,7 +330,7 @@ export function BootstrapPage() {
                 <>
                   <label className="field">
                     <span>
-                      Export catalog URL
+                      Package catalog URL
                       <CatalogStatusInline
                         status={catalogStatus.data?.status ?? (catalogStatus.isError ? "offline" : null)}
                         pending={catalogStatus.isFetching && !catalogStatus.data}
@@ -345,7 +351,7 @@ export function BootstrapPage() {
                         disabled={!available || busy || !catalogUrl.trim() || catalog.isFetching}
                         onClick={() => void loadCatalog()}
                       >
-                        {catalog.isFetching ? "Loading…" : "Load exports"}
+                        {catalog.isFetching ? "Loading…" : "Load packages"}
                       </button>
                     </div>
                   </label>
@@ -354,7 +360,7 @@ export function BootstrapPage() {
                   )}
                   {catalogLoaded && !catalog.isFetching && catalog.data && (
                     <div className="export-catalog-panel">
-                      <div className="export-filter-group" role="tablist" aria-label="Export filter">
+                      <div className="export-filter-group" role="tablist" aria-label="Package filter">
                         {(
                           [
                             ["all", "All"],
@@ -378,11 +384,11 @@ export function BootstrapPage() {
                       {catalogExports.length === 0 ? (
                         <p className="export-catalog-empty">
                           {catalogFilter === "all"
-                            ? "No exports in this catalog."
-                            : `No ${catalogFilter} exports.`}
+                            ? "No packages in this catalog."
+                            : `No ${catalogFilter} packages.`}
                         </p>
                       ) : (
-                        <ul className="export-picker-list" role="listbox" aria-label="Bootstrap exports">
+                        <ul className="export-picker-list" role="listbox" aria-label="Bootstrap packages">
                           {catalogExports.map((item) => {
                             const selected = selectedExportId === item.id;
                             return (
@@ -423,7 +429,7 @@ export function BootstrapPage() {
 
               {sourceMode === "path" && (
                 <label className="field">
-                  <span>Export directory</span>
+                  <span>Package directory</span>
                   <input
                     type="text"
                     value={exportPath}
@@ -482,6 +488,7 @@ export function BootstrapPage() {
             </form>
           )}
           {error && <p className="form-error">{error}</p>}
+          {last && <BootstrapResultPanel result={last} resultRef={resultRef} />}
         </section>
 
         <section className="panel bootstrap-side-panel">
@@ -549,8 +556,6 @@ export function BootstrapPage() {
           )}
         </section>
       </div>
-
-      {last && <BootstrapResultPanel result={last} />}
     </main>
   );
 }
@@ -593,28 +598,47 @@ function roleStatusTone(status: string): string {
   }
 }
 
-function BootstrapResultPanel({ result }: { result: BootstrapResult }) {
+function BootstrapResultPanel({
+  result,
+  resultRef,
+}: {
+  result: BootstrapResult;
+  resultRef?: RefObject<HTMLElement | null>;
+}) {
   const preview = result.dryRun ? result : result.preview;
   const materialize = result.dryRun ? null : result.materialize;
   const job = result.dryRun ? null : "job" in result ? result.job : null;
   const previewSkills = preview.skills ?? [];
+  const specialists = preview.specialists ?? [];
   const accepted = !result.dryRun && "accepted" in result && result.accepted;
+  const pickupName = preview.pickup.name?.trim() || `Inception #${preview.pickup.inceptionId}`;
   return (
-    <section className="panel result-panel">
+    <section
+      className={`bootstrap-result ${result.dryRun ? "bootstrap-result-preview" : ""}`}
+      ref={resultRef}
+      aria-live="polite"
+    >
       <div className="panel-heading">
         <div>
           <span className="eyebrow">
             {result.dryRun ? "Dry run result" : accepted ? "Bootstrap started" : "Bootstrap result"}
           </span>
-          <h2>{preview.pickup.name} · v{preview.pickup.version}</h2>
+          <h2>{pickupName} · v{preview.pickup.version}</h2>
         </div>
         <StatusChip
           label={result.dryRun ? "preview" : accepted ? "running" : job?.status ?? "done"}
-          tone={result.dryRun || accepted || job?.status === "running_agents" ? "running" : "done"}
+          tone={result.dryRun ? "done" : accepted || job?.status === "running_agents" ? "running" : "done"}
         />
       </div>
+      {result.dryRun && (
+        <p className="bootstrap-banner bootstrap-banner-success" role="status">
+          Export validated. Dry run only — no git, files, or agents were written.
+        </p>
+      )}
       <div className="config-kv bootstrap-kv">
+        <div className="kv-row"><span>Schema</span><code>{preview.pickup.schemaVersion}</code></div>
         <div className="kv-row"><span>Export</span><code>{preview.pickup.exportDir}</code></div>
+        <div className="kv-row"><span>Target</span><code>{preview.targetDir}</code></div>
         <div className="kv-row">
           <span>Brief</span>
           <code>{preview.pickup.brief.replace(/\s+/g, " ").trim().slice(0, 180) || "(empty)"}</code>
@@ -623,8 +647,47 @@ function BootstrapResultPanel({ result }: { result: BootstrapResult }) {
           <span>Documents</span>
           <code>{preview.pickup.documents} in manifest · {preview.pickup.documentsOnDisk} on disk</code>
         </div>
-        <div className="kv-row"><span>Artifacts</span><code>{preview.pickup.artifacts}</code></div>
-        <div className="kv-row"><span>Primer notes</span><code>{preview.pickup.primerNotes}</code></div>
+        <div className="kv-row">
+          <span>Artifacts</span>
+          <code>{preview.pickup.artifacts} in manifest · {preview.pickup.artifactsOnDisk} on disk</code>
+        </div>
+        <div className="kv-row">
+          <span>Primer notes</span>
+          <code>{preview.pickup.primerNotes} notes · {preview.pickup.primerNotesOnDisk} on disk</code>
+        </div>
+        <div className="kv-row">
+          <span>INDEX.md</span>
+          <code>{preview.pickup.indexExists ? "present" : "missing"}</code>
+        </div>
+        <div className="kv-row">
+          <span>Git</span>
+          <code>
+            {materialize
+              ? "initialized"
+              : preview.assessment.hasGit
+                ? "present"
+                : "will create on execute"}
+          </code>
+        </div>
+        <div className="kv-row">
+          <span>Helix</span>
+          <code>
+            {materialize
+              ? "initialized (.helix/)"
+              : preview.assessment.hasHelixConfig
+                ? "scaffold present"
+                : "will create on execute"}
+          </code>
+        </div>
+        <div className="kv-row"><span>Roles</span><code>{preview.roles.join(" → ")}</code></div>
+        <div className="kv-row">
+          <span>Specialists</span>
+          <code>
+            {specialists.length
+              ? specialists.map((item) => `${item.name} (${item.source.replace("_", " ")})`).join(", ")
+              : "none resolved"}
+          </code>
+        </div>
         <div className="kv-row">
           <span>Skills</span>
           <code>
@@ -634,19 +697,21 @@ function BootstrapResultPanel({ result }: { result: BootstrapResult }) {
           </code>
         </div>
         {materialize && (
-          <>
-            <div className="kv-row"><span>Git</span><code>initialized</code></div>
-            <div className="kv-row">
-              <span>Wrote</span>
-              <code>
-                {materialize.documentsWritten} docs · {materialize.artifactsWritten} artifacts ·{" "}
-                {materialize.primerNotesWritten} primer
-              </code>
-            </div>
-            <div className="kv-row"><span>Target</span><code>{materialize.targetDir}</code></div>
-          </>
+          <div className="kv-row">
+            <span>Wrote</span>
+            <code>
+              {materialize.documentsWritten} docs · {materialize.artifactsWritten} artifacts ·{" "}
+              {materialize.primerNotesWritten} primer
+            </code>
+          </div>
         )}
       </div>
+      {result.dryRun && (
+        <p className="bootstrap-result-next">
+          Ready to materialize. Execute will create git + Helix scaffolding, then run{" "}
+          {preview.roles.join(" → ")}.
+        </p>
+      )}
       {job && <JobProgress job={job} />}
       {!result.dryRun && job?.status === "completed" && (
         <p className="bootstrap-banner bootstrap-banner-success">
