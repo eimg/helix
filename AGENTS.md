@@ -15,7 +15,7 @@ This file is an entrypoint, not the full specification. Follow the linked docs w
 | Acme Projects | `~/Desktop/acme/acme-projects` | Feature-idea and collaboration board for existing Helix repos; can manually create non-triggering issues through Acme Issues. |
 | Acme Todo | `~/Desktop/acme/acme-todo` | Disposable target application used for agent implementation and verification. |
 
-Existing-repo runtime flow: Acme Issues → Helix → Acme Todo, followed by a Helix completion callback to Acme Issues. Primer shares the fictional Acme context but remains a separate knowledge-product effort.
+Existing-repo runtime flow: Acme Issues → Helix → Acme Todo, followed by a Helix completion callback to Acme Issues. Primer shares the fictional Acme context but remains a separate knowledge-product effort. Helix owns a stable tracker contract (`/runs`, `/pr-reviews`, `/local-prs/merge`, and flat `{trackerUrl}/api/pull-requests` + `/api/webhooks/helix`); Issues adapts around that without becoming a Helix dependency.
 
 Manual feature handoff: Acme Projects ready card → linked Acme Issues issue without the configured trigger label; a human adds that label in Acme Issues to start Helix. Automatic trigger and later PR/card projections remain planned. Acme Projects does not call Helix directly; see the Project-board handoff in [`docs/vision.md`](./docs/vision.md#project-board-handoff).
 

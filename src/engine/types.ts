@@ -10,10 +10,6 @@
 export interface IssueExternalRef {
   trackerUrl: string;
   issueId: number;
-  /** Issues project id when the tracker is multi-project (e.g. Acme Issues). */
-  projectId?: number;
-  /** Issues project slug; preferred over projectId for project-scoped API URLs. */
-  projectSlug?: string;
 }
 
 /** A work item that triggers a run. */
