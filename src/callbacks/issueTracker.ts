@@ -1,12 +1,14 @@
 /**
  * Completion callbacks to external issue trackers (POC — no auth).
  *
- * Follows common webhook conventions:
- *   POST {trackerUrl}/api/webhooks/helix
- *   X-Helix-Event: run.completed
- *   { event, run, issue }
+ * Helix owns a stable outbound contract. Trackers adapt to Helix — not the reverse:
+ *   POST {trackerUrl}/api/webhooks/helix   (run.completed)
+ *   POST {trackerUrl}/api/pull-requests    (local PR create)
+ *   PATCH {trackerUrl}/api/pull-requests/:id
+ *
+ * Extra tracker fields on inbound payloads (e.g. project slug) are ignored.
  */
-import type { Run } from "../engine/types.js";
+import type { IssueExternalRef, Run } from "../engine/types.js";
 
 export interface RunCompletedPayload {
   event: "run.completed";
@@ -69,7 +71,7 @@ export async function notifyIssueTracker(
   }
 }
 
-export function parseIssueExternal(value: unknown): import("../engine/types.js").IssueExternalRef | undefined {
+export function parseIssueExternal(value: unknown): IssueExternalRef | undefined {
   if (!value || typeof value !== "object") return undefined;
   const o = value as Record<string, unknown>;
   const trackerUrl = typeof o.trackerUrl === "string" ? o.trackerUrl.trim() : "";
@@ -80,7 +82,7 @@ export function parseIssueExternal(value: unknown): import("../engine/types.js")
 
 export function externalFromHeaders(
   headers: Record<string, string | string[] | undefined>
-): import("../engine/types.js").IssueExternalRef | undefined {
+): IssueExternalRef | undefined {
   const issueIdRaw = headerValue(headers["x-issues-issue-id"]);
   const trackerUrl = headerValue(headers["x-issues-source"]);
   if (!issueIdRaw || !trackerUrl) return undefined;

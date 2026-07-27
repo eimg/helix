@@ -160,18 +160,19 @@ npm run dev
 # → http://127.0.0.1:8320/
 ```
 
-**Configure acme-issues** (Settings in the UI):
+**Configure acme-issues** (per-project Settings in the UI):
 
 | Setting | Value |
 |---------|-------|
 | Webhook URL | `http://127.0.0.1:8319/runs` |
 | Label filter | `trigger` (default) or any label you prefer |
 | Continuation comment command | `/helix` (default) |
+| Callback / base URL | Issues public URL Helix should call back (e.g. `http://127.0.0.1:8320`) |
 | Webhooks enabled | on |
 
 **Create an issue** in acme-issues with the filter label (e.g. `trigger`). The tracker POSTs to Helix; Helix creates an isolated feature branch/worktree, then the run starts and appears in the Helix run console. On success, Helix policy-checks and commits any remaining implementation changes before registering a draft local PR in Acme Issues. The linked issue remains in progress while the PR is reviewed.
 
-Open **Pull requests** in Acme Issues and request review. Helix checks out the exact head SHA in a detached temporary worktree and runs the independent `reviewer` and `verifier` concurrently. Acme Issues displays the findings, executed checks, decision, diff, and review history. A changed head SHA invalidates the current readiness state. Helix never merges; after manually merging the reviewed SHA, use **Mark merged** to record the result and close the linked issue.
+Open **Pull requests** in Acme Issues and request review. Helix checks out the exact head SHA in a detached temporary worktree and runs the independent `reviewer` and `verifier` concurrently. Acme Issues displays the findings, executed checks, decision, diff, and review history. A changed head SHA invalidates the current readiness state. Helix never auto-merges; after review passes, use **Merge** in Acme Issues (which prefers Helix `POST /local-prs/merge`) to record the result and close the linked issue.
 
 > The current local harness assumes repositories and PR branches are trusted. Verification commands execute locally without a VM/container boundary. Do not review untrusted third-party code while credentials are present in the Helix process environment.
 
@@ -251,7 +252,11 @@ Accepts inline issues from acme-issues and other producers:
 }
 ```
 
-Correlation also works via headers: `X-Issues-Issue-Id`, `X-Issues-Source`. The `external` block (or headers) enables completion callbacks to acme-issues.
+Correlation also works via headers: `X-Issues-Issue-Id`, `X-Issues-Source`.
+The `external` block (or headers) enables completion callbacks and local PR
+registration against Helix’s flat tracker contract
+(`POST/PATCH {trackerUrl}/api/pull-requests`, `POST …/api/webhooks/helix`).
+Trackers may send extra fields; Helix ignores them.
 
 ### `POST /runs/:id/continuations`
 

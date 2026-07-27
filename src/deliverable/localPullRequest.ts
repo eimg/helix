@@ -22,7 +22,9 @@ export interface LocalPullRequestDeliverableOptions {
 
 /**
  * Finalizes a Helix-owned implementation branch and registers it as a draft
- * local PR in Acme Issues. It never merges or pushes.
+ * local PR with the linked issue tracker. Helix uses a stable flat contract
+ * (`POST/PATCH {trackerUrl}/api/pull-requests`); trackers map that onto their
+ * own storage. Helix never merges or pushes.
  */
 export class LocalPullRequestDeliverablePipeline implements DeliverablePipeline {
   private readonly cwd: string;
@@ -102,11 +104,11 @@ export class LocalPullRequestDeliverablePipeline implements DeliverablePipeline 
           }),
         });
         if (!response.ok) {
-          throw new Error(`Acme Issues rejected local PR update (HTTP ${response.status})`);
+          throw new Error(`Issue tracker rejected local PR update (HTTP ${response.status})`);
         }
         const updated = await response.json() as CreatedLocalPullRequest;
         if (!Number.isInteger(updated.id) || updated.id <= 0) {
-          throw new Error("Acme Issues returned an invalid local PR response");
+          throw new Error("Issue tracker returned an invalid local PR response");
         }
         pullRequestId = updated.id;
         if (typeof updated.headBranch === "string" && updated.headBranch.trim()) {
@@ -131,11 +133,11 @@ export class LocalPullRequestDeliverablePipeline implements DeliverablePipeline 
           }),
         });
         if (!response.ok) {
-          throw new Error(`Acme Issues rejected local PR creation (HTTP ${response.status})`);
+          throw new Error(`Issue tracker rejected local PR creation (HTTP ${response.status})`);
         }
         const created = await response.json() as CreatedLocalPullRequest;
         if (!Number.isInteger(created.id) || created.id <= 0) {
-          throw new Error("Acme Issues returned an invalid local PR response");
+          throw new Error("Issue tracker returned an invalid local PR response");
         }
         pullRequestId = created.id;
         if (typeof created.headBranch === "string" && created.headBranch.trim()) {
@@ -149,7 +151,7 @@ export class LocalPullRequestDeliverablePipeline implements DeliverablePipeline 
         draft: true,
         url: `${trackerBase}/?pr=${pullRequestId}`,
       };
-      // Readiness and the human merge record live in Acme Issues PR control,
+      // Readiness and the human merge record live in the issue tracker PR UI,
       // not in Helix's provisional GitHub approve/merge endpoints.
       run.approvalStatus = "none";
     } catch (err) {
