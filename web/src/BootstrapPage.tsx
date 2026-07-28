@@ -16,8 +16,10 @@ type SourceMode = "catalog" | "path" | "url";
 type CatalogFilter = "all" | "new" | "adopted";
 
 const CATALOG_URL_KEY = "helix.bootstrap.exportCatalogUrl";
+const DEFAULT_CATALOG_URL = "http://127.0.0.1:8318";
+const LEGACY_DEFAULT_CATALOG_URL = "http://127.0.0.1:8321";
 
-export function BootstrapPage() {
+export function BootstrapPage({ canBootstrap }: { canBootstrap: boolean }) {
   const client = useQueryClient();
   const resultRef = useRef<HTMLElement | null>(null);
   const workspace = useQuery({
@@ -33,9 +35,10 @@ export function BootstrapPage() {
   const [exportUrl, setExportUrl] = useState("");
   const [catalogUrl, setCatalogUrl] = useState(() => {
     try {
-      return localStorage.getItem(CATALOG_URL_KEY) ?? "http://127.0.0.1:8321";
+      const stored = localStorage.getItem(CATALOG_URL_KEY);
+      return !stored || stored === LEGACY_DEFAULT_CATALOG_URL ? DEFAULT_CATALOG_URL : stored;
     } catch {
-      return "http://127.0.0.1:8321";
+      return DEFAULT_CATALOG_URL;
     }
   });
   const [catalogFilter, setCatalogFilter] = useState<CatalogFilter>("all");
@@ -218,6 +221,16 @@ export function BootstrapPage() {
                 ? "done"
                 : "error";
 
+  if (!canBootstrap) {
+    return (
+      <main className="workspace"><section className="panel restricted-panel">
+        <span className="eyebrow">Read-only account</span>
+        <h2>Bootstrap access required</h2>
+        <p className="panel-description">Previewing or applying a bootstrap requires <code>helix.bootstrap</code>.</p>
+      </section></main>
+    );
+  }
+
   return (
     <main className="workspace bootstrap-workspace">
       <div className="top-grid">
@@ -341,7 +354,7 @@ export function BootstrapPage() {
                         type="url"
                         value={catalogUrl}
                         onChange={(event) => setCatalogUrl(event.target.value)}
-                        placeholder="http://127.0.0.1:8321"
+                        placeholder="http://127.0.0.1:8318"
                         disabled={!available || busy}
                         required
                       />
@@ -448,7 +461,7 @@ export function BootstrapPage() {
                     type="url"
                     value={exportUrl}
                     onChange={(event) => setExportUrl(event.target.value)}
-                    placeholder="http://127.0.0.1:8321/api/exports/1/package"
+                    placeholder="http://127.0.0.1:8318/api/exports/1/package"
                     disabled={!available || busy}
                     required
                   />

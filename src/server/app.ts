@@ -63,6 +63,14 @@ import {
 import { listExportCatalog } from "../inception/pickup.js";
 import { probeExportCatalogStatus } from "../inception/catalogStatus.js";
 import type { CreateBootstrapSpecialistFactory } from "../inception/runner.js";
+import {
+  authenticateRequests,
+  authorizeHelixRequest,
+  createAuthAdapterFromEnv,
+  sameOriginWrites,
+  sessionRoutes,
+  type HelixAuthAdapter,
+} from "./auth.js";
 
 export interface CreateAppOptions {
   ctx: RunContext;
@@ -72,6 +80,8 @@ export interface CreateAppOptions {
   prControl?: PullRequestControlService;
   /** Inject inception specialist sessions (tests). */
   createBootstrapSpecialistFactory?: CreateBootstrapSpecialistFactory;
+  /** Inject a standalone or external auth provider without coupling the engine to it. */
+  authAdapter?: HelixAuthAdapter;
 }
 
 interface ActiveRunEntry {
@@ -97,6 +107,16 @@ export function createApp(opts: CreateAppOptions): Express {
 
   const app = express();
   app.use(express.json());
+  app.use(sameOriginWrites());
+  app.use(webAssets());
+
+  const authAdapter = opts.authAdapter ?? createAuthAdapterFromEnv();
+  sessionRoutes(app, authAdapter);
+  app.get("/health", (_req, res) => {
+    res.json({ ok: true, authProvider: authAdapter.provider });
+  });
+  app.get(["/", "/manage", "/config", "/reviews", "/bootstrap"], webIndex());
+  app.use(authenticateRequests(authAdapter), authorizeHelixRequest);
 
   const activeRuns = new Map<string, ActiveRunEntry>();
   const activeManage = new Map<string, ActiveManageEntry>();
@@ -714,13 +734,6 @@ export function createApp(opts: CreateAppOptions): Express {
       res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
-
-  app.get("/health", (_req, res) => {
-    res.json({ ok: true });
-  });
-
-  app.use(webAssets());
-  app.get(["/", "/manage", "/config", "/reviews", "/bootstrap"], webIndex());
 
   return app;
 }

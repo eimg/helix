@@ -78,8 +78,8 @@ cp .helix/.env.example .helix/.env   # set OPENROUTER_API_KEY
 helix bootstrap --export /path/to/exports/<id>/v<n> --dry-run
 
 # Or pull a packaged export / catalog entry
-helix bootstrap --export-url http://127.0.0.1:8321/api/exports/1/package --dry-run
-helix bootstrap --export-catalog http://127.0.0.1:8321 --export-id 1 --execute
+helix bootstrap --export-url http://127.0.0.1:8318/api/exports/1/package --dry-run
+helix bootstrap --export-catalog http://127.0.0.1:8318 --export-id 1 --execute
 
 # If materialize already finished, resume agents only
 helix bootstrap --run-agents [--export …]
@@ -117,6 +117,12 @@ Flags: `--preset <stack>` (default `typescript`), `--force` (allow non-empty for
 - Local PR deliverable waits until git exists (after bootstrap `--execute`); a long-lived `helix serve` upgrades from NoOp → local PR automatically once bootstrap leaves a base commit
 
 ## Web UI & HTTP
+
+When HTTP auth is enabled, export catalog reads require `helix.bootstrap` and
+the selected auth adapter resolves the human principal. Helix uses its scoped
+Prelude service token only for catalog origins listed in
+`HELIX_TRUSTED_PRELUDE_ORIGINS`; other compatible catalogs remain usable
+without receiving that credential.
 
 - `GET /workspace` — `bootstrap.state` is `ready` | `awaiting_agents` | `running` | `completed` | `failed` | `blocked`
   - `bootstrap.available` — fresh execute allowed (empty / no git)

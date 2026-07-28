@@ -61,6 +61,14 @@ OPENROUTER_API_KEY=
 
 # Default model shipped with helix init (OpenRouter: xiaomi/mimo-v2.5-pro)
 HELIX_MODEL=openrouter/xiaomi/mimo-v2.5-pro
+
+# Optional replaceable HTTP auth and sibling-service credentials.
+# HELIX_AUTH_PROVIDER=acme-identity
+# HELIX_AUTH_URL=http://127.0.0.1:8316
+# HELIX_PRELUDE_TOKEN=svc_replace_me
+# HELIX_ISSUES_TOKEN=svc_replace_me
+# HELIX_TRUSTED_PRELUDE_ORIGINS=http://127.0.0.1:8318
+# HELIX_TRUSTED_ISSUES_ORIGINS=http://127.0.0.1:8320
 `;
 
 export function listPresets(): string[] {

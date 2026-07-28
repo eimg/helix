@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { WorkspaceStatus } from "../../src/inception/service";
 import { api, timeAgo, timeOnly } from "./api";
@@ -61,16 +61,90 @@ interface LogBlock {
   tone?: string;
 }
 
+export type HelixPrincipal = {
+  id: string;
+  issuer: string;
+  username: string;
+  displayName: string;
+  roles: string[];
+  permissions: string[];
+  kind: "human" | "service" | "development";
+};
+
+type AuthSession = {
+  schemaVersion: "helix.session.v1";
+  provider: string;
+  principal: HelixPrincipal;
+};
+
+type HelixAuth = {
+  session: AuthSession;
+  can: (permission: string) => boolean;
+  signOut: () => void;
+  signingOut: boolean;
+};
+
+const HelixAuthContext = createContext<HelixAuth | null>(null);
+
+export function useHelixAuth(): HelixAuth {
+  const value = useContext(HelixAuthContext);
+  if (!value) throw new Error("Helix auth context is unavailable");
+  return value;
+}
+
 export function App() {
+  const client = useQueryClient();
+  const auth = useQuery({
+    queryKey: ["auth-session"],
+    queryFn: () => api<AuthSession>("/auth/session"),
+    retry: false,
+  });
+  const signOut = useMutation({
+    mutationFn: () => api("/auth/session", { method: "DELETE" }),
+    onSuccess: async () => {
+      client.clear();
+      await auth.refetch();
+    },
+  });
+
+  if (auth.isLoading) return <AuthStatus message="Checking access…" />;
+  if (!auth.data?.principal) {
+    return (
+      <Login
+        error={auth.error?.message === "Authentication required" ? undefined : auth.error?.message}
+        onSignedIn={async () => {
+          await client.invalidateQueries({ queryKey: ["auth-session"] });
+        }}
+      />
+    );
+  }
+
+  const session = auth.data;
+  const can = (permission: string) => hasPermission(session.principal, permission);
+  return (
+    <HelixAuthContext.Provider value={{
+      session,
+      can,
+      signOut: () => signOut.mutate(),
+      signingOut: signOut.isPending,
+    }}>
+      <AuthenticatedApp />
+    </HelixAuthContext.Provider>
+  );
+}
+
+function AuthenticatedApp() {
+  const { can } = useHelixAuth();
   const path = location.pathname;
-  if (path === "/bootstrap") return <PageShell active="bootstrap"><BootstrapPage /></PageShell>;
+  if (path === "/bootstrap") return <PageShell active="bootstrap"><BootstrapPage canBootstrap={can("helix.bootstrap")} /></PageShell>;
   if (path === "/reviews") return <PageShell active="reviews"><ReviewsPage /></PageShell>;
-  if (path === "/manage") return <PageShell active="manage"><ManagePage /></PageShell>;
+  if (path === "/manage") return <PageShell active="manage"><ManagePage canManage={can("helix.manage")} /></PageShell>;
   if (path === "/config") return <PageShell active="config"><ConfigPage /></PageShell>;
   return <PageShell active="run"><RunPage /></PageShell>;
 }
 
 function RunPage() {
+  const { can } = useHelixAuth();
   const client = useQueryClient();
   const deepLink = new URLSearchParams(location.search).get("run");
   const [selectedId, setSelectedId] = useState<string | null>(deepLink);
@@ -115,7 +189,7 @@ function RunPage() {
   return (
       <main className="workspace">
         <div className="top-grid">
-          <RunForm mutation={create} />
+          <RunForm mutation={create} allowed={can("helix.trigger")} />
           <HistoryPanel
             query={history}
             selectedId={selectedId}
@@ -126,6 +200,7 @@ function RunPage() {
             onDelete={(summary) => {
               if (confirm(`Delete run "${summary.title}"? This cannot be undone.`)) remove.mutate(summary.id);
             }}
+            canDelete={can("helix.admin")}
           />
         </div>
         <LogPanel
@@ -148,6 +223,7 @@ function PageShell({
   active: "run" | "bootstrap" | "reviews" | "manage" | "config";
   children: ReactNode;
 }) {
+  const { session, can, signOut, signingOut } = useHelixAuth();
   const workspace = useQuery({
     queryKey: ["workspace"],
     queryFn: () => api<WorkspaceStatus>("/workspace"),
@@ -211,9 +287,18 @@ function PageShell({
         ) : (
           <a className={`nav-link ${active === "reviews" ? "active" : ""}`} href="/reviews">PR Reviews</a>
         )}
-        <a className={`nav-link ${active === "manage" ? "active" : ""}`} href="/manage">Manage</a>
+        {can("helix.manage") && <a className={`nav-link ${active === "manage" ? "active" : ""}`} href="/manage">Manage</a>}
         <a className={`nav-link ${active === "config" ? "active" : ""}`} href="/config">Config</a>
       </nav>
+      <div className="identity-actions">
+        <div className="identity-chip" title={session.principal.permissions.join(", ")}>
+          <strong>{session.principal.displayName}</strong>
+          <span>{session.principal.roles.join(", ") || session.principal.kind}</span>
+        </div>
+        {session.provider !== "standalone" && (
+          <button className="btn btn-ghost btn-sm" disabled={signingOut} onClick={signOut}>Sign out</button>
+        )}
+      </div>
     </header>
     {children}
     </div>
@@ -222,8 +307,10 @@ function PageShell({
 
 function RunForm({
   mutation,
+  allowed,
 }: {
   mutation: ReturnType<typeof useMutation<{ id: string }, Error, { title: string; body: string }>>;
+  allowed: boolean;
 }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -241,18 +328,19 @@ function RunForm({
       <form onSubmit={submit}>
         <label className="field">
           <span>Title</span>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} required placeholder="Fix the login bug" disabled={mutation.isPending} />
+          <input value={title} onChange={(event) => setTitle(event.target.value)} required placeholder="Fix the login bug" disabled={mutation.isPending || !allowed} />
         </label>
         <label className="field">
           <span>Body</span>
-          <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={5} placeholder="Describe the task…" disabled={mutation.isPending} />
+          <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={5} placeholder="Describe the task…" disabled={mutation.isPending || !allowed} />
         </label>
         {mutation.isError && <p className="form-error">{mutation.error.message}</p>}
         <div className="form-actions">
-          <button className="btn btn-primary" disabled={mutation.isPending || !title.trim()}>
+          <button className="btn btn-primary" disabled={mutation.isPending || !title.trim() || !allowed}>
             <Icon name="play" /> {mutation.isPending ? "Starting…" : "Run"}
           </button>
         </div>
+        {!allowed && <p className="panel-description">Starting runs requires <code>helix.trigger</code>.</p>}
       </form>
     </section>
   );
@@ -263,11 +351,13 @@ function HistoryPanel({
   selectedId,
   onSelect,
   onDelete,
+  canDelete,
 }: {
   query: ReturnType<typeof useQuery<RunSummary[]>>;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onDelete: (run: RunSummary) => void;
+  canDelete: boolean;
 }) {
   return (
     <section className="panel history-panel">
@@ -290,7 +380,7 @@ function HistoryPanel({
                 </span>
                 <StatusPill status={status} />
               </button>
-              {!run.live && (
+              {!run.live && canDelete && (
                 <button className="delete-button" aria-label={`Delete ${run.title}`} onClick={() => onDelete(run)}>
                   <Icon name="trash" />
                 </button>
@@ -303,6 +393,41 @@ function HistoryPanel({
         {query.isError && <li className="empty-row error-text">{query.error.message}</li>}
       </ul>
     </section>
+  );
+}
+
+function Login({ error, onSignedIn }: { error?: string; onSignedIn: () => Promise<void> }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const signIn = useMutation({
+    mutationFn: () => api("/auth/session", {
+      method: "POST",
+      body: JSON.stringify({ username: username.trim(), password }),
+    }),
+    onSuccess: onSignedIn,
+  });
+  return (
+    <main className="auth-shell">
+      <section className="panel auth-panel">
+        <div className="brand auth-brand"><span className="brand-mark" aria-hidden="true">H</span><div><h1>Helix</h1><p>Agent orchestration control plane</p></div></div>
+        <form onSubmit={(event) => { event.preventDefault(); if (username.trim() && password) signIn.mutate(); }}>
+          <label className="field"><span>Username</span><input autoFocus autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+          <label className="field"><span>Password</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+          {(error || signIn.error) && <p className="form-error">{signIn.error?.message ?? error}</p>}
+          <button className="btn btn-primary" disabled={!username.trim() || !password || signIn.isPending}>{signIn.isPending ? "Signing in…" : "Sign in"}</button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
+function AuthStatus({ message }: { message: string }) {
+  return <main className="auth-shell"><section className="panel auth-panel"><p>{message}</p></section></main>;
+}
+
+function hasPermission(principal: HelixPrincipal, requested: string): boolean {
+  return principal.permissions.some((granted) =>
+    granted === "*" || granted === requested || (granted.endsWith(".*") && requested.startsWith(granted.slice(0, -1))),
   );
 }
 

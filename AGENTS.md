@@ -38,6 +38,7 @@ Read only the relevant detailed docs, but read `architecture.md` before changing
 
 - **Pi-first:** Pi is the default harness for coding and general-purpose profiles. Do not introduce another agent SDK without a measured Pi limitation and regression evidence.
 - **Independent core:** Helix must remain runnable locally and headlessly. Do not make a hosted control plane, React/Next.js, Google Cloud, or another vendor topology the source of truth.
+- **Replaceable auth:** The HTTP host defaults to a standalone principal and may use Acme Identity through a plain-HTTP adapter. Core run, review, bootstrap, and CLI domains must not import Acme-specific identity types or branch on fixed role names.
 - **Own the control plane, not the agent loop:** Helix owns product modes, orchestration, gates, policy, identity/channel mapping, memory strategy, durable jobs, and presentation. Pi owns provider/model execution, tool continuation, sessions, transcripts, compaction, skills, extensions, and resource loading.
 - **Two product modes:** coding workflow runs are goal-oriented and may use isolated specialists; assistant conversations are long-lived Pi threads and should use specialists only when decomposition is genuinely useful.
 - **Separate PR lifecycle:** local implementation workflows use `planner → dev`, register a clean committed feature branch as an Acme local PR, and stop. Independent PR control uses `.helix/pr-agents/{reviewer,verifier}.md`, exact-SHA temporary worktrees, its own SQLite state, and structured callbacks for both Helix-created and external PRs. It reports readiness; humans merge. The GitHub auto-merge pipeline remains provisional.
@@ -58,6 +59,7 @@ Read only the relevant detailed docs, but read `architecture.md` before changing
 - Implementation workflows have no privileged verification role. Agents may run deterministic self-checks, but independent `reviewer` and `verifier` authority belongs only to PR control.
 - `deliverable.localPr` only acts for a run linked to an external local tracker. The server creates an isolated run worktree and named feature branch, safely commits remaining implementation changes there, registers the PR, and cleans up the temporary checkout. It never merges or pushes. Direct/manual deliverable use still requires a clean committed feature branch.
 - PR-control decisions are valid only for the requested head SHA. `reviewer` and `verifier` run independently and concurrently in a detached exact-head worktree; malformed specialist reports fail closed.
+- Human HTTP actions are gated by Helix permission strings. Service callbacks use narrow bearer tokens and attach them only when the destination origin is explicitly trusted.
 
 ## Repository map
 

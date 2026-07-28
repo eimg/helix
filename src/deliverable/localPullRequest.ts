@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import type { Run } from "../engine/types.js";
 import type { DeliverableFinalizeContext, DeliverablePipeline } from "./pipeline.js";
 import type { MergeGateConfig } from "../orchestrator/workflow.js";
+import { issuesServiceAuthHeader } from "../integrations/serviceAuth.js";
 
 const execFileP = promisify(execFile);
 
@@ -94,7 +95,11 @@ export class LocalPullRequestDeliverablePipeline implements DeliverablePipeline 
         const url = `${trackerBase}/api/pull-requests/${existingId}`;
         const response = await this.fetchFn(url, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json", "X-Helix-Run-Id": run.id },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Helix-Run-Id": run.id,
+            ...issuesServiceAuthHeader(url),
+          },
           body: JSON.stringify({
             description,
             baseBranch,
@@ -118,7 +123,11 @@ export class LocalPullRequestDeliverablePipeline implements DeliverablePipeline 
         const url = `${trackerBase}/api/pull-requests`;
         const response = await this.fetchFn(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-Helix-Run-Id": run.id },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Helix-Run-Id": run.id,
+            ...issuesServiceAuthHeader(url),
+          },
           body: JSON.stringify({
             issueId: external.issueId,
             title: run.issue.title,

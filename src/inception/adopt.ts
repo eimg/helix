@@ -3,6 +3,7 @@
  * Soft coupling — failures are ignored.
  */
 import { catalogAdoptUrl } from "./pickup.js";
+import { preludeServiceAuthHeader } from "../integrations/serviceAuth.js";
 
 export interface NotifyExportAdoptedOptions {
   catalogBaseUrl: string;
@@ -18,7 +19,10 @@ export async function notifyExportAdopted(opts: NotifyExportAdoptedOptions): Pro
   try {
     await fetchFn(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...preludeServiceAuthHeader(url),
+      },
       body: JSON.stringify({
         adoptedBy: opts.adoptedBy?.trim() || "helix",
         adoptionNote: opts.adoptionNote?.trim() || "",

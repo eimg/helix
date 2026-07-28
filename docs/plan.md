@@ -86,7 +86,7 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 | **Within-run context reuse** | One Pi session per specialist lane per run + bounded structured handoffs (`RunKnowledgeEntry`) |
 | **Web-native streaming** | Orchestrator and specialist responses share started → live buffered deltas → durable full finished output; token deltas stay ephemeral |
 | **SQLite run state** | `.helix/runs.db` default with WAL; legacy `.helix/runs/*.json` imported when the database is empty |
-| **Issue-tracker callback** | Best-effort `run.completed` POST to external tracker (POC, no auth) — used with acme-issues |
+| **Issue-tracker callback** | Best-effort `run.completed` POST to external tracker; scoped service auth is added only for configured trusted Issues origins |
 | **External workflow continuations** | Issue reopen/comment events create idempotent linked child runs with fresh sessions and bounded parent context |
 | **Run history / delete** | `GET /runs`, UI sidebar, `DELETE /runs/:id` for test cleanup |
 | **Config observability** | Config tab + `GET /config/snapshot` — resolved essentials provenance, separate workflow/PR-control agents, delivery-gate activity, and wiring |

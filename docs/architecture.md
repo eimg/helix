@@ -66,6 +66,7 @@ Helix core (orchestrator, gates, specialist contracts)
 5. **Telemetry is derived.** OTel/LLM-ops adapters translate domain lifecycle events and runtime-native spans; they are not the durable run store.
 6. **Swap when pain is measurable** (crash loss, concurrent long runs, need for standard dashboards) — not when a blog post is exciting.
 7. DIY layers are **scaffolding with swap points**, not a permanent refusal of established engines.
+8. **Authentication is a host adapter.** The HTTP server translates a standalone or external principal into Helix-owned capability checks. Core workflow, PR-control, bootstrap, and CLI code do not depend on Acme Identity. Outbound service credentials are selected by thin integration adapters and may be attached only to configured trusted origins.
 
 ### Near-term vs later (exploration)
 

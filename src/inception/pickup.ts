@@ -11,6 +11,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { preludeServiceAuthHeader } from "../integrations/serviceAuth.js";
 
 const execFileP = promisify(execFile);
 
@@ -73,7 +74,9 @@ export async function listExportCatalog(
   status: "all" | "available" | "adopted" | "new" = "all",
   fetchFn: typeof fetch = fetch,
 ): Promise<BootstrapExportCatalogItem[]> {
-  const res = await fetchFn(catalogExportsUrl(catalogBaseUrl, status));
+  const res = await fetchFn(catalogExportsUrl(catalogBaseUrl, status), {
+    headers: preludeServiceAuthHeader(catalogExportsUrl(catalogBaseUrl, status)),
+  });
   if (!res.ok) {
     throw new Error(`Export catalog returned HTTP ${res.status}`);
   }
@@ -122,7 +125,9 @@ export async function resolveExportDirectory(
   const exportDir = join(cacheRoot, "export");
   mkdirSync(exportDir, { recursive: true });
 
-  const res = await fetchFn(packageUrl);
+  const res = await fetchFn(packageUrl, {
+    headers: preludeServiceAuthHeader(packageUrl),
+  });
   if (!res.ok) {
     throw new Error(`Bootstrap export package returned HTTP ${res.status}`);
   }

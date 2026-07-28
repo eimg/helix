@@ -42,9 +42,9 @@ Clarify which of these you are protecting against:
 
 1. **Model mistakes** — wrong edits, runaway loops, accidental `gh` / destructive bash (primary for local demos).
 2. **Malicious or injected prompts** — issue body / tracker content trying to exfiltrate or escape the repo.
-3. **Exposed `helix serve`** — anything beyond `127.0.0.1` needs auth; localhost single-operator can defer this.
+3. **Exposed `helix serve`** — the HTTP host has replaceable authentication and permission gates; standalone mode is suitable only for a trusted local operator.
 
-Default assumption for Helix’s current use (acme-issues + localhost serve): optimize for (1), harden lightly for (2), defer (3) until bind address leaves loopback.
+Default assumption for Helix’s current use (acme-issues + localhost serve): optimize for (1), harden lightly for (2), and use the Acme Identity adapter before exposing the server beyond a trusted loopback workflow.
 
 The shipped local PR reviewer is **not** a sandbox for hostile contributions. A detached worktree isolates checkout state, not process permissions or environment secrets; reviewer/verifier tools and repository test scripts still execute with local process authority. External currently means work produced outside the Helix implementation loop but still trusted by the operator. Untrusted PR support requires the subprocess/container isolation work below.
 
@@ -64,7 +64,7 @@ The shipped local PR reviewer is **not** a sandbox for hostile contributions. A 
 - Git push / PR / merge — already opt-in via `deliverable.pr`; keep fail-closed.
 - In the local split, Helix may register a PR and report `ready_to_merge`, but it exposes no merge operation. The human performs the Git merge and records it in Acme Issues.
 - PR-trigger consumers must pin work to repository + PR number + head SHA, deduplicate webhook/comment events, and ignore their own bot-authored events.
-- Issue-tracker / webhook callbacks — URL allowlist, auth (today: POC, no auth).
+- Issue-tracker / webhook callbacks — scoped bearer service tokens are sent only to configured trusted destination origins; arbitrary uncredentialed integrations remain possible.
 - Outbound network via `bash` (curl, etc.).
 
 ### 3. Cost & runaway
@@ -116,7 +116,7 @@ Map `mode` to defaults so “acme-issues demo” vs “GitHub PR mode” is one 
 | **1** | Enforce at owned boundaries: budgets in engine; tool filter in session factory; deliverable/callback gates; serve bind/route checks |
 | **2** | Tool wrappers for `bash` / `write` / `edit` (cwd jail, deny patterns, clear deny events) |
 | **3** | Human checkpoints (plan gate) reusing approval/escalation pause UX |
-| **4** | Authn for non-localhost serve; webhook HMAC |
+| **4** | **Shipped:** replaceable HTTP auth, capability gates, scoped service tokens, and trusted-destination binding |
 
 **Priority for current acme-issues demos:** side-effect defaults (done for PR) → run budgets → workspace jail → demo/github preset → Settings UI later.
 
@@ -274,7 +274,7 @@ policy / budget / gate trip
 | Orchestrator prompt | `src/orchestrator/driver.ts` — teach codes when emitting escalate |
 | Session / tools | `src/agents/session.ts`, `loaderBuilder.ts` — tool policy |
 | Deliverable | `src/deliverable/pipeline.ts`, `deliverable.pr` |
-| Callbacks | `src/callbacks/issueTracker.ts` — escalated events, auth later |
+| Callbacks | `src/callbacks/issueTracker.ts` — escalated events; credential selection stays in the integration adapter |
 | UI | `web/src/` — React badges and future resume actions |
 | Config | `src/config.ts` — `guardrails` block + presets |
 | Docs | Update this file + `plan.md` when phases ship |

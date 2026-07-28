@@ -10,7 +10,7 @@ Package: [`@eimg/helix`](https://github.com/eimg/helix) · command: `helix`
 
 ## Acme development testbed
 
-Helix is one of six related projects. They remain separate products with separate responsibilities.
+Helix is one of seven related projects. They remain separate products with separate responsibilities.
 
 | Project | Role |
 |---|---|
@@ -119,6 +119,41 @@ curl -s -X POST http://127.0.0.1:8319/runs \
   -H 'Content-Type: application/json' \
   -d '{"issueNumber":42,"repo":"owner/name"}'
 ```
+
+### HTTP authentication
+
+Helix is standalone by default: `HELIX_AUTH_PROVIDER=standalone` grants the local
+HTTP operator full access and does not contact another service. This affects only
+the Express host; CLI runs and the orchestration engine do not depend on auth.
+
+To use a replaceable HTTP identity provider, set:
+
+```bash
+HELIX_AUTH_PROVIDER=acme-identity
+HELIX_AUTH_URL=http://127.0.0.1:8316
+```
+
+The bundled adapter translates the provider principal into a Helix-owned shape.
+Human sessions use the web sign-in screen and same-origin cookie proxy. API callers
+send `Authorization: Bearer <token>`. Provider errors fail closed with `503`.
+
+Helix authorizes capabilities, not role names: `helix.read`, `helix.trigger`,
+`helix.review`, `helix.merge`, `helix.bootstrap`, `helix.manage`, and `helix.admin`.
+Namespace grants such as `helix.*` and the suite wildcard `*` are supported, so
+future roles do not require Helix changes.
+
+Optional outbound service credentials remain ordinary HTTP configuration:
+
+- `HELIX_PRELUDE_TOKEN` authenticates export catalog and package reads.
+- `HELIX_ISSUES_TOKEN` authenticates issue/PR registration and callbacks.
+
+Each credential is origin-bound. `HELIX_TRUSTED_PRELUDE_ORIGINS` defaults to
+`http://127.0.0.1:8318`; `HELIX_TRUSTED_ISSUES_ORIGINS` defaults to
+`http://127.0.0.1:8320`. Helix rejects a credentialed request whose operator- or
+payload-supplied URL points elsewhere. Comma-separated alternatives support a
+replacement service without coupling Helix to its implementation.
+
+Unset tokens keep standalone and unauthenticated integrations usable.
 
 See [Server & web UI](#server--web-ui) for the full endpoint list and webhook payload format.
 

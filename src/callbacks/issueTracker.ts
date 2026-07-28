@@ -9,6 +9,7 @@
  * Extra tracker fields on inbound payloads (e.g. project slug) are ignored.
  */
 import type { IssueExternalRef, Run } from "../engine/types.js";
+import { issuesServiceAuthHeader } from "../integrations/serviceAuth.js";
 
 export interface RunCompletedPayload {
   event: "run.completed";
@@ -62,6 +63,7 @@ export async function notifyIssueTracker(
         "Content-Type": "application/json",
         "X-Helix-Event": payload.event,
         "X-Helix-Run-Id": run.id,
+        ...issuesServiceAuthHeader(url),
       },
       body: JSON.stringify(payload),
     });

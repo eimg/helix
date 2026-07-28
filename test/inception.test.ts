@@ -259,10 +259,10 @@ test("parseBootstrapArgs defaults target to cwd and dry-run", () => {
   assert.equal(execOpts.targetDir, join(cwd, "app"));
   assert.equal(execOpts.dryRun, false);
   const catalogOpts = parseBootstrapArgs(
-    ["--export-catalog", "http://127.0.0.1:8321", "--export-id", "7", "--execute"],
+    ["--export-catalog", "http://127.0.0.1:8318", "--export-id", "7", "--execute"],
     cwd,
   );
-  assert.equal(catalogOpts.exportCatalogUrl, "http://127.0.0.1:8321");
+  assert.equal(catalogOpts.exportCatalogUrl, "http://127.0.0.1:8318");
   assert.equal(catalogOpts.exportId, 7);
   assert.equal(catalogOpts.dryRun, false);
   assert.throws(

@@ -11,7 +11,7 @@ import { api } from "./api";
 
 interface Workflow { steps: string[]; maxIterations?: number }
 
-export function ManagePage() {
+export function ManagePage({ canManage }: { canManage: boolean }) {
   const client = useQueryClient();
   const [steps, setSteps] = useState<string[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -82,6 +82,16 @@ export function ManagePage() {
   const current = session.data;
   const availableAgents = agents.data?.filter((item) => !steps.includes(item.name)) ?? [];
   const workflowDirty = workflow.data ? !sameSteps(steps, workflow.data.steps) : false;
+
+  if (!canManage) {
+    return (
+      <main className="workspace"><section className="panel restricted-panel">
+        <span className="eyebrow">Read-only account</span>
+        <h2>Manage access required</h2>
+        <p className="panel-description">Authoring agents, skills, and workflows requires <code>helix.manage</code>.</p>
+      </section></main>
+    );
+  }
 
   return (
     <main className="workspace manage-workspace">

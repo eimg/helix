@@ -2,6 +2,7 @@ import type {
   PullRequestReview,
   PullRequestReviewCallbackPayload,
 } from "./types.js";
+import { issuesServiceAuthHeader } from "../integrations/serviceAuth.js";
 
 export async function notifyPullRequestTracker(
   review: PullRequestReview,
@@ -34,6 +35,7 @@ export async function notifyPullRequestTracker(
         "Content-Type": "application/json",
         "X-Helix-Event": event,
         "X-Helix-Review-Id": review.id,
+        ...issuesServiceAuthHeader(url),
       },
       body: JSON.stringify(payload),
     });
