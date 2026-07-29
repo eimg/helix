@@ -74,6 +74,7 @@ export type HelixPrincipal = {
 type AuthSession = {
   schemaVersion: "helix.session.v1";
   provider: string;
+  accountUrl?: string;
   principal: HelixPrincipal;
 };
 
@@ -85,6 +86,21 @@ type HelixAuth = {
 };
 
 const HelixAuthContext = createContext<HelixAuth | null>(null);
+
+function useOutsideDismissDetails() {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const dismiss = (event: MouseEvent) => {
+      const menu = ref.current;
+      if (menu?.open && event.target instanceof Node && !menu.contains(event.target)) {
+        menu.open = false;
+      }
+    };
+    document.addEventListener("mousedown", dismiss);
+    return () => document.removeEventListener("mousedown", dismiss);
+  }, []);
+  return ref;
+}
 
 export function useHelixAuth(): HelixAuth {
   const value = useContext(HelixAuthContext);
@@ -224,6 +240,7 @@ function PageShell({
   children: ReactNode;
 }) {
   const { session, can, signOut, signingOut } = useHelixAuth();
+  const accountMenuRef = useOutsideDismissDetails();
   const workspace = useQuery({
     queryKey: ["workspace"],
     queryFn: () => api<WorkspaceStatus>("/workspace"),
@@ -290,15 +307,35 @@ function PageShell({
         {can("helix.manage") && <a className={`nav-link ${active === "manage" ? "active" : ""}`} href="/manage">Manage</a>}
         <a className={`nav-link ${active === "config" ? "active" : ""}`} href="/config">Config</a>
       </nav>
-      <div className="identity-actions">
-        <div className="identity-chip" title={session.principal.permissions.join(", ")}>
-          <strong>{session.principal.displayName}</strong>
-          <span>{session.principal.roles.join(", ") || session.principal.kind}</span>
+      <details className="account-menu" ref={accountMenuRef}>
+        <summary className="account-trigger" aria-label={`Operator account: ${session.principal.displayName}`}>
+          <span className="account-avatar" aria-hidden="true">
+            {session.principal.displayName.charAt(0).toUpperCase()}
+          </span>
+          <span className="account-trigger-name">{session.principal.displayName}</span>
+        </summary>
+        <div className="account-popover">
+          <div className="account-heading">
+            <strong>{session.principal.displayName}</strong>
+            <span>@{session.principal.username}</span>
+          </div>
+          <div className="account-context">
+            <span className={`account-status ${session.provider === "standalone" ? "standalone" : "connected"}`} />
+            <div>
+              <strong>{session.provider === "standalone" ? "Standalone operator" : "Acme Identity"}</strong>
+              <span>{session.principal.roles.join(", ") || session.principal.kind}</span>
+            </div>
+          </div>
+          {session.accountUrl && (
+            <a className="account-action" href={session.accountUrl} target="_blank" rel="noreferrer">
+              Open identity account <span aria-hidden="true">↗</span>
+            </a>
+          )}
+          {session.provider !== "standalone" && (
+            <button className="account-action" type="button" disabled={signingOut} onClick={signOut}>Sign out</button>
+          )}
         </div>
-        {session.provider !== "standalone" && (
-          <button className="btn btn-ghost btn-sm" disabled={signingOut} onClick={signOut}>Sign out</button>
-        )}
-      </div>
+      </details>
     </header>
     {children}
     </div>

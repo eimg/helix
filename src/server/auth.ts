@@ -29,6 +29,7 @@ export type SessionResult = {
 /** Helix-owned seam. Providers translate their native identity into this shape. */
 export interface HelixAuthAdapter {
   readonly provider: string;
+  readonly accountUrl?: string;
   resolve(request: AuthRequest): Promise<HelixPrincipal>;
   signIn?(credentials: unknown, request: AuthRequest): Promise<SessionResult>;
   signOut?(request: AuthRequest): Promise<SessionResult>;
@@ -104,6 +105,7 @@ export function createAcmeIdentityAuthAdapter({
 
   return {
     provider: "acme-identity",
+    accountUrl: `${identityUrl}/?tab=account`,
     async resolve(request) {
       const response = await call(
         "/api/principal",
@@ -162,6 +164,7 @@ export function sessionRoutes(app: import("express").Express, adapter: HelixAuth
       res.json({
         schemaVersion: "helix.session.v1",
         provider: adapter.provider,
+        accountUrl: adapter.accountUrl,
         principal: await adapter.resolve(authRequest(req)),
       });
     } catch (error) {

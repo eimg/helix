@@ -43,6 +43,10 @@ npm link          # exposes `helix` (built) and `helix-dev` (source) globally
 
 `helix` runs the last build in `dist`. `helix-dev` runs the same CLI straight from
 `src`, so changes to this checkout apply to other projects without rebuilding.
+Run either command from the target repository: Helix intentionally uses the
+current working directory as its workspace. `npm run dev` in the Helix source
+checkout is for developing Helix itself; it does not start Helix for another
+target application.
 
 ## Getting started
 
@@ -136,6 +140,9 @@ HELIX_AUTH_URL=http://127.0.0.1:8316
 The bundled adapter translates the provider principal into a Helix-owned shape.
 Human sessions use the web sign-in screen and same-origin cookie proxy. API callers
 send `Authorization: Bearer <token>`. Provider errors fail closed with `503`.
+The operator menu shows whether the host is standalone or Identity-backed. An
+external adapter may optionally supply an account-management URL; Helix does
+not hardcode or import the provider UI.
 
 Helix authorizes capabilities, not role names: `helix.read`, `helix.trigger`,
 `helix.review`, `helix.merge`, `helix.bootstrap`, `helix.manage`, and `helix.admin`.
@@ -154,6 +161,10 @@ payload-supplied URL points elsewhere. Comma-separated alternatives support a
 replacement service without coupling Helix to its implementation.
 
 Unset tokens keep standalone and unauthenticated integrations usable.
+If Prelude is Identity-backed, however, its catalog correctly returns `401`
+without `HELIX_PRELUDE_TOKEN`. A standalone Helix operator and an
+Identity-backed Prelude are valid but constitute a mixed-mode setup; either run
+Prelude standalone for feature testing or provision the scoped machine token.
 
 See [Server & web UI](#server--web-ui) for the full endpoint list and webhook payload format.
 
@@ -368,8 +379,9 @@ Needs `gh` auth and a configured `triggers.github.repo`.
 
 ```bash
 npm run verify                                  # typecheck + test + build
-npm run dev                                     # serve on 8319; restarts on src changes, HMR for web
-helix-dev run --title "Smoke test" --body "Hello"   # source CLI, from any directory
+npm run dev                                     # develop Helix against this source checkout
+cd /path/to/target && helix-dev serve            # source Helix against a target repo
+cd /path/to/target && helix-dev run --title "Smoke test" --body "Hello"
 ```
 
 `npm run dev` and `helix-dev` serve the web UI from `web/` through Vite, so `dist`
