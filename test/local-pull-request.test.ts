@@ -8,7 +8,7 @@ import { LocalPullRequestDeliverablePipeline } from "../src/deliverable/localPul
 import { mergeLocalPullRequest } from "../src/deliverable/localMerge.js";
 import type { Run } from "../src/engine/types.js";
 import { GitPullRequestWorkspace } from "../src/pr-control/workspace.js";
-import { GitRunWorkspaceManager } from "../src/run/workspace.js";
+import { GitRunWorkspaceManager, restorePreparedRunWorkspace } from "../src/run/workspace.js";
 import { createRunContext, startRun, maybeWireLocalPullRequest } from "../src/run/bootstrap.js";
 import { MemoryRunStore } from "../src/state/runStore.js";
 import { FakeProvider } from "../src/providers/fake.js";
@@ -41,10 +41,6 @@ test("local deliverable registers a committed feature branch without merging it"
       execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace.cwd, encoding: "utf8" }).trim(),
       headSha,
     );
-    const worktreePath = workspace.cwd;
-    await workspace.cleanup();
-    assert.equal(existsSync(worktreePath), false);
-
     let posted: Record<string, unknown> | undefined;
     const pipeline = new LocalPullRequestDeliverablePipeline({
       cwd,
@@ -124,7 +120,16 @@ test("run workspace creates an isolated feature branch and preserves it after cl
       workspace.branch,
     );
     const worktreePath = workspace.cwd;
-    await workspace.cleanup();
+    const restored = await restorePreparedRunWorkspace({
+      path: workspace.cwd,
+      branch: workspace.branch,
+      repositoryPath: workspace.repositoryPath,
+      baseBranch: workspace.baseBranch,
+      baseSha: workspace.baseSha,
+    });
+    assert.equal(restored.cwd, workspace.cwd);
+    assert.equal(restored.branch, workspace.branch);
+    await restored.cleanup();
     assert.equal(existsSync(worktreePath), false);
     assert.match(
       execFileSync("git", ["branch", "--list", workspace.branch], {

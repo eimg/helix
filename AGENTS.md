@@ -50,10 +50,11 @@ Read only the relevant detailed docs, but read `architecture.md` before changing
 - Node.js 22.19+ (pi's floor; Node 24 LTS supported), TypeScript, ESM.
 - The engine is independent of Express; CLI and server are consumers of the same run API.
 - The orchestrator combines workflow rails, an LLM decision, and deterministic gates.
-- Specialists are isolated from one another. Each named specialist lane reuses one in-memory Pi session within a run; compact `RunKnowledgeEntry` values cross lane boundaries.
+- Specialists are isolated from one another. Each named specialist lane reuses a file-backed Pi session under `.helix/sessions/<run-id>/`; compact `RunKnowledgeEntry` values cross lane boundaries.
 - Global Pi skills, extensions, context files, prompts, and themes are not inherited. Repo-local `.helix/skills/` load into run/PR sessions; `.helix/inception-skills/` load into bootstrap sessions; `.helix/extensions/` are opt-in.
 - Default run state is SQLite at `.helix/runs.db`; legacy JSON runs are import-only compatibility state.
 - Full completed orchestrator and specialist responses are durable. High-volume token deltas are live-only.
+- Server runs checkpoint orchestrator decisions, specialist invocation state, and deliverable finalization in SQLite. Pause/resume occurs at safe boundaries; shutdown requests a bounded drain. Startup marks stale work interrupted, and an invocation or delivery attempt that was active requires explicit retry confirmation.
 - Web runs stream orchestrator and specialist output through SSE. The direct CLI intentionally remains a compact event/preview renderer unless an explicit streaming mode is added.
 - GitHub PR creation and merging are opt-in through `deliverable.pr`; local and inline runs must not acquire GitHub side effects by accident.
 - Implementation workflows have no privileged verification role. Agents may run deterministic self-checks, but independent `reviewer` and `verifier` authority belongs only to PR control.

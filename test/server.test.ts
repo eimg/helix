@@ -80,6 +80,216 @@ test("POST /runs starts inline run and GET returns final state", async () => {
   assert.equal(got.status, 200);
   assert.equal(got.body.status, "done");
   assert.equal(got.body.issue.title, "Test");
+  assert.equal(got.body.checkpoint.phase, "delivery");
+  assert.equal(got.body.checkpoint.delivery.status, "completed");
+  assert.ok(got.body.events.some((event: { type: string }) => event.type === "delivery_started"));
+});
+
+test("server marks stale runs interrupted and resumes the same run id", async () => {
+  const store = new MemoryRunStore();
+  store.save({
+    id: "resume-me",
+    issue: { source: "inline", title: "Recover", body: "", labels: [] },
+    startedAt: 100,
+    status: "running",
+    events: [{ ts: 100, type: "run_started", summary: "started" }],
+    results: [],
+    knowledge: [],
+    checkpoint: { phase: "orchestrator", iteration: 0, updatedAt: 101 },
+  });
+  const ctx = createRunContext({
+    helixDir: fixtureDir,
+    store,
+    provider: new FakeProvider(),
+    deliverable: new NoOpDeliverablePipeline(),
+    createOrchestrator: () => new ScriptedOrchestrator([{ kind: "done", reason: "recovered" }]),
+    createSpecialistFactory: () => new StubSpecialistFactory([], {}),
+  });
+  const app = createApp({ ctx });
+
+  const interrupted = await request(app).get("/runs/resume-me");
+  assert.equal(interrupted.status, 200);
+  assert.equal(interrupted.body.status, "interrupted");
+  assert.equal(interrupted.body.events.at(-1).type, "run_interrupted");
+
+  const accepted = await request(app).post("/runs/resume-me/resume");
+  assert.equal(accepted.status, 202);
+  assert.equal(accepted.body.id, "resume-me");
+
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 80));
+  const completed = await request(app).get("/runs/resume-me");
+  assert.equal(completed.body.status, "done");
+  assert.equal(completed.body.id, "resume-me");
+  assert.ok(completed.body.events.some((event: { type: string }) => event.type === "run_resumed"));
+});
+
+test("interrupted active specialist requires an explicit retry confirmation", async () => {
+  const store = new MemoryRunStore();
+  store.save({
+    id: "uncertain-specialist",
+    issue: { source: "inline", title: "Recover uncertain work", body: "", labels: [] },
+    startedAt: 100,
+    status: "running",
+    events: [],
+    results: [],
+    knowledge: [],
+    checkpoint: {
+      version: 1,
+      phase: "specialists",
+      iteration: 0,
+      updatedAt: 101,
+      invocations: [{ id: "invocation-1", specialist: "dev", task: "write files", status: "started" }],
+    },
+  });
+  const ctx = createRunContext({
+    helixDir: fixtureDir,
+    store,
+    provider: new FakeProvider(),
+    deliverable: new NoOpDeliverablePipeline(),
+    createOrchestrator: () => new ScriptedOrchestrator([{ kind: "done", reason: "recovered" }]),
+    createSpecialistFactory: () => new StubSpecialistFactory([def("dev")], { dev: "already safe" }),
+  });
+  const app = createApp({ ctx });
+
+  assert.equal(store.load("uncertain-specialist")?.checkpoint?.invocations?.[0].status, "uncertain");
+  const refused = await request(app).post("/runs/uncertain-specialist/resume").send({});
+  assert.equal(refused.status, 409);
+  assert.equal(refused.body.requiresRetryConfirmation, true);
+
+  const accepted = await request(app)
+    .post("/runs/uncertain-specialist/resume")
+    .send({ retryUncertain: true });
+  assert.equal(accepted.status, 202);
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 80));
+  const completed = store.load("uncertain-specialist");
+  assert.equal(completed?.status, "done");
+  assert.equal(completed?.results.length, 1);
+  assert.ok(completed?.events.some((event) => event.type === "run_retry_confirmed"));
+});
+
+test("interrupted deliverable finalization resumes without rerunning orchestration", async () => {
+  const store = new MemoryRunStore();
+  let orchestratorCalls = 0;
+  let deliveryCalls = 0;
+  store.save({
+    id: "uncertain-delivery",
+    issue: { source: "inline", title: "Finish delivery", body: "", labels: [] },
+    startedAt: 100,
+    status: "delivering",
+    events: [],
+    results: [],
+    knowledge: [],
+    finalDecision: { kind: "done", reason: "implementation complete", deliverable: "demo" },
+    checkpoint: {
+      version: 1,
+      phase: "delivery",
+      iteration: 1,
+      updatedAt: 101,
+      delivery: { status: "started", attempt: 1 },
+    },
+  });
+  const ctx = createRunContext({
+    helixDir: fixtureDir,
+    store,
+    provider: new FakeProvider(),
+    deliverable: {
+      async finalize(run) {
+        deliveryCalls++;
+        run.approvalStatus = "none";
+        return run;
+      },
+    },
+    createOrchestrator: () => ({
+      async decide() {
+        orchestratorCalls++;
+        return { kind: "done" as const, reason: "must not run" };
+      },
+    }),
+    createSpecialistFactory: () => new StubSpecialistFactory([], {}),
+  });
+  const app = createApp({ ctx });
+
+  const refused = await request(app).post("/runs/uncertain-delivery/resume").send({});
+  assert.equal(refused.status, 409);
+  assert.deepEqual(refused.body.uncertain, ["deliverable finalization"]);
+  await request(app)
+    .post("/runs/uncertain-delivery/resume")
+    .send({ retryUncertain: true })
+    .expect(202);
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 80));
+
+  const completed = store.load("uncertain-delivery");
+  assert.equal(completed?.status, "done");
+  assert.equal(completed?.checkpoint?.delivery?.status, "completed");
+  assert.equal(deliveryCalls, 1);
+  assert.equal(orchestratorCalls, 0);
+});
+
+test("pause endpoint parks at a boundary and resume completes the same run", async () => {
+  const store = new MemoryRunStore();
+  let orchestratorCount = 0;
+  const ctx = createRunContext({
+    helixDir: fixtureDir,
+    store,
+    provider: new FakeProvider(),
+    deliverable: new NoOpDeliverablePipeline(),
+    createOrchestrator: () => {
+      orchestratorCount++;
+      if (orchestratorCount === 1) {
+        return {
+          async decide() {
+            await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+            return { kind: "run" as const, specialists: [{ specialist: "dev", task: "work" }], reason: "go" };
+          },
+        };
+      }
+      return new ScriptedOrchestrator([{ kind: "done", reason: "complete" }]);
+    },
+    createSpecialistFactory: () => new StubSpecialistFactory([def("dev")], { dev: "done" }),
+  });
+  const app = createApp({ ctx });
+  const started = await request(app).post("/runs").send({ title: "Pause me" });
+  const id = started.body.id as string;
+
+  const pause = await request(app).post(`/runs/${id}/pause`);
+  assert.equal(pause.status, 202);
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 90));
+  assert.equal(store.load(id)?.status, "paused");
+  assert.equal(store.load(id)?.checkpoint?.phase, "specialists");
+
+  const resume = await request(app).post(`/runs/${id}/resume`);
+  assert.equal(resume.status, 202);
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 80));
+  assert.equal(store.load(id)?.status, "done");
+  assert.equal(store.load(id)?.results.length, 1);
+});
+
+test("graceful shutdown requests pause and drains a run to a safe boundary", async () => {
+  const store = new MemoryRunStore();
+  const ctx = createRunContext({
+    helixDir: fixtureDir,
+    store,
+    provider: new FakeProvider(),
+    deliverable: new NoOpDeliverablePipeline(),
+    createOrchestrator: () => ({
+      async decide() {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 40));
+        return { kind: "run" as const, specialists: [{ specialist: "dev", task: "work" }], reason: "go" };
+      },
+    }),
+    createSpecialistFactory: () => new StubSpecialistFactory([def("dev")], { dev: "done" }),
+  });
+  const app = createApp({ ctx });
+  const started = await request(app).post("/runs").send({ title: "Drain me" });
+  const pauseActiveRuns = app.locals.pauseActiveRuns as (
+    reason?: string,
+    timeoutMs?: number,
+  ) => Promise<{ requested: number; remaining: number }>;
+
+  const result = await pauseActiveRuns("test shutdown", 500);
+  assert.deepEqual(result, { requested: 1, remaining: 0 });
+  assert.equal(store.load(started.body.id)?.status, "paused");
+  assert.match(store.load(started.body.id)?.events.at(-1)?.summary ?? "", /test shutdown/);
 });
 
 test("POST /runs/:id/continuations starts a linked fresh run and deduplicates events", async () => {

@@ -1,6 +1,6 @@
 # Guardrails & escalation
 
-**Status:** Design note — not implemented (beyond existing hard gates). Revisit when adding Settings, stronger safety, or human-in-the-loop resume.
+**Status:** Design note with basic operator pause/resume implemented. Structured escalation, policy routing, and human reply/decision resume remain planned.
 
 This doc captures considerations and a phased path so future work does not rediscover the problem space. It pairs two topics that should stay aligned: **what must not happen** (guardrails) and **what happens when the loop cannot continue** (escalation).
 
@@ -15,6 +15,7 @@ Related: [`plan.md`](./plan.md), [`architecture.md`](./architecture.md), [`repo-
 | Workflow rails + LLM orchestrator | `orchestrator/driver.ts`, config `workflow` | Soft guidance; may skip/reorder/retry |
 | Iteration cap | `orchestrator/gates.ts` | Forces `escalate` |
 | Blocking-failure gate | `engine/engine.ts` | `done` over failed specialist → escalate |
+| Run pause/recovery | `engine/engine.ts`, `run/bootstrap.ts`, `server/app.ts` | Safe-boundary operator pause, persisted Pi lanes/checkpoints, startup interruption detection, same-run resume |
 | GitHub delivery gate + approval | `mergeGate.ts`, deliverable pipeline, approve/reject API | Opt-in size thresholds → auto-merge or `approvalStatus: pending`; no verification |
 | `deliverable.pr` (default `false`) | config + `cli.ts` serve wiring | No `gh pr create` unless opted in |
 | Local PR delivery | `run/workspace.ts`, `localPullRequest.ts`, `deliverable.localPr` | Acme-linked server runs use a host-created isolated branch/worktree; remaining changes are policy-checked and committed before metadata registration; never pushes or merges |
@@ -203,7 +204,7 @@ Approval = work looks done, need sign-off. Escalation = cannot continue the orch
 
 1. **Surface** — Run UI: code badge + reason + suggested action.
 2. **Notify** — optional `run.escalated` / `run.awaiting_human` to acme-issues with structured payload.
-3. **Resume** (paused only) — e.g. `POST /runs/:id/resume` with `{ reply }` or `{ decision }`; inject as human input into orchestrator and continue.
+3. **Resume** — `POST /runs/:id/resume` continues a paused/interrupted run. Recovery retry confirmation (`{ retryUncertain: true }`) is deliberately distinct from a future authenticated domain decision or reply.
 4. **Close** — abandon without resume.
 
 ### Phased implementation (escalation)
@@ -211,11 +212,11 @@ Approval = work looks done, need sign-off. Escalation = cannot continue the orch
 | Phase | Scope |
 |---|---|
 | **A** | Structured `Escalation` on decisions/gates; persist; show in UI; **still terminal** |
-| **B** | `awaiting_human` + resume API + orchestrator consumes human reply |
+| **B** | `awaiting_human` classification + orchestrator consumes an authenticated human reply/decision (the generic resume API already exists) |
 | **C** | Tracker notifications; policy denials always emit `policy_denied` with details |
 | **D** | Presets: demo (pause + notify) vs github (escalate + optional issue comment / draft PR) |
 
-**Recommended start:** Phase A only — gives acme-issues and the UI signal without inventing resume yet.
+Basic execution pause/resume landed independently of this escalation sequence. Phase A remains the next escalation-specific step.
 
 ---
 

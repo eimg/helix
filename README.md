@@ -235,6 +235,8 @@ PR review is a separate Helix workflow, not another step inside the implementati
 
 To request more work after completion, reopen the issue or add a comment beginning with `/helix`. acme-issues sends that external event to the completed run; Helix creates a linked child run with fresh specialist sessions and bounded context from the original issue and parent outcome. This is workflow continuation, not a manual chat prompt.
 
+Live server runs can also be paused and resumed without creating a child. Helix finishes the current safe orchestration boundary, persists the next orchestrator decision or remaining specialist invocations, and releases the live session objects. Pi lane transcripts are stored under `.helix/sessions/<run-id>/`. Deliverable finalization is a separate checkpoint, so a restart after implementation does not rerun the agents. On server startup, stale execution becomes `interrupted`; an invocation or delivery attempt that was active becomes `uncertain` and requires an explicit operator-confirmed retry. `SIGINT`/`SIGTERM` first ask active runs to pause and wait up to ten seconds for safe boundaries. This is intentionally visible demo-grade recovery, not exactly-once execution or a production workflow engine.
+
 See the [acme-issues README](https://github.com/eimg/acme-issues#pull-request-review-lifecycle) for the tracker-side review lifecycle, webhook payloads, and API reference.
 
 ## Tips
@@ -256,7 +258,7 @@ helix serve
 
 | Surface | URL | Notes |
 |--------|-----|--------|
-| Run console | `/` | Form, live log, cached run history, and delete |
+| Run console | `/` | Form, live log, cached run history, pause/resume, and delete |
 | PR Reviews | `/reviews` | Active exact-SHA reviews, durable history, lifecycle progress, findings, and checks; nav disabled until git exists |
 | Bootstrap | `/bootstrap` | Empty-workspace execute, or read-only receipt when the repo has Helix bootstrap artifacts; nav disabled on plain existing git |
 | Manage | `/manage` | Experimental authoring for run, PR, and bootstrap agents/skills plus default-workflow ordering (web/API only) |
@@ -269,6 +271,8 @@ Default port **8319** (phone-keypad mnemonic for HELIX). Override with `--port` 
 |--------|------|---------|
 | `POST` | `/runs` | Start a run (inline or GitHub issue) |
 | `POST` | `/runs/:id/continuations` | Start an externally triggered child run |
+| `POST` | `/runs/:id/pause` | Request a live run to park at its next safe boundary |
+| `POST` | `/runs/:id/resume` | Resume the same run; uncertain work requires `{ "retryUncertain": true }` |
 | `GET` | `/runs` | List run summaries (`?limit=`) |
 | `GET` | `/runs/:id` | Run state snapshot |
 | `DELETE` | `/runs/:id` | Delete a finished run |
@@ -318,6 +322,10 @@ Accepts a terminal parent run plus an idempotent external event:
 
 The parent must be `done` or `escalated`. Helix returns the existing child for a repeated `externalEventId`, and rejects a second child while one for the same parent is still running. A continuation is a new auditable workflow run; it does not resume an opaque Pi conversation.
 
+### `POST /runs/:id/pause` and `/resume`
+
+`pause` accepts only a live execution run. It changes the run to `pause_requested`, lets the active orchestrator call or specialist batch reach a checkpoint, then persists `paused`. `resume` accepts `paused` or `interrupted`, keeps the same run ID and retained implementation worktree, reopens the run-scoped Pi lane sessions, and continues from the stored checkpoint. If Helix stopped after a specialist or deliverable attempt started but before it was durably completed, a normal resume returns `409` with `requiresRetryConfirmation: true`; the UI asks for confirmation, or an API caller may retry deliberately with `{ "retryUncertain": true }`. Both actions require `helix.trigger`.
+
 ## Config
 
 `helix init` creates project-local `.helix/`:
@@ -332,6 +340,7 @@ The parent must be `done` or `escalated`. Helix returns the existing child for a
   inception-skills/*/SKILL.md
   context/*.md             # optional curated notes (Phase A bootstrap)
   runs.db                  # SQLite run state (gitignored)
+  sessions/<run-id>/       # resumable Pi specialist lane transcripts (gitignored)
   pr-reviews.db            # SQLite PR-control state (gitignored)
   runs/                    # legacy JSON import source (gitignored)
 ```

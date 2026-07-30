@@ -264,7 +264,10 @@ export function hasPermission(principal: HelixPrincipal, requested: string): boo
 function requiredPermission(req: Request): string {
   if (req.method === "GET" || req.method === "HEAD") return "helix.read";
   if (req.method === "DELETE" && /^\/runs\/[^/]+$/.test(req.path)) return "helix.admin";
-  if (req.method === "POST" && (req.path === "/runs" || /\/continuations$/.test(req.path))) {
+  if (
+    req.method === "POST"
+    && (req.path === "/runs" || /\/(continuations|pause|resume)$/.test(req.path))
+  ) {
     return "helix.trigger";
   }
   if (req.method === "POST" && req.path === "/pr-reviews") return "helix.review";

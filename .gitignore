@@ -9,6 +9,7 @@ dist/
 .helix/.env
 .helix/runs/
 .helix/runs.db*
+.helix/sessions/
 .helix/pr-reviews.db*
 .helix/secrets.*
 coverage/

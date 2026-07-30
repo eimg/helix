@@ -64,6 +64,8 @@ export interface SpecialistRunOptions {
 
 /** The result of running a specialist on a task. */
 export interface SpecialistResult {
+  /** Stable within one run so an interrupted invocation can be correlated on resume. */
+  invocationId?: string;
   specialist: string;
   task: string;
   ok: boolean;
@@ -108,6 +110,14 @@ export interface RunEvent {
     | "specialist_activity"
     | "specialist_output_delta"
     | "specialist_finished"
+    | "run_pause_requested"
+    | "run_paused"
+    | "run_resumed"
+    | "run_interrupted"
+    | "run_retry_confirmed"
+    | "delivery_pending"
+    | "delivery_started"
+    | "delivery_finished"
     | "gate_blocked"
     | "run_done"
     | "run_escalated"
@@ -144,11 +154,13 @@ export interface Run {
   issue: Issue;
   startedAt: number;
   finishedAt?: number;
-  status: "running" | "done" | "escalated" | "error";
+  status: "running" | "pause_requested" | "paused" | "interrupted" | "delivering" | "done" | "escalated" | "error";
   events: RunEvent[];
   results: SpecialistResult[];
   /** Compact cross-specialist handoffs; raw Pi conversations remain session-owned. */
   knowledge?: RunKnowledgeEntry[];
+  /** Last replay-safe orchestration boundary. High-volume model deltas remain live-only. */
+  checkpoint?: RunCheckpoint;
   finalDecision?: OrchestratorDecision;
   runFile?: string;
   /** Human approval gate (M2). */
@@ -160,7 +172,33 @@ export interface Run {
   implementationWorkspace?: {
     path: string;
     branch: string;
+    repositoryPath?: string;
+    baseBranch?: string;
+    baseSha?: string;
   };
+}
+
+export interface RunCheckpoint {
+  /** Optional on imported first-pass records; new checkpoints always write version 1. */
+  version?: 1;
+  phase: "orchestrator" | "specialists" | "delivery";
+  /** 0-based orchestrator turn that owns this checkpoint. */
+  iteration: number;
+  updatedAt: number;
+  /** Present while executing a persisted orchestrator `run` decision. */
+  decision?: Extract<OrchestratorDecision, { kind: "run" }>;
+  invocations?: RunCheckpointInvocation[];
+  delivery?: {
+    status: "pending" | "started" | "uncertain" | "completed";
+    attempt: number;
+  };
+}
+
+export interface RunCheckpointInvocation {
+  id: string;
+  specialist: string;
+  task: string;
+  status: "pending" | "started" | "uncertain" | "completed";
 }
 
 export interface RunContinuation {

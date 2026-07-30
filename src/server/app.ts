@@ -3,6 +3,7 @@
  *
  * POST /runs          start a run (inline or GitHub issue number)
  * POST /runs/:id/continuations   start an externally triggered linked child run
+ * POST /runs/:id/pause | /resume   park or continue the same durable run
  * GET  /runs          list run summaries (newest first)
  * GET  /runs/:id      run state snapshot
  * DELETE /runs/:id    delete a finished run (testing cleanup)
@@ -32,12 +33,14 @@
  */
 import express, { type Express, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
+import { rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { attachHmr, webAssets, webFromSource, webIndex } from "./webAssets.js";
 import type { RunContext } from "../run/bootstrap.js";
 import { refreshRunContextResources, startRun } from "../run/bootstrap.js";
 import type { Issue, Run, RunContinuation, RunEvent } from "../engine/types.js";
 import { EventStream } from "../engine/eventStream.js";
+import { RunExecutionControl } from "../engine/runControl.js";
 import { inlineIssue } from "../triggers/inline.js";
 import { GitHubTrigger } from "../triggers/github.js";
 import { approveRun, rejectRun } from "../deliverable/pipeline.js";
@@ -50,6 +53,7 @@ import type { ManageEvent } from "../manage/types.js";
 import { externalFromHeaders, parseIssueExternal } from "../callbacks/issueTracker.js";
 import { loadManagedWorkflow, saveManagedWorkflow } from "../manage/workflow.js";
 import { buildContinuationIssue } from "../run/continuation.js";
+import { runSessionRoot } from "../run/sessionPath.js";
 import type { RunStore } from "../state/runStore.js";
 import type { PullRequestControlService } from "../pr-control/service.js";
 import type { PullRequestReviewEvent, PullRequestReviewRequest } from "../pr-control/types.js";
@@ -86,9 +90,16 @@ export interface CreateAppOptions {
 
 interface ActiveRunEntry {
   eventStream: import("../engine/eventStream.js").EventStream;
+  control: import("../engine/runControl.js").RunExecutionControl;
   sseClients: Set<Response>;
   /** Latest accumulated live text per active invocation for late SSE attachment. */
   liveSnapshots: Map<string, RunEvent>;
+  promise?: Promise<Run>;
+}
+
+export interface GracefulPauseResult {
+  requested: number;
+  remaining: number;
 }
 
 interface ActiveManageEntry {
@@ -120,14 +131,22 @@ export function createApp(opts: CreateAppOptions): Express {
 
   const activeRuns = new Map<string, ActiveRunEntry>();
   const activeManage = new Map<string, ActiveManageEntry>();
+  reconcileInterruptedRuns(ctx.store);
 
   const launchRun = (
     issue: Issue,
     lineage: { parentRunId?: string; rootRunId?: string; continuation?: RunContinuation } = {},
+    resumeRun?: Run,
   ): string => {
-    const runId = randomUUID();
+    const runId = resumeRun?.id ?? randomUUID();
     const eventStream = new EventStream();
-    const entry: ActiveRunEntry = { eventStream, sseClients: new Set(), liveSnapshots: new Map() };
+    const control = new RunExecutionControl();
+    const entry: ActiveRunEntry = {
+      eventStream,
+      control,
+      sseClients: new Set(),
+      liveSnapshots: new Map(),
+    };
     activeRuns.set(runId, entry);
 
     const unsubscribe = eventStream.subscribe((event) => {
@@ -136,14 +155,17 @@ export function createApp(opts: CreateAppOptions): Express {
       if (isTerminalRunEvent(event)) closeRunSseClients(entry);
     });
 
-    const { promise } = startRun(ctx, issue, {
+    const active = startRun(ctx, issue, {
       skipDeliverable: false,
       runId,
       eventStream,
+      control,
+      resumeRun,
       ...lineage,
     });
+    entry.promise = active.promise;
 
-    promise
+    active.promise
       .finally(() => {
         unsubscribe();
         activeRuns.delete(runId);
@@ -152,6 +174,29 @@ export function createApp(opts: CreateAppOptions): Express {
         /* persisted via onEvent */
       });
     return runId;
+  };
+
+  app.locals.pauseActiveRuns = async (
+    reason = "Paused for Helix shutdown",
+    timeoutMs = 10_000,
+  ): Promise<GracefulPauseResult> => {
+    const snapshot = [...activeRuns.entries()];
+    for (const [, entry] of snapshot) entry.control.requestPause(reason);
+    const promises = snapshot.flatMap(([, entry]) => entry.promise ? [entry.promise] : []);
+    if (promises.length > 0) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        Promise.allSettled(promises),
+        new Promise<void>((resolveDelay) => {
+          timer = setTimeout(resolveDelay, Math.max(0, timeoutMs));
+        }),
+      ]);
+      if (timer) clearTimeout(timer);
+    }
+    return {
+      requested: snapshot.length,
+      remaining: snapshot.filter(([id]) => activeRuns.has(id)).length,
+    };
   };
 
   app.post("/runs", async (req: Request, res: Response) => {
@@ -249,8 +294,78 @@ export function createApp(opts: CreateAppOptions): Express {
     res.json(run);
   });
 
+  app.post("/runs/:id/pause", (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    const entry = activeRuns.get(id);
+    if (!entry) {
+      const run = ctx.store.load(id);
+      if (!run) {
+        res.status(404).json({ error: "Run not found" });
+      } else {
+        res.status(409).json({ error: `Run is ${run.status}; only a live run can be paused` });
+      }
+      return;
+    }
+    if (ctx.store.load(id)?.status === "delivering") {
+      res.status(409).json({ error: "Deliverable finalization is already running; wait for it to finish or restart Helix if it becomes stuck" });
+      return;
+    }
+    const accepted = entry.control.requestPause("Paused by operator");
+    res.status(accepted ? 202 : 200).json({ id, status: "pause_requested", duplicate: !accepted });
+  });
+
+  app.post("/runs/:id/resume", (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    if (activeRuns.has(id)) {
+      res.status(409).json({ error: "Run is already live" });
+      return;
+    }
+    const run = ctx.store.load(id);
+    if (!run) {
+      res.status(404).json({ error: "Run not found" });
+      return;
+    }
+    if (run.status !== "paused" && run.status !== "interrupted") {
+      res.status(409).json({ error: `Run is ${run.status}; only paused or interrupted runs can be resumed` });
+      return;
+    }
+    const uncertain = uncertainRecoveryItems(run);
+    const retryUncertain = req.body?.retryUncertain === true;
+    if (uncertain.length > 0 && !retryUncertain) {
+      res.status(409).json({
+        error: "Run stopped during side-effecting work; confirm an explicit retry",
+        requiresRetryConfirmation: true,
+        uncertain,
+      });
+      return;
+    }
+    if (uncertain.length > 0) {
+      for (const invocation of run.checkpoint?.invocations ?? []) {
+        if (invocation.status === "uncertain") invocation.status = "pending";
+      }
+      if (run.checkpoint?.delivery?.status === "uncertain") {
+        run.checkpoint.delivery.status = "pending";
+      }
+      run.events.push({
+        ts: Date.now(),
+        type: "run_retry_confirmed",
+        summary: `Operator confirmed retry for ${uncertain.join(", ")}`,
+        details: { uncertain },
+      });
+      run.runFile = ctx.store.save(run);
+    }
+    launchRun(run.issue, {}, run);
+    res.status(202).json({ id, status: "running" });
+  });
+
   app.delete("/runs/:id", (req: Request, res: Response) => {
     const id = String(req.params.id);
+    let sessionsDir: string | undefined;
+    try {
+      sessionsDir = runSessionRoot(ctx.helixDir, id);
+    } catch {
+      // Legacy imported ids may not be valid path segments; never derive a path from them.
+    }
     if (activeRuns.has(id)) {
       res.status(409).json({ error: "Cannot delete a running run" });
       return;
@@ -264,6 +379,7 @@ export function createApp(opts: CreateAppOptions): Express {
       res.status(500).json({ error: "Failed to delete run" });
       return;
     }
+    if (sessionsDir) rmSync(sessionsDir, { recursive: true, force: true });
     res.status(204).end();
   });
 
@@ -285,7 +401,7 @@ export function createApp(opts: CreateAppOptions): Express {
     }
 
     const entry = activeRuns.get(runId);
-    if (entry && run.status === "running") {
+    if (entry && (run.status === "running" || run.status === "pause_requested" || run.status === "delivering")) {
       for (const event of entry.liveSnapshots.values()) writeRunSse(res, event);
       entry.sseClients.add(res);
       req.on("close", () => entry.sseClients.delete(res));
@@ -887,7 +1003,13 @@ function findContinuationByEvent(
 
 function findActiveContinuationChild(store: RunStore, parentRunId: string): Run | undefined {
   for (const summary of store.listSummaries()) {
-    if (summary.status !== "running") continue;
+    if (
+      summary.status !== "running"
+      && summary.status !== "pause_requested"
+      && summary.status !== "paused"
+      && summary.status !== "interrupted"
+      && summary.status !== "delivering"
+    ) continue;
     const run = store.load(summary.id);
     if (run?.parentRunId === parentRunId) return run;
   }
@@ -934,7 +1056,38 @@ function updateLiveSnapshot(entry: ActiveRunEntry, event: RunEvent): void {
 }
 
 function isTerminalRunEvent(event: RunEvent): boolean {
-  return event.type === "run_done" || event.type === "run_escalated" || event.type === "run_error";
+  return event.type === "run_done" || event.type === "run_escalated" || event.type === "run_error" || event.type === "run_paused";
+}
+
+function reconcileInterruptedRuns(store: RunStore): void {
+  for (const summary of store.listSummaries()) {
+    if (summary.status !== "running" && summary.status !== "pause_requested" && summary.status !== "delivering") continue;
+    const run = store.load(summary.id);
+    if (!run) continue;
+    for (const invocation of run.checkpoint?.invocations ?? []) {
+      if (invocation.status === "started") invocation.status = "uncertain";
+    }
+    if (run.checkpoint?.delivery?.status === "started") {
+      run.checkpoint.delivery.status = "uncertain";
+    }
+    run.status = "interrupted";
+    run.finishedAt = undefined;
+    run.events.push({
+      ts: Date.now(),
+      type: "run_interrupted",
+      summary: "Helix restarted without a live executor; resume continues from the last durable checkpoint",
+      details: { checkpoint: run.checkpoint },
+    });
+    run.runFile = store.save(run);
+  }
+}
+
+function uncertainRecoveryItems(run: Run): string[] {
+  const items = (run.checkpoint?.invocations ?? [])
+    .filter((invocation) => invocation.status === "uncertain")
+    .map((invocation) => `specialist ${invocation.specialist}`);
+  if (run.checkpoint?.delivery?.status === "uncertain") items.push("deliverable finalization");
+  return items;
 }
 
 function closeRunSseClients(entry: ActiveRunEntry): void {
@@ -957,13 +1110,18 @@ export interface StartServerOptions extends CreateAppOptions {
   host?: string;
 }
 
-export function startServer(opts: StartServerOptions): ReturnType<Express["listen"]> {
+export type HelixServer = ReturnType<Express["listen"]> & {
+  pauseActiveRuns(reason?: string, timeoutMs?: number): Promise<GracefulPauseResult>;
+};
+
+export function startServer(opts: StartServerOptions): HelixServer {
   const app = createApp(opts);
   const port = opts.port ?? Number(process.env.PORT ?? HELIX_DEFAULT_PORT);
   const host = opts.host ?? "127.0.0.1";
   const server = app.listen(port, host, () => {
     console.log(`Helix  http://${host}:${port}${webFromSource() ? "  (web from source)" : ""}`);
-  });
+  }) as HelixServer;
+  server.pauseActiveRuns = app.locals.pauseActiveRuns as HelixServer["pauseActiveRuns"];
   attachHmr(server);
   return server;
 }

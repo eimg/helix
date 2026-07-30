@@ -289,7 +289,7 @@ async function cmdServe(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  startServer({ ctx, pr, githubRepo: repo, prControl, port, host: "127.0.0.1" });
+  const server = startServer({ ctx, pr, githubRepo: repo, prControl, port, host: "127.0.0.1" });
   if (!gitReady) {
     console.log("Inception mode: workspace has no git yet. Run helix bootstrap --export … --execute to create the project repo.");
   }
@@ -304,8 +304,9 @@ async function cmdServe(args: string[]): Promise<void> {
   }
 
   const gh = config.triggers?.github;
+  let poll: GitHubPollTrigger | undefined;
   if (gh?.mode === "poll" && repo) {
-    const poll = new GitHubPollTrigger({
+    poll = new GitHubPollTrigger({
       repo,
       labelFilter: gh.labelFilter,
       intervalSec: gh.intervalSec,
@@ -320,6 +321,25 @@ async function cmdServe(args: string[]): Promise<void> {
     poll.start();
     console.log(`GitHub poll enabled (${repo}, label=${gh.labelFilter ?? "any"}, every ${gh.intervalSec ?? 60}s)`);
   }
+
+  let shuttingDown = false;
+  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`${signal}: pausing active runs at safe boundaries…`);
+    poll?.stop();
+    server.close();
+    const result = await server.pauseActiveRuns(`Paused for ${signal} shutdown`, 10_000);
+    if (result.remaining > 0) {
+      console.warn(`${result.remaining} run(s) did not reach a safe boundary; they will be marked interrupted on restart.`);
+    } else if (result.requested > 0) {
+      console.log(`Paused ${result.requested} active run(s).`);
+    }
+    server.closeAllConnections();
+    process.exit(0);
+  };
+  process.once("SIGINT", () => void shutdown("SIGINT"));
+  process.once("SIGTERM", () => void shutdown("SIGTERM"));
 }
 
 async function main(): Promise<void> {

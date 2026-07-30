@@ -38,7 +38,7 @@ export class DefaultDeliverablePipeline implements DeliverablePipeline {
   constructor(private readonly deps: DeliverablePipelineDeps) {}
 
   async finalize(run: Run, mergeGate: MergeGateConfig): Promise<Run> {
-    if (run.status !== "done") {
+    if (run.status !== "done" && run.status !== "delivering") {
       run.approvalStatus = "none";
       return run;
     }

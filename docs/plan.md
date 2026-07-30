@@ -55,7 +55,7 @@ Turn the engine into a self-driving service: issues can arrive automatically, ru
 
 | Area | Files |
 |---|---|
-| Express host | `src/server/app.ts` — start/list/get/delete runs, linked continuations, SSE events, approve/reject |
+| Express host | `src/server/app.ts` — start/list/get/delete runs, pause/resume, linked continuations, SSE events, approve/reject |
 | Run bootstrap | `src/run/bootstrap.ts` — shared `createRunContext()` + async `startRun()` for CLI and server |
 | GitHub poll | `src/triggers/github-poll.ts` — `GitHubPollTrigger` + injectable `IssueLister` |
 | PR creation | `src/deliverable/pr.ts` — `GhPullRequestCreator` + `FakePullRequestCreator` |
@@ -86,6 +86,7 @@ Originally: no full product UI, no cost dashboards. Run console + Manage have si
 | **Within-run context reuse** | One Pi session per specialist lane per run + bounded structured handoffs (`RunKnowledgeEntry`) |
 | **Web-native streaming** | Orchestrator and specialist responses share started → live buffered deltas → durable full finished output; token deltas stay ephemeral |
 | **SQLite run state** | `.helix/runs.db` default with WAL; legacy `.helix/runs/*.json` imported when the database is empty |
+| **Thin run durability** | Stable execution + delivery checkpoints, file-backed per-run Pi lane sessions, operator pause/resume, graceful shutdown drain, startup interruption detection, and explicit confirmation before retrying uncertain work |
 | **Issue-tracker callback** | Best-effort `run.completed` POST to external tracker; scoped service auth is added only for configured trusted Issues origins |
 | **External workflow continuations** | Issue reopen/comment events create idempotent linked child runs with fresh sessions and bounded parent context |
 | **Run history / delete** | `GET /runs`, UI sidebar, `DELETE /runs/:id` for test cleanup |
@@ -109,10 +110,10 @@ PR lifecycle ownership is now separated for the local Acme path: implementation 
 ## Still open (scale sketch)
 
 - **Architecture / substrate** — ports, two tracks, DIY→third-party swap points. [→](./architecture.md)
-- **Guardrails & escalation** — structured escalation codes, budgets, workspace jail, pause/resume; design only. [→](./guardrails.md)
+- **Guardrails & escalation** — structured escalation codes, budgets, workspace jail, and human reply/decision resume; basic operator pause/resume is shipped. [→](./guardrails.md)
 - **Repo context B–D** — persistent `.helix/repo-memory.md`, freshness/`helix index`, semantic index
 - **Observability** — cost/token dashboards and richer searchable SQLite projections (domain `RunEvent` first; OTel later per architecture.md)
-- **Durability** — resume after crash / HITL park; shape `DurableRunner` before adopting Temporal
+- **Durability hardening** — idempotent effect ledger, explicit deliverable checkpoints, and stronger mid-tool recovery before considering Temporal-class infrastructure
 - **General-assistant mode** — persistent Pi thread sessions, profile-specific tools/resources, streamed messages; specialist orchestration remains optional
 - **Run-scoped Git delivery hardening** — shipped host-created isolated branch/worktree and deterministic fallback commit; next add explicit failed-workspace discovery/cleanup controls and stronger subprocess isolation
 - **PR-control expansion** — conditional security/performance/etc. specialists, fix authorization, event reconciliation, and hosted-provider adapters

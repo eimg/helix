@@ -5,6 +5,7 @@ import type { Issue, OrchestratorDecision, SpecialistDefinition, SpecialistSessi
 import { FakeProvider } from "../src/providers/fake.js";
 import { StubSpecialistFactory } from "../src/agents/stubSession.js";
 import { ScriptedOrchestrator } from "../src/orchestrator/scripted.js";
+import { RunExecutionControl } from "../src/engine/runControl.js";
 
 const issue: Issue = {
   source: "github",
@@ -337,4 +338,59 @@ test("blocking-failure gate: orchestrator 'done' over a failed result is escalat
   assert.equal(run.finalDecision?.kind, "escalate");
   assert.match((run.finalDecision as { reason: string }).reason, /failed/);
   assert.ok(events.some((e) => e.type === "gate_blocked"), "gate_blocked event should fire");
+});
+
+test("pause and resume keep the same run and persisted specialist decision", async () => {
+  const control = new RunExecutionControl();
+  let specialistRuns = 0;
+  const baseFactory = new StubSpecialistFactory([def("dev")], { dev: "implemented" });
+  const factory: SpecialistSessionFactory & { definitions: SpecialistDefinition[] } = {
+    definitions: baseFactory.definitions,
+    async create(definition) {
+      const session = await baseFactory.create(definition);
+      return {
+        name: session.name,
+        async run(task, opts) {
+          specialistRuns++;
+          return session.run(task, opts);
+        },
+        dispose: () => session.dispose(),
+      };
+    },
+  };
+  const paused = await runIssue(issue, {
+    runId: "durable-run",
+    provider: new FakeProvider(),
+    orchestrator: {
+      async decide() {
+        control.requestPause("test pause");
+        return { kind: "run" as const, specialists: [{ specialist: "dev", task: "implement once" }], reason: "go" };
+      },
+    },
+    specialistFactory: factory,
+    control,
+  });
+
+  assert.equal(paused.id, "durable-run");
+  assert.equal(paused.status, "paused");
+  assert.equal(paused.checkpoint?.phase, "specialists");
+  assert.equal(specialistRuns, 0);
+  assert.equal(paused.events.filter((event) => event.type === "run_started").length, 1);
+
+  const resumed = await runIssue(issue, {
+    runId: paused.id,
+    provider: new FakeProvider(),
+    orchestrator: new ScriptedOrchestrator([{ kind: "done", reason: "complete" }]),
+    specialistFactory: factory,
+    resumeRun: paused,
+    control: new RunExecutionControl(),
+  });
+
+  assert.equal(resumed.id, "durable-run");
+  assert.equal(resumed.status, "done");
+  assert.equal(specialistRuns, 1);
+  assert.equal(resumed.results.length, 1);
+  assert.equal(resumed.results[0].invocationId, paused.events.find((event) => event.type === "specialist_started")?.details?.invocationId);
+  assert.equal(resumed.events.filter((event) => event.type === "run_started").length, 1);
+  assert.ok(resumed.events.some((event) => event.type === "run_resumed"));
 });

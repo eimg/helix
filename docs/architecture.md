@@ -75,7 +75,7 @@ Helix core (orchestrator, gates, specialist contracts)
 | Agent runtimes | **pi** for decisions + coding specialists | Pi-first conversation and domain-agent profiles; evaluate alternatives only for measured gaps |
 | Tools | pi/native runtime tools | One policy-aware registry with native and MCP client adapters |
 | Observability | Durable `RunEvent` + live-only SSE deltas + console | Domain-event exporter plus runtime-native OTel/LLM-ops spans |
-| Durability | Incremental SQLite run/events/results (not replay checkpoints) | Explicit step/checkpoint runner behind `WorkflowRunner` |
+| Durability | SQLite orchestration checkpoints + file-backed Pi lane sessions; safe-boundary pause and crash resume | Idempotent effect ledger and stronger tool/deliverable replay before a Temporal-class adapter |
 | Second agent SDK in mainline | **No** — premature dual runtime | Only when provider, protocol, deployment, or evaluation evidence requires it |
 | OTel / Temporal in mainline | **No** — shape seams first | Yes when in-process + JSON checkpoint is insufficient |
 
@@ -179,19 +179,22 @@ Existing seams are a useful start:
 - `RunStore` persists normalized SQLite run state and completed full responses; high-volume orchestrator/specialist token deltas remain ephemeral
 - Specialist Pi sessions are retained per named lane for a run, while compact `RunKnowledgeEntry` handoffs cross specialist boundaries
 - `SpecialistSessionFactory` is the closest current specialist-runtime boundary
-- Merge approve/reject is an early HITL surface (post-run today; park/resume later)
+- Operator pause/resume parks at an orchestrator or specialist-batch boundary; delivery is a separate resumable phase, while merge approve/reject remains a post-run HITL surface
 - Pi already supplies the complete local session harness needed to prototype a general conversation mode without introducing another agent SDK
 
 Gaps vs this strategy (intentional for exploration):
 
 - `RunContext`, the default orchestrator, and Manage still depend on `PiProvider`; runtime portability is aspirational
-- `startRun` is one in-process promise; SQLite records are durable state, not replay-safe workflow checkpoints
-- No resume after process death, stable effect/invocation IDs, or idempotency contract
+- The live executor remains one in-process promise, but SQLite now stores the next orchestrator/specialist boundary and stable specialist invocation IDs; startup marks stale live runs `interrupted` for same-run resume
+- Completed specialist invocations are checkpointed individually and Pi lane transcripts live under `.helix/sessions/<run-id>/`; an active invocation becomes `uncertain` after interruption and requires an explicit operator-confirmed retry
+- Deliverable finalization has its own pending/started/uncertain/completed checkpoint and resumes without rerunning orchestration; the active delivery attempt still relies on explicit retry rather than a general side-effect ledger
+- `SIGINT` and `SIGTERM` request safe-boundary pauses and wait up to ten seconds; work still active after that is recovered as interrupted on restart
+- Tool, Git, PR, and callback effects do not share a general idempotency ledger; this remains intentionally out of scope for the demo
 - `RunEvent` has no schema version, sequence/event ID, or causation metadata yet
 - No domain-event/observability port beyond the event stream and SQLite store
 - No unified tool registry/policy boundary for native and future MCP tools
 - The public product model is still `Issue → orchestrator → specialists → deliverable`; there is no persistent thread/message surface yet
-- Session construction hard-codes coding tools and run-scoped in-memory sessions; general profiles need coding tools disabled by default and Pi-backed thread persistence
+- Session construction still hard-codes coding tools; workflow lanes are now file-backed, while general profiles still need coding tools disabled by default and a distinct durable thread model
 
 ---
 

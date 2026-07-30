@@ -14,6 +14,7 @@ import {
   createAgentSession,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import type {
   SpecialistDefinition,
@@ -43,6 +44,11 @@ export interface PiSpecialistFactoryOptions {
   skillPack?: SkillPack;
   /** Repo-local extension config. Default disabled. */
   extensions?: { enabled?: boolean; paths?: string[] };
+  /**
+   * Optional per-run root for durable lane sessions. Each specialist receives
+   * a deterministic subdirectory and resumes its latest Pi JSONL transcript.
+   */
+  sessionRoot?: string;
 }
 
 export class PiSpecialistSessionFactory implements SpecialistSessionFactory {
@@ -54,6 +60,7 @@ export class PiSpecialistSessionFactory implements SpecialistSessionFactory {
   private readonly defaultModel: string | undefined;
   private readonly skillPack: SkillPack;
   private readonly extensions: { enabled?: boolean; paths?: string[] } | undefined;
+  private readonly sessionRoot: string | undefined;
 
   constructor(provider: PiProvider, definitions: SpecialistDefinition[], opts: PiSpecialistFactoryOptions = {}) {
     this.provider = provider;
@@ -63,6 +70,7 @@ export class PiSpecialistSessionFactory implements SpecialistSessionFactory {
     this.defaultModel = opts.defaultModel;
     this.skillPack = opts.skillPack ?? "run";
     this.extensions = opts.extensions;
+    this.sessionRoot = opts.sessionRoot;
   }
 
   async create(def: SpecialistDefinition): Promise<SpecialistSession> {
@@ -84,18 +92,27 @@ export class PiSpecialistSessionFactory implements SpecialistSessionFactory {
     });
     await loader.reload();
 
+    const sessionManager = this.sessionRoot
+      ? SessionManager.continueRecent(this.cwd, resolve(this.sessionRoot, laneDirectory(def.name)))
+      : SessionManager.inMemory();
     const { session } = await createAgentSession({
       cwd: this.cwd,
       model,
       thinkingLevel: "off",
       tools: def.tools && def.tools.length > 0 ? def.tools : ["read", "bash", "edit", "write"],
       resourceLoader: loader,
-      sessionManager: SessionManager.inMemory(),
+      sessionManager,
       modelRuntime,
     });
 
     return new PiSpecialistSession(def.name, session);
   }
+}
+
+function laneDirectory(name: string): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "specialist";
+  const suffix = createHash("sha256").update(name).digest("hex").slice(0, 8);
+  return `${slug}-${suffix}`;
 }
 
 /**

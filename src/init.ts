@@ -50,6 +50,7 @@ const CONFIG_TEMPLATE = `{
 const GITIGNORE_ENTRIES = [
   ".helix/runs/",
   ".helix/runs.db*",
+  ".helix/sessions/",
   ".helix/pr-reviews.db*",
   ".helix/.env",
   ".env",

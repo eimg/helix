@@ -24,7 +24,7 @@ These stack together; fixing one alone helps only partially.
 
 | Factor | Where | Effect |
 |---|---|---|
-| **Fresh sessions per run** | `PiSpecialistSessionFactory` uses `SessionManager.inMemory()` | No memory from prior runs or prior issues; within a run, named specialist lanes are now retained |
+| **Fresh durable sessions per run** | Server runs use one file-backed Pi session directory per run and specialist lane | No memory from unrelated runs; a paused/interrupted run can reopen its own lane transcript |
 | **Session isolation** | `loaderBuilder.ts` sets `noContextFiles: true` | pi does not auto-load `AGENTS.md`, README, or other context files |
 | **Planner prompt** | `.helix/agents/planner.md` | Explicitly instructs "Read the repo as needed to ground the plan" |
 | **Tool-free orchestrator** | `orchestrator/driver.ts` | Orchestrator cannot pre-read the repo; first repo contact is a specialist |

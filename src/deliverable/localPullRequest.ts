@@ -44,7 +44,7 @@ export class LocalPullRequestDeliverablePipeline implements DeliverablePipeline 
     context?: DeliverableFinalizeContext,
   ): Promise<Run> {
     const external = run.issue.external;
-    if (run.status !== "done" || !external) {
+    if ((run.status !== "done" && run.status !== "delivering") || !external) {
       run.approvalStatus = "none";
       return run;
     }

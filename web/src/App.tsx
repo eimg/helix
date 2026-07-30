@@ -7,7 +7,7 @@ import { ManagePage } from "./ManagePage";
 import { ConfigPage } from "./ConfigPage";
 import { BootstrapPage } from "./BootstrapPage";
 
-type RunStatus = "running" | "done" | "escalated" | "error";
+type RunStatus = "running" | "pause_requested" | "paused" | "interrupted" | "delivering" | "done" | "escalated" | "error";
 
 interface RunSummary {
   id: string;
@@ -46,6 +46,11 @@ interface Run {
   approvalStatus?: string;
   deliverableError?: string;
   implementationWorkspace?: { path: string; branch: string };
+  checkpoint?: {
+    phase: "orchestrator" | "specialists" | "delivery";
+    invocations?: { specialist: string; status: "pending" | "started" | "uncertain" | "completed" }[];
+    delivery?: { status: "pending" | "started" | "uncertain" | "completed"; attempt: number };
+  };
 }
 
 interface LogBlock {
@@ -194,6 +199,27 @@ function RunPage() {
       await client.invalidateQueries({ queryKey: ["runs"] });
     },
   });
+  const pause = useMutation({
+    mutationFn: (id: string) => api(`/runs/${encodeURIComponent(id)}/pause`, { method: "POST" }),
+    onSuccess: async (_, id) => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["run", id] }),
+        client.invalidateQueries({ queryKey: ["runs"] }),
+      ]);
+    },
+  });
+  const resume = useMutation({
+    mutationFn: ({ id, retryUncertain }: { id: string; retryUncertain: boolean }) => api(`/runs/${encodeURIComponent(id)}/resume`, {
+      method: "POST",
+      body: JSON.stringify({ retryUncertain }),
+    }),
+    onSuccess: async (_, { id }) => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["run", id] }),
+        client.invalidateQueries({ queryKey: ["runs"] }),
+      ]);
+    },
+  });
 
   useEffect(() => {
     if (!selectedId && history.data) {
@@ -224,7 +250,16 @@ function RunPage() {
           events={clearedId === selectedId ? [] : streamedEvents}
           loading={run.isPending && selectedId !== null}
           selectedId={selectedId}
-          interrupted={run.data?.status === "running" && !selectedSummary?.live}
+          live={selectedSummary?.live === true}
+          canControl={can("helix.trigger")}
+          actionPending={pause.isPending || resume.isPending}
+          onPause={() => selectedId && pause.mutate(selectedId)}
+          onResume={() => {
+            if (!selectedId) return;
+            const uncertain = hasUncertainRecovery(run.data);
+            if (uncertain && !confirm("Helix stopped during work that may already have changed files or registered a deliverable. Retry that uncertain step?")) return;
+            resume.mutate({ id: selectedId, retryUncertain: uncertain });
+          }}
           onClear={() => selectedId && setClearedId(selectedId)}
         />
         {run.data && <ResultPanel run={run.data} />}
@@ -473,14 +508,22 @@ function LogPanel({
   events,
   loading,
   selectedId,
-  interrupted,
+  live,
+  canControl,
+  actionPending,
+  onPause,
+  onResume,
   onClear,
 }: {
   run?: Run;
   events: RunEvent[];
   loading: boolean;
   selectedId: string | null;
-  interrupted: boolean;
+  live: boolean;
+  canControl: boolean;
+  actionPending: boolean;
+  onPause: () => void;
+  onResume: () => void;
   onClear: () => void;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -496,7 +539,17 @@ function LogPanel({
           <h2>Live log</h2>
         </div>
         <div className="heading-actions">
-          {run && <StatusPill status={interrupted ? "interrupted" : run.status} />}
+          {run && <StatusPill status={run.status === "running" && !live ? "interrupted" : run.status} />}
+          {run && live && (run.status === "running" || run.status === "pause_requested") && (
+            <button className="btn btn-ghost btn-sm" onClick={onPause} disabled={!canControl || actionPending || run.status === "pause_requested"}>
+              <Icon name="pause" /> {run.status === "pause_requested" ? "Pausing…" : "Pause"}
+            </button>
+          )}
+          {run && !live && (run.status === "paused" || run.status === "interrupted") && (
+            <button className="btn btn-primary btn-sm" onClick={onResume} disabled={!canControl || actionPending}>
+              <Icon name="play" /> {actionPending ? "Resuming…" : hasUncertainRecovery(run) ? "Review & retry" : "Resume"}
+            </button>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={onClear} disabled={!run}><Icon name="clear" /> Clear</button>
         </div>
       </div>
@@ -536,7 +589,7 @@ function LogEntry({ block }: { block: LogBlock }) {
 }
 
 function ResultPanel({ run }: { run: Run }) {
-  if (run.status === "running") return null;
+  if (run.status === "running" || run.status === "pause_requested" || run.status === "delivering") return null;
   const elapsed = run.finishedAt ? Math.max(1, Math.round((run.finishedAt - run.startedAt) / 1_000)) : null;
   return (
     <section className="panel result-panel">
@@ -561,6 +614,11 @@ function ResultPanel({ run }: { run: Run }) {
 
 function ResultBlock({ title, children }: { title: string; children: ReactNode }) {
   return <div className="result-block"><h3>{title}</h3>{children}</div>;
+}
+
+function hasUncertainRecovery(run?: Run): boolean {
+  return run?.checkpoint?.delivery?.status === "uncertain"
+    || run?.checkpoint?.invocations?.some((invocation) => invocation.status === "uncertain") === true;
 }
 
 function StatusPill({ status }: { status: string }) {
@@ -634,6 +692,14 @@ function buildLog(events: RunEvent[]): LogBlock[] {
     }
     const mapping: Record<string, [string, string]> = {
       run_started: ["Run", "accent"],
+      run_pause_requested: ["Pause requested", "warning"],
+      run_paused: ["Paused", "warning"],
+      run_resumed: ["Resumed", "accent"],
+      run_interrupted: ["Interrupted", "warning"],
+      run_retry_confirmed: ["Retry confirmed", "warning"],
+      delivery_pending: ["Delivery pending", "accent"],
+      delivery_started: ["Finalizing deliverable", "accent"],
+      delivery_finished: ["Deliverable finalized", "success"],
       run_done: ["Done", "success"],
       run_escalated: ["Escalated", "warning"],
       run_error: ["Error", "danger"],
@@ -666,7 +732,7 @@ function useRunEvents(
         return;
       }
       setEvents((current) => mergeStreamEvent(current, event));
-      if (event.type === "run_done" || event.type === "run_escalated" || event.type === "run_error") {
+      if (event.type === "run_done" || event.type === "run_escalated" || event.type === "run_error" || event.type === "run_paused") {
         void client.invalidateQueries({ queryKey: ["run", runId] });
         void client.invalidateQueries({ queryKey: ["runs"] });
         source.close();
@@ -716,11 +782,12 @@ function decisionSummary(value: unknown): string {
     : decision.kind ?? "decided";
 }
 
-type IconName = "clear" | "play" | "refresh" | "trash";
+type IconName = "clear" | "pause" | "play" | "refresh" | "trash";
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
     clear: <><path d="M5 5l14 14M19 5 5 19" /></>,
+    pause: <><path d="M9 6v12M15 6v12" /></>,
     play: <path d="m8 5 11 7-11 7z" />,
     refresh: <><path d="M20 7v5h-5" /><path d="M4 17v-5h5" /><path d="M6.2 8.2A7 7 0 0 1 18.5 7L20 12M4 12l1.5 5a7 7 0 0 0 12.3-1.2" /></>,
     trash: <><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></>,

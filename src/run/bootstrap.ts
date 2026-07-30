@@ -22,7 +22,9 @@ import { LocalPullRequestDeliverablePipeline } from "../deliverable/localPullReq
 import { notifyIssueTracker } from "../callbacks/issueTracker.js";
 import { buildRepoBootstrap } from "../context/bootstrap.js";
 import { hasCommit, hasOwnGitDir } from "../inception/git.js";
-import { GitRunWorkspaceManager, type PreparedRunWorkspace, type RunWorkspaceManager } from "./workspace.js";
+import { GitRunWorkspaceManager, restorePreparedRunWorkspace, type PreparedRunWorkspace, type RunWorkspaceManager } from "./workspace.js";
+import { RunExecutionControl } from "../engine/runControl.js";
+import { runSessionRoot } from "./sessionPath.js";
 
 export interface RunContext {
   helixDir: string;
@@ -117,6 +119,7 @@ export function maybeWireLocalPullRequest(ctx: RunContext): void {
 export interface ActiveRun {
   runId: string;
   eventStream: EventStream;
+  control: RunExecutionControl;
   promise: Promise<Run>;
 }
 
@@ -129,6 +132,9 @@ export interface StartRunOptions {
   parentRunId?: string;
   rootRunId?: string;
   continuation?: RunContinuation;
+  /** Continue this exact paused/interrupted run rather than creating a child. */
+  resumeRun?: Run;
+  control?: RunExecutionControl;
 }
 
 export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = {}): ActiveRun {
@@ -138,19 +144,43 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
   const config = ctx.config;
   const workflow = ctx.workflow;
   const specialists = ctx.specialists;
-  const runId = opts.runId ?? randomUUID();
+  const runId = opts.resumeRun?.id ?? opts.runId ?? randomUUID();
   const eventStream = opts.eventStream ?? new EventStream();
+  const control = opts.control ?? new RunExecutionControl();
   const promise = (async (): Promise<Run> => {
+    const resumeDelivery = opts.resumeRun?.checkpoint?.phase === "delivery";
     let workspace: PreparedRunWorkspace | undefined;
-    const parent = opts.parentRunId ? ctx.store.load(opts.parentRunId) : undefined;
+    const parentRunId = opts.parentRunId ?? opts.resumeRun?.parentRunId;
+    const continuation = opts.continuation ?? opts.resumeRun?.continuation;
+    const parent = parentRunId ? ctx.store.load(parentRunId) : undefined;
     const reuseBranch =
-      opts.continuation?.pullRequestHeadBranch?.trim()
+      continuation?.pullRequestHeadBranch?.trim()
       || parent?.pullRequest?.branch?.trim()
       || undefined;
     const existingPullRequestId =
-      opts.continuation?.pullRequestId
+      continuation?.pullRequestId
+      ?? opts.resumeRun?.pullRequest?.number
       ?? parent?.pullRequest?.number;
-    if (!opts.skipDeliverable && issue.external && ctx.workspace) {
+    if (opts.resumeRun?.implementationWorkspace) {
+      try {
+        workspace = await restorePreparedRunWorkspace(opts.resumeRun.implementationWorkspace);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        opts.resumeRun.status = "error";
+        opts.resumeRun.finishedAt = Date.now();
+        opts.resumeRun.deliverableError = message;
+        const event: RunEvent = {
+          ts: Date.now(),
+          type: "run_error",
+          summary: `Implementation workspace resume failed: ${message}`,
+        };
+        opts.resumeRun.events.push(event);
+        eventStream.emit(event);
+        opts.onEvent?.(opts.resumeRun, event);
+        opts.resumeRun.runFile = ctx.store.save(opts.resumeRun);
+        return opts.resumeRun;
+      }
+    } else if (!opts.skipDeliverable && issue.external && ctx.workspace) {
       try {
         workspace = await ctx.workspace.prepare({
           runId,
@@ -211,6 +241,7 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
         helixDir: ctx.helixDir,
         defaultModel: ctx.model,
         extensions: config.extensions,
+        sessionRoot: runSessionRoot(ctx.helixDir, runId),
       });
     const workspaceNotice = workspace
       ? [
@@ -234,7 +265,22 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
       parentRunId: opts.parentRunId,
       rootRunId: opts.rootRunId,
       continuation: opts.continuation,
+      resumeRun: opts.resumeRun,
+      control,
       repoContext,
+      implementationWorkspace: workspace
+        ? {
+            path: workspace.cwd,
+            branch: workspace.branch,
+            repositoryPath: workspace.repositoryPath,
+            baseBranch: workspace.baseBranch,
+            baseSha: workspace.baseSha,
+          }
+        : undefined,
+      deferCompletionToDelivery: !opts.skipDeliverable,
+      onCheckpoint: (run) => {
+        run.runFile = ctx.store.save(run);
+      },
       onEvent: (run, event) => {
         opts.onEvent?.(run, event);
         run.runFile = ctx.store.save(run);
@@ -242,24 +288,85 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
     };
 
     let run: Run;
-    try {
-      run = await runIssue(issue, deps);
-    } finally {
+    if (resumeDelivery && opts.resumeRun) {
+      run = opts.resumeRun;
+      run.status = "delivering";
+      run.finishedAt = undefined;
+      recordRunEvent(run, {
+        ts: Date.now(),
+        type: "run_resumed",
+        summary: "Resumed at the deliverable finalization boundary",
+        details: { checkpoint: run.checkpoint },
+      });
       if ("dispose" in orchestrator && typeof (orchestrator as { dispose?: () => void }).dispose === "function") {
         (orchestrator as { dispose: () => void }).dispose();
       }
+    } else {
+      try {
+        run = await runIssue(issue, deps);
+      } finally {
+        if ("dispose" in orchestrator && typeof (orchestrator as { dispose?: () => void }).dispose === "function") {
+          (orchestrator as { dispose: () => void }).dispose();
+        }
+      }
     }
 
-    if (!opts.skipDeliverable && run.status === "done") {
-      run = await ctx.deliverable.finalize(run, workflow.mergeGate, {
-        cwd: runCwd,
-        repositoryPath: workspace?.repositoryPath ?? ctx.cwd,
-        branch: workspace?.branch,
-        baseBranch: workspace?.baseBranch,
-        baseSha: workspace?.baseSha,
-        ...(existingPullRequestId !== undefined
-          ? { existingPullRequestId }
-          : {}),
+    if (!opts.skipDeliverable && run.status === "delivering" && run.checkpoint?.phase === "delivery") {
+      const deliveryCheckpoint = run.checkpoint;
+      const delivery = deliveryCheckpoint.delivery ?? { status: "pending" as const, attempt: 0 };
+      deliveryCheckpoint.delivery = delivery;
+      delivery.status = "started";
+      delivery.attempt += 1;
+      run.deliverableError = undefined;
+      deliveryCheckpoint.updatedAt = Date.now();
+      recordRunEvent(run, {
+        ts: Date.now(),
+        type: "delivery_started",
+        summary: `Deliverable finalization attempt ${delivery.attempt} started`,
+        details: { attempt: delivery.attempt },
+      });
+      try {
+        run = await ctx.deliverable.finalize(run, workflow.mergeGate, {
+          cwd: runCwd,
+          repositoryPath: workspace?.repositoryPath ?? ctx.cwd,
+          branch: workspace?.branch,
+          baseBranch: workspace?.baseBranch,
+          baseSha: workspace?.baseSha,
+          ...(existingPullRequestId !== undefined
+            ? { existingPullRequestId }
+            : {}),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        run.deliverableError = message;
+        delivery.status = "uncertain";
+        run.status = "interrupted";
+        recordRunEvent(run, {
+          ts: Date.now(),
+          type: "run_interrupted",
+          summary: `Deliverable finalization stopped unexpectedly: ${message}`,
+          details: { checkpoint: run.checkpoint },
+        });
+        return run;
+      }
+      delivery.status = "completed";
+      deliveryCheckpoint.updatedAt = Date.now();
+      recordRunEvent(run, {
+        ts: Date.now(),
+        type: "delivery_finished",
+        summary: run.deliverableError ? `Deliverable finalization finished with a visible error: ${run.deliverableError}` : "Deliverable finalization finished",
+        details: { attempt: delivery.attempt, error: run.deliverableError },
+      });
+      run.status = "done";
+      run.finishedAt = Date.now();
+      recordRunEvent(run, {
+        ts: Date.now(),
+        type: "run_done",
+        summary: run.finalDecision?.kind === "done" ? run.finalDecision.reason : "Run completed",
+        details: {
+          deliverable: run.finalDecision?.kind === "done" ? run.finalDecision.deliverable : undefined,
+          deliverableError: run.deliverableError,
+        },
       });
     }
     if (workspace && run.pullRequest) {
@@ -273,13 +380,23 @@ export function startRun(ctx: RunContext, issue: Issue, opts: StartRunOptions = 
       run.implementationWorkspace = {
         path: workspace.cwd,
         branch: workspace.branch,
+        repositoryPath: workspace.repositoryPath,
+        baseBranch: workspace.baseBranch,
+        baseSha: workspace.baseSha,
       };
     }
 
     run.runFile = ctx.store.save(run);
     void notifyIssueTracker(run, { fetchFn: ctx.issueTrackerFetch });
     return run;
+
+    function recordRunEvent(target: Run, event: RunEvent): void {
+      target.events.push(event);
+      eventStream.emit(event);
+      opts.onEvent?.(target, event);
+      target.runFile = ctx.store.save(target);
+    }
   })();
 
-  return { runId, eventStream, promise };
+  return { runId, eventStream, control, promise };
 }

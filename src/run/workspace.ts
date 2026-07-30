@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import type { Issue } from "../engine/types.js";
+import type { Issue, Run } from "../engine/types.js";
 
 const execFileP = promisify(execFile);
 
@@ -107,6 +107,37 @@ export class GitRunWorkspaceManager implements RunWorkspaceManager {
       },
     };
   }
+}
+
+/** Reattach a retained worktree recorded on a paused or interrupted run. */
+export async function restorePreparedRunWorkspace(
+  saved: NonNullable<Run["implementationWorkspace"]>,
+): Promise<PreparedRunWorkspace> {
+  if (!saved.repositoryPath || !saved.baseBranch || !saved.baseSha) {
+    throw new Error("Run workspace metadata predates durable resume and cannot be reattached safely");
+  }
+  const cwd = resolve(saved.path);
+  const repositoryPath = resolve(saved.repositoryPath);
+  await access(cwd);
+  await assertRepository(cwd);
+  const branch = await git(cwd, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  if (branch !== saved.branch) {
+    throw new Error(`Retained run workspace is on ${branch || "detached HEAD"}; expected ${saved.branch}`);
+  }
+  return {
+    cwd,
+    repositoryPath,
+    branch: saved.branch,
+    baseBranch: saved.baseBranch,
+    baseSha: saved.baseSha,
+    cleanup: async () => {
+      try {
+        await git(repositoryPath, ["worktree", "remove", "--force", cwd]);
+      } finally {
+        await rm(dirname(cwd), { recursive: true, force: true });
+      }
+    },
+  };
 }
 
 async function assertRepository(cwd: string): Promise<void> {
