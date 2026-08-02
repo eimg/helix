@@ -4,6 +4,8 @@ Helix is an experimental, platform-independent agent control plane built on the 
 
 This file is an entrypoint, not the full specification. Follow the linked docs when working in an area.
 
+Treat the Acme suite as an executable reference architecture, not a universal platform. Preserve Helix's local and headless operation, focused ownership, and replaceable provider and tracker seams; add breadth to prove orchestration concepts, not to anticipate every organization's delivery platform.
+
 ## Related projects
 
 | Project | Local path | Responsibility |

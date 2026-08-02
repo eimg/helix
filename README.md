@@ -10,7 +10,9 @@ Package: [`@eimg/helix`](https://github.com/eimg/helix) · command: `helix`
 
 ## Acme development testbed
 
-Helix is one of seven related projects. They remain separate products with separate responsibilities.
+The Acme suite is an executable reference architecture, not an all-inclusive platform or a universal prescription. Its local-first, independently runnable products and replaceable integration seams let subject-matter experts inspect working patterns and adapt the parts that fit their organization.
+
+Helix is one of the related projects. They remain separate products with separate responsibilities.
 
 | Project | Role |
 |---|---|
