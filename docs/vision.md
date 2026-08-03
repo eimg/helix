@@ -6,7 +6,7 @@ Helix should help a small development team operate the full path from knowledge 
 
 Related: [`architecture.md`](./architecture.md) · [`plan.md`](./plan.md) · [`guardrails.md`](./guardrails.md)
 
-![Agentic software development loops](../omni-loop.png)
+![Agentic software development loops](https://raw.githubusercontent.com/eimg/acme-software-factory/main/omni-loop.png)
 
 ## Core idea
 
@@ -153,13 +153,16 @@ continuations, PR record, review history, and human merge record. Helix consumes
 that issue and remains unaware of project-board presentation concerns.
 
 `Ready` is the handoff boundary; `In progress` means Helix accepted a run. The
-current integration requires an explicit Submit action and a human-added trigger
-label in Acme Issues. A later project-level policy may trigger automatically
-when a card enters `Ready`, but a failed request remains ready and requires an
-explicit retry rather than looping.
+default integration requires an explicit Submit action and a human-added trigger
+label in Acme Issues. Optional Acme Steering may request those two transitions
+through separate Projects- and Issues-owned action contracts; the shipped
+reference policy keeps both human-required. A later organization-specific policy
+may delegate them, but a failed request remains ready and requires an explicit
+retry rather than looping.
 
-The manual non-triggering issue handoff is shipped in Acme Projects. Automatic
-triggering and the later card lifecycle projections remain product direction.
+The manual non-triggering issue handoff and Issues → Projects lifecycle
+projections are shipped. Steering-backed delegation is available only through
+the narrow product actions and never creates a Projects → Helix shortcut.
 
 ### Implementation
 

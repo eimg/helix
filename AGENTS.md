@@ -15,11 +15,12 @@ Treat the Acme suite as an executable reference architecture, not a universal pl
 | Helix | `~/Desktop/acme/helix` | Agent workflow control plane that receives work and orchestrates changes. |
 | Acme Issues | `~/Desktop/acme/acme-issues` | Local issue and PR management surface that triggers Helix and receives callbacks. |
 | Acme Projects | `~/Desktop/acme/acme-projects` | Feature-idea and collaboration board for existing Helix repos; can manually create non-triggering issues through Acme Issues. |
+| Acme Steering | `~/Desktop/acme/acme-steering` | Optional decision inbox and delegation policy; records Helix decisions and may invoke only narrow paused/interrupted-run recovery. |
 | Acme Todo | `~/Desktop/acme/acme-todo` | Disposable target application used for agent implementation and verification. |
 
 Existing-repo runtime flow: Acme Issues → Helix → Acme Todo, followed by a Helix completion callback to Acme Issues. Primer shares the fictional Acme context but remains a separate knowledge-product effort. Helix owns a stable tracker contract (`/runs`, `/pr-reviews`, `/local-prs/merge`, and flat `{trackerUrl}/api/pull-requests` + `/api/webhooks/helix`); Issues adapts around that without becoming a Helix dependency.
 
-Manual feature handoff: Acme Projects ready card → linked Acme Issues issue without the configured trigger label; a human adds that label in Acme Issues to start Helix. Automatic trigger and later PR/card projections remain planned. Acme Projects does not call Helix directly; see the Project-board handoff in [`docs/vision.md`](./docs/vision.md#project-board-handoff).
+Default feature handoff: Acme Projects ready card → linked Acme Issues issue without the configured trigger label; a human adds that label in Acme Issues to start Helix. Optional Steering may request Projects submission and Issues triggering through those products' separate actions, while Issues → Projects PR/card projections are implemented. Acme Projects does not call Helix directly; see the Project-board handoff in [`docs/vision.md`](./docs/vision.md#project-board-handoff).
 
 New-project path: Prelude drafts inception and exports `prelude.bootstrap.v1`. Helix owns empty-workspace inception (`helix bootstrap --export … --execute` or `helix serve` then bootstrap): no prior git host; target defaults to cwd; execute creates git + `.helix` in place. Fixed `architect` / `scaffolder` / `validator` under `.helix/inception-agents/` (package presets until overrides exist). Do not add a Prelude → Helix trigger. See [`docs/inception-bootstrap.md`](./docs/inception-bootstrap.md).
 
@@ -57,7 +58,7 @@ Read only the relevant detailed docs, but read `architecture.md` before changing
 - Default run state is SQLite at `.helix/runs.db`; legacy JSON runs are import-only compatibility state.
 - Full completed orchestrator and specialist responses are durable. High-volume token deltas are live-only.
 - Server runs checkpoint orchestrator decisions, specialist invocation state, and deliverable finalization in SQLite. Pause/resume occurs at safe boundaries; shutdown requests a bounded drain. Startup marks stale work interrupted, and an invocation or delivery attempt that was active requires explicit retry confirmation.
-- `acme.steering.decision.v1` is durable human input, not a run command. Require `helix.steering.receive`, record it in run metadata without appending an event or changing the source revision, and keep any workflow response Helix-owned.
+- `acme.steering.decision.v1` is durable Steering input, not a run command; an automatic approval is service-attributed rather than human. Require `helix.steering.receive`, record it in run metadata without appending an event or changing the source revision, and keep any workflow response Helix-owned.
 - Show the stored decision and its bounded workflow effect in run detail. Non-approval decisions hold an existing paused/interrupted checkpoint; only the separate `helix.recover_run` action may resume it.
 - Web runs stream orchestrator and specialist output through SSE. The direct CLI intentionally remains a compact event/preview renderer unless an explicit streaming mode is added.
 - GitHub PR creation and merging are opt-in through `deliverable.pr`; local and inline runs must not acquire GitHub side effects by accident.

@@ -21,9 +21,10 @@ Helix is one of the related projects. They remain separate products with separat
 | **[Helix](https://github.com/eimg/helix)** | Agent workflow control plane that receives work and orchestrates changes. |
 | **[Acme Issues](https://github.com/eimg/acme-issues)** | Local issue and PR management surface that triggers Helix and receives callbacks. |
 | **[Acme Projects](https://github.com/eimg/acme-projects)** | Feature-idea and collaboration board for existing Helix repos; can manually create non-triggering issues through Acme Issues. |
+| **[Acme Steering](https://github.com/eimg/acme-steering)** | Optional decision inbox and delegation policy; receives Helix lifecycle events and may invoke only narrow run recovery. |
 | **[Acme Todo](https://github.com/eimg/acme-todo)** | Disposable target application used for agent implementation and verification. |
 
-Existing-repo exercise: Acme Issues triggers Helix, Helix works on Acme Todo, and Helix callbacks update Acme Issues. Acme Projects can create a thin linked issue without triggering Helix; a human adds the configured trigger label to start that flow. Automatic trigger and card lifecycle callbacks remain planned. Acme Projects will not call Helix directly; see [`docs/vision.md`](./docs/vision.md#project-board-handoff).
+Existing-repo exercise: Acme Issues triggers Helix, Helix works on Acme Todo, and Helix callbacks update Acme Issues. Acme Projects can create a thin linked issue without triggering Helix; a human normally adds the configured trigger label to start that flow. Optional Steering may request submission and triggering through the owning products' separate actions, and Issues projects accepted-run, PR, and completion state back to Projects. Acme Projects will not call Helix directly; see [`docs/vision.md`](./docs/vision.md#project-board-handoff).
 
 New-project path: Prelude owns inception drafting and exports `prelude.bootstrap.v1` artifacts. Helix owns empty-workspace bootstrap (`helix bootstrap --export …` dry-run/execute, or `helix serve` then Bootstrap UI): creates git + `.helix` in place with fixed `architect` / `scaffolder` / `validator` specialists; inception skills auto-load into bootstrap sessions. Specialist LLM execution after materialize is next. Prelude does not call Helix. Primer may supply evidence to Prelude over HTTP and remains outside the Issues → Helix loop.
 
@@ -389,6 +390,8 @@ Needs `gh` auth and a configured `triggers.github.repo`.
 ## Optional Steering notifications
 
 Set `ACME_STEERING_URL` in the target repository's `.helix/.env` to publish durable run lifecycle events to Acme Steering. In shared local-auth mode, set a scoped `ACME_STEERING_TOKEN` with `steering.notify.helix`. Output deltas and tool activity are intentionally excluded; lifecycle, gate, interruption, escalation, and completion events are best-effort and never block a run. Manual Helix recovery remains available and its next event reconciles Steering.
+
+The shipped reference policy keeps Helix recovery human-required. Only the accepted, reversible Prelude export is policy-automated; a later organization-specific policy must not broaden Helix recovery beyond this explicit action and Helix's own live-state checks.
 
 Helix accepts `helix.recover_run` at `POST /api/steering/actions`. The caller needs the action-specific `helix.steering.recover` permission; Helix reloads the run, checks the last durable event revision, and resumes only a paused or interrupted run. Approval explicitly confirms uncertain retries. Merge, bootstrap, deletion, and arbitrary run mutation are not exposed.
 

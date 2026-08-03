@@ -1,6 +1,6 @@
 # Guardrails & escalation
 
-**Status:** Design note with basic operator pause/resume implemented. Structured escalation, policy routing, and human reply/decision resume remain planned.
+**Status:** Design note with operator pause/resume, Steering lifecycle projection, durable decision receipt, and narrow paused/interrupted-run recovery implemented. A richer Helix-native escalation taxonomy and general reply-driven continuation remain planned.
 
 This doc captures considerations and a phased path so future work does not rediscover the problem space. It pairs two topics that should stay aligned: **what must not happen** (guardrails) and **what happens when the loop cannot continue** (escalation).
 
@@ -16,6 +16,7 @@ Related: [`plan.md`](./plan.md), [`architecture.md`](./architecture.md), [`repo-
 | Iteration cap | `orchestrator/gates.ts` | Forces `escalate` |
 | Blocking-failure gate | `engine/engine.ts` | `done` over failed specialist → escalate |
 | Run pause/recovery | `engine/engine.ts`, `run/bootstrap.ts`, `server/app.ts` | Safe-boundary operator pause, persisted Pi lanes/checkpoints, startup interruption detection, same-run resume |
+| Optional Acme Steering edge | `steering.ts`, `server/app.ts` | Best-effort lifecycle notifications, durable decision metadata, and revision-checked `helix.recover_run`; never merge or generic mutation |
 | GitHub delivery gate + approval | `mergeGate.ts`, deliverable pipeline, approve/reject API | Opt-in size thresholds → auto-merge or `approvalStatus: pending`; no verification |
 | `deliverable.pr` (default `false`) | config + `cli.ts` serve wiring | No `gh pr create` unless opted in |
 | Local PR delivery | `run/workspace.ts`, `localPullRequest.ts`, `deliverable.localPr` | Acme-linked server runs use a host-created isolated branch/worktree; remaining changes are policy-checked and committed before metadata registration; never pushes or merges |
@@ -33,7 +34,7 @@ The local Acme path now separates implementation delivery from PR control. Acme 
 → run.status = "escalated" → emit run_escalated → stop
 ```
 
-There is **no** category, severity, suggested action, resume path, or notification contract. Merge **approval** is a separate, structured pause; escalation is only a terminal string. Orchestrator errors, iteration caps, policy-like stops, and “needs a human decision” all collapse into one bucket.
+Helix's internal escalation record still has **no** category, severity, or suggested action; escalation is a terminal string. The optional Steering notification contract now makes that event visible outside Helix, but it does not enrich or rewrite Helix state. Durable Steering decisions are recorded as input, and only the separate `helix.recover_run` action can resume a paused or interrupted checkpoint after live revision and retry checks. Merge **approval** remains a separate structured boundary. Orchestrator errors, iteration caps, policy-like stops, and “needs a human decision” still collapse into one native escalation bucket.
 
 ---
 
