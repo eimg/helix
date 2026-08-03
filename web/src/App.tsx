@@ -5,6 +5,7 @@ import { api, timeAgo, timeOnly } from "./api";
 import { ReviewsPage } from "./ReviewsPage";
 import { ManagePage } from "./ManagePage";
 import { ConfigPage } from "./ConfigPage";
+import { ConnectionsPage } from "./ConnectionsPage";
 import { BootstrapPage } from "./BootstrapPage";
 
 type RunStatus = "running" | "pause_requested" | "paused" | "interrupted" | "delivering" | "done" | "escalated" | "error";
@@ -170,6 +171,7 @@ function AuthenticatedApp() {
   if (path === "/reviews") return <PageShell active="reviews"><ReviewsPage /></PageShell>;
   if (path === "/manage") return <PageShell active="manage"><ManagePage canManage={can("helix.manage")} /></PageShell>;
   if (path === "/config") return <PageShell active="config"><ConfigPage /></PageShell>;
+  if (path === "/connections") return <PageShell active="connections"><ConnectionsPage canWrite={can("helix.admin")} /></PageShell>;
   return <PageShell active="run"><RunPage /></PageShell>;
 }
 
@@ -280,7 +282,7 @@ function PageShell({
   active,
   children,
 }: {
-  active: "run" | "bootstrap" | "reviews" | "manage" | "config";
+  active: "run" | "bootstrap" | "reviews" | "manage" | "config" | "connections";
   children: ReactNode;
 }) {
   const { session, can, signOut, signingOut } = useHelixAuth();
@@ -349,6 +351,7 @@ function PageShell({
           <a className={`nav-link ${active === "reviews" ? "active" : ""}`} href="/reviews">PR Reviews</a>
         )}
         {can("helix.manage") && <a className={`nav-link ${active === "manage" ? "active" : ""}`} href="/manage">Manage</a>}
+        <a className={`nav-link ${active === "connections" ? "active" : ""}`} href="/connections">Connections</a>
         <a className={`nav-link ${active === "config" ? "active" : ""}`} href="/config">Config</a>
       </nav>
       <details className="account-menu" ref={accountMenuRef}>

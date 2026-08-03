@@ -281,6 +281,12 @@ function requiredPermission(req: Request): string {
   }
   if (req.method === "POST" && req.path === "/bootstrap") return "helix.bootstrap";
   if (req.path.startsWith("/manage/")) return "helix.manage";
+  if (
+    req.method === "PATCH" && req.path === "/api/integrations/steering"
+    || req.method === "POST" && req.path === "/api/integrations/steering/test"
+  ) {
+    return "helix.admin";
+  }
   return "helix.admin";
 }
 

@@ -76,9 +76,20 @@ import {
   type HelixAuthAdapter,
 } from "./auth.js";
 import {
-  createSteeringNotifier, parseSteeringActionRequest, parseSteeringDecisionNotice,
-  type SteeringActionReceipt, type SteeringDecisionReceipt, type SteeringNotification,
+  clearSteeringUrl,
+  createSteeringNotifier,
+  parseSteeringActionRequest,
+  parseSteeringDecisionNotice,
+  probeSteeringIntegration,
+  resolveSteeringConfig,
+  setSteeringUrl,
+  steeringEnvironmentFromProcess,
+  type SteeringActionReceipt,
+  type SteeringDecisionReceipt,
+  type SteeringEnvironmentConfig,
+  type SteeringNotification,
 } from "../steering.js";
+import { AppSettingsStore } from "../state/appSettings.js";
 
 export interface CreateAppOptions {
   ctx: RunContext;
@@ -90,6 +101,9 @@ export interface CreateAppOptions {
   createBootstrapSpecialistFactory?: CreateBootstrapSpecialistFactory;
   /** Inject a standalone or external auth provider without coupling the engine to it. */
   authAdapter?: HelixAuthAdapter;
+  fetchFn?: typeof fetch;
+  steeringEnvironment?: SteeringEnvironmentConfig;
+  appSettings?: AppSettingsStore;
 }
 
 interface ActiveRunEntry {
@@ -126,13 +140,35 @@ export function createApp(opts: CreateAppOptions): Express {
   app.use(webAssets());
 
   const authAdapter = opts.authAdapter ?? createAuthAdapterFromEnv();
-  const notifySteering = createSteeringNotifier();
+  const fetchFn = opts.fetchFn ?? fetch;
+  const steeringEnvironment = opts.steeringEnvironment ?? steeringEnvironmentFromProcess();
+  const appSettings = opts.appSettings ?? new AppSettingsStore(ctx.helixDir);
+  const notifySteering = createSteeringNotifier(fetchFn, () => resolveSteeringConfig(appSettings, steeringEnvironment));
   sessionRoutes(app, authAdapter);
   app.get("/health", (_req, res) => {
     res.json({ ok: true, authProvider: authAdapter.provider });
   });
-  app.get(["/", "/manage", "/config", "/reviews", "/bootstrap"], webIndex());
+  app.get(["/", "/manage", "/config", "/connections", "/reviews", "/bootstrap"], webIndex());
   app.use(authenticateRequests(authAdapter), authorizeHelixRequest);
+
+  app.get("/api/integrations/steering", async (_req, res) => {
+    res.json(await probeSteeringIntegration(appSettings, fetchFn, steeringEnvironment));
+  });
+  app.patch("/api/integrations/steering", async (req, res) => {
+    if (req.body?.url !== null && typeof req.body?.url !== "string") {
+      return res.status(400).json({ error: "url must be a string or null" });
+    }
+    try {
+      if (req.body.url === null) clearSteeringUrl(appSettings);
+      else setSteeringUrl(appSettings, req.body.url);
+      return res.json(await probeSteeringIntegration(appSettings, fetchFn, steeringEnvironment));
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post("/api/integrations/steering/test", async (_req, res) => {
+    res.json(await probeSteeringIntegration(appSettings, fetchFn, steeringEnvironment));
+  });
 
   const activeRuns = new Map<string, ActiveRunEntry>();
   const activeManage = new Map<string, ActiveManageEntry>();

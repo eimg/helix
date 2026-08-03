@@ -134,7 +134,7 @@ test("all primary web routes serve the React shell", async () => {
   const ctx = testCtx();
   const app = createApp({ ctx });
 
-  for (const path of ["/", "/bootstrap", "/reviews", "/manage", "/config"]) {
+  for (const path of ["/", "/bootstrap", "/reviews", "/manage", "/config", "/connections"]) {
     const page = await request(app).get(path);
     assert.equal(page.status, 200);
     assert.match(page.text, /id="root"/);
