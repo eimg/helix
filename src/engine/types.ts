@@ -126,6 +126,22 @@ export interface RunEvent {
   details?: Record<string, unknown>;
 }
 
+export interface RunSteeringDecision {
+  decisionId: string;
+  caseId: string;
+  actionKey: string;
+  resolution: "approve" | "reject" | "request_revision" | "defer" | "escalate" | "cancel";
+  rationale: string;
+  decidedAt: string;
+  actor: { id: string; issuer: string; username: string; displayName: string; kind: "human" | "service" | "development" };
+  resource: { type: string; id: string; expectedRevision: string };
+  receiptStatus: "recorded" | "stale";
+  /** Added after the initial decision-ledger slice; absent legacy records are observation-only. */
+  workflowEffect?: "awaiting_recovery" | "holding" | "observation_only" | "recovery_accepted";
+  sourceRevision: string;
+  receivedAt: string;
+}
+
 /** A full run record, persisted by the configured RunStore. */
 export type ApprovalStatus = "none" | "pending" | "approved" | "rejected";
 
@@ -145,6 +161,8 @@ export interface PullRequestInfo {
 
 export interface Run {
   id: string;
+  /** Human dispositions received from Steering; audit-only until this workflow defines a deterministic response. */
+  steeringDecisions?: RunSteeringDecision[];
   /** Linked-run lineage. Absent for an initial run. */
   parentRunId?: string;
   /** First run in this issue lineage. Set on continuation runs. */

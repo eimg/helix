@@ -51,6 +51,15 @@ interface Run {
     invocations?: { specialist: string; status: "pending" | "started" | "uncertain" | "completed" }[];
     delivery?: { status: "pending" | "started" | "uncertain" | "completed"; attempt: number };
   };
+  steeringDecisions?: Array<{
+    decisionId: string;
+    resolution: "approve" | "reject" | "request_revision" | "defer" | "escalate" | "cancel";
+    rationale: string;
+    decidedAt: string;
+    actor: { displayName: string };
+    receiptStatus: "recorded" | "stale";
+    workflowEffect?: "awaiting_recovery" | "holding" | "observation_only" | "recovery_accepted";
+  }>;
 }
 
 interface LogBlock {
@@ -603,6 +612,15 @@ function ResultPanel({ run }: { run: Run }) {
       {run.finalDecision?.kind === "escalate" && (
         <ResultBlock title="Reason"><pre>{run.finalDecision.reason}</pre></ResultBlock>
       )}
+      {!!run.steeringDecisions?.length && <ResultBlock title="Steering decisions">
+        <div className="steering-decision-list">{[...run.steeringDecisions].reverse().map((decision) => (
+          <article className="steering-decision" key={decision.decisionId}>
+            <div><strong>{decision.resolution.replaceAll("_", " ")}</strong><StatusPill status={decision.workflowEffect ?? "observation_only"} /></div>
+            {decision.rationale && <p>{decision.rationale}</p>}
+            <small>{decision.actor.displayName} · {timeAgo(Date.parse(decision.decidedAt))} · {decision.receiptStatus}</small>
+          </article>
+        ))}</div>
+      </ResultBlock>}
       {run.pullRequest?.url && <a className="result-link" href={run.pullRequest.url} target="_blank" rel="noreferrer">Pull request #{run.pullRequest.number} ↗</a>}
       {run.deliverableError && <p className="error-text">{run.deliverableError}</p>}
       {run.implementationWorkspace && (

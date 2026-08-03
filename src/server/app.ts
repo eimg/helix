@@ -75,7 +75,10 @@ import {
   sessionRoutes,
   type HelixAuthAdapter,
 } from "./auth.js";
-import { createSteeringNotifier, parseSteeringActionRequest, type SteeringActionReceipt, type SteeringNotification } from "../steering.js";
+import {
+  createSteeringNotifier, parseSteeringActionRequest, parseSteeringDecisionNotice,
+  type SteeringActionReceipt, type SteeringDecisionReceipt, type SteeringNotification,
+} from "../steering.js";
 
 export interface CreateAppOptions {
   ctx: RunContext;
@@ -414,6 +417,8 @@ export function createApp(opts: CreateAppOptions): Express {
         details: { steeringRequestId: action.requestId },
       });
     }
+    const recordedDecision = run.steeringDecisions?.find((item) => item.decisionId === action.decisionId);
+    if (recordedDecision?.resolution === "approve") recordedDecision.workflowEffect = "recovery_accepted";
     run.runFile = ctx.store.save(run);
     launchRun(run.issue, {}, run);
     const acceptedRevision = String(run.events.at(-1)?.ts ?? run.startedAt);
@@ -421,6 +426,54 @@ export function createApp(opts: CreateAppOptions): Express {
       ...actionReceipt(action.requestId, "accepted", acceptedRevision, "Helix accepted the run recovery request."),
       operationId: run.id,
     });
+  });
+
+  app.post("/api/steering/decisions", (req: Request, res: Response) => {
+    const notice = parseSteeringDecisionNotice(req.body);
+    if (!notice) {
+      res.status(400).json({ error: "Invalid acme.steering.decision.v1 payload" });
+      return;
+    }
+    if (notice.actionKey !== "helix.recover_run" || notice.resource.type !== "run") {
+      res.status(400).json({ error: "Unsupported Helix Steering decision" });
+      return;
+    }
+    const run = ctx.store.load(notice.resource.id);
+    if (!run) {
+      res.status(404).json({ error: "Run not found" });
+      return;
+    }
+    const currentRevision = String(run.events.at(-1)?.ts ?? run.startedAt);
+    const existing = run.steeringDecisions?.find((item) => item.decisionId === notice.decisionId);
+    if (existing) {
+      const same = existing.caseId === notice.caseId && existing.actionKey === notice.actionKey
+        && existing.resolution === notice.resolution && existing.rationale === notice.rationale
+        && existing.decidedAt === notice.decidedAt && JSON.stringify(existing.actor) === JSON.stringify(notice.actor)
+        && JSON.stringify(existing.resource) === JSON.stringify(notice.resource);
+      res.status(same ? 200 : 409).json(decisionReceipt(
+        notice.decisionId, same ? "already_recorded" : "rejected", currentRevision,
+        same ? "This Steering decision was already recorded." : "The decision id is already bound to a different payload.",
+      ));
+      return;
+    }
+    const receiptStatus = currentRevision === notice.resource.expectedRevision ? "recorded" : "stale";
+    const recoverable = run.status === "paused" || run.status === "interrupted";
+    const workflowEffect = receiptStatus === "stale" || !recoverable
+      ? "observation_only"
+      : notice.resolution === "approve" ? "awaiting_recovery" : "holding";
+    run.steeringDecisions = [...(run.steeringDecisions ?? []), {
+      decisionId: notice.decisionId, caseId: notice.caseId, actionKey: notice.actionKey,
+      resolution: notice.resolution, rationale: notice.rationale, decidedAt: notice.decidedAt,
+      actor: notice.actor, resource: notice.resource, receiptStatus, workflowEffect, sourceRevision: currentRevision,
+      receivedAt: new Date().toISOString(),
+    }];
+    run.runFile = ctx.store.save(run);
+    res.status(receiptStatus === "recorded" ? 202 : 409).json(decisionReceipt(
+      notice.decisionId, receiptStatus, currentRevision,
+      receiptStatus === "recorded"
+        ? "Helix recorded the Steering decision without applying a generic run transition."
+        : "Helix recorded the Steering decision, but its referenced run revision is stale.",
+    ));
   });
 
   app.delete("/runs/:id", (req: Request, res: Response) => {
@@ -956,6 +1009,15 @@ function actionReceipt(
   summary: string,
 ): SteeringActionReceipt {
   return { schemaVersion: "acme.steering.action-receipt.v1", requestId, status, sourceRevision, summary };
+}
+
+function decisionReceipt(
+  decisionId: string,
+  status: SteeringDecisionReceipt["status"],
+  sourceRevision: string,
+  summary: string,
+): SteeringDecisionReceipt {
+  return { schemaVersion: "acme.steering.decision-receipt.v1", decisionId, status, sourceRevision, summary };
 }
 
 async function parseRunBody(body: unknown, defaultRepo?: string): Promise<Issue> {

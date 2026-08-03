@@ -57,6 +57,8 @@ Read only the relevant detailed docs, but read `architecture.md` before changing
 - Default run state is SQLite at `.helix/runs.db`; legacy JSON runs are import-only compatibility state.
 - Full completed orchestrator and specialist responses are durable. High-volume token deltas are live-only.
 - Server runs checkpoint orchestrator decisions, specialist invocation state, and deliverable finalization in SQLite. Pause/resume occurs at safe boundaries; shutdown requests a bounded drain. Startup marks stale work interrupted, and an invocation or delivery attempt that was active requires explicit retry confirmation.
+- `acme.steering.decision.v1` is durable human input, not a run command. Require `helix.steering.receive`, record it in run metadata without appending an event or changing the source revision, and keep any workflow response Helix-owned.
+- Show the stored decision and its bounded workflow effect in run detail. Non-approval decisions hold an existing paused/interrupted checkpoint; only the separate `helix.recover_run` action may resume it.
 - Web runs stream orchestrator and specialist output through SSE. The direct CLI intentionally remains a compact event/preview renderer unless an explicit streaming mode is added.
 - GitHub PR creation and merging are opt-in through `deliverable.pr`; local and inline runs must not acquire GitHub side effects by accident.
 - Implementation workflows have no privileged verification role. Agents may run deterministic self-checks, but independent `reviewer` and `verifier` authority belongs only to PR control.

@@ -392,6 +392,8 @@ Set `ACME_STEERING_URL` in the target repository's `.helix/.env` to publish dura
 
 Helix accepts `helix.recover_run` at `POST /api/steering/actions`. The caller needs the action-specific `helix.steering.recover` permission; Helix reloads the run, checks the last durable event revision, and resumes only a paused or interrupted run. Approval explicitly confirms uncertain retries. Merge, bootstrap, deletion, and arbitrary run mutation are not exposed.
 
+Every Steering disposition is independently accepted at `POST /api/steering/decisions` with `helix.steering.receive`, recorded in the run's durable metadata, and shown beside the persisted run outcome/checkpoint. Receipt does not append a run event, alter its revision, or resume execution. A non-approval disposition holds an already paused/interrupted run; an approval is shown as awaiting recovery until the separate narrow recovery action is accepted. Active runs, completed runs, and stale decisions are observation-only. Helix still owns any richer response to revision, cancellation, or escalation.
+
 ## Development
 
 ```bash

@@ -50,6 +50,26 @@ export interface SteeringActionReceipt {
   operationId?: string;
 }
 
+export interface SteeringDecisionNotice {
+  schemaVersion: "acme.steering.decision.v1";
+  decisionId: string;
+  caseId: string;
+  actionKey: string;
+  resolution: "approve" | "reject" | "request_revision" | "defer" | "escalate" | "cancel";
+  rationale: string;
+  decidedAt: string;
+  actor: { id: string; issuer: string; username: string; displayName: string; kind: "human" | "service" | "development" };
+  resource: { type: string; id: string; expectedRevision: string };
+}
+
+export interface SteeringDecisionReceipt {
+  schemaVersion: "acme.steering.decision-receipt.v1";
+  decisionId: string;
+  status: "recorded" | "already_recorded" | "stale" | "rejected" | "unavailable";
+  sourceRevision: string;
+  summary: string;
+}
+
 export function parseSteeringActionRequest(value: unknown): SteeringActionRequest | undefined {
   if (!value || typeof value !== "object") return undefined;
   const item = value as Partial<SteeringActionRequest>;
@@ -57,6 +77,18 @@ export function parseSteeringActionRequest(value: unknown): SteeringActionReques
     || !text(item.decisionId) || !text(item.actionKey) || !item.resource
     || !text(item.resource.type) || !text(item.resource.id) || !text(item.resource.expectedRevision)) return undefined;
   return item as SteeringActionRequest;
+}
+
+export function parseSteeringDecisionNotice(value: unknown): SteeringDecisionNotice | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const item = value as Partial<SteeringDecisionNotice>;
+  if (item.schemaVersion !== "acme.steering.decision.v1" || !text(item.decisionId) || !text(item.caseId)
+    || !text(item.actionKey) || !["approve", "reject", "request_revision", "defer", "escalate", "cancel"].includes(String(item.resolution))
+    || typeof item.rationale !== "string" || !text(item.decidedAt) || Number.isNaN(Date.parse(String(item.decidedAt)))
+    || !item.actor || !text(item.actor.id) || !text(item.actor.issuer) || !text(item.actor.username)
+    || !text(item.actor.displayName) || !["human", "service", "development"].includes(String(item.actor.kind))
+    || !item.resource || !text(item.resource.type) || !text(item.resource.id) || !text(item.resource.expectedRevision)) return undefined;
+  return item as SteeringDecisionNotice;
 }
 
 export function createSteeringNotifier(
