@@ -75,6 +75,7 @@ import {
   sessionRoutes,
   type HelixAuthAdapter,
 } from "./auth.js";
+import { createSteeringNotifier, parseSteeringActionRequest, type SteeringActionReceipt, type SteeringNotification } from "../steering.js";
 
 export interface CreateAppOptions {
   ctx: RunContext;
@@ -122,6 +123,7 @@ export function createApp(opts: CreateAppOptions): Express {
   app.use(webAssets());
 
   const authAdapter = opts.authAdapter ?? createAuthAdapterFromEnv();
+  const notifySteering = createSteeringNotifier();
   sessionRoutes(app, authAdapter);
   app.get("/health", (_req, res) => {
     res.json({ ok: true, authProvider: authAdapter.provider });
@@ -160,6 +162,10 @@ export function createApp(opts: CreateAppOptions): Express {
       runId,
       eventStream,
       control,
+      onEvent: (run, event) => {
+        const notification = runNotification(run, event);
+        if (notification) notifySteering(notification);
+      },
       resumeRun,
       ...lineage,
     });
@@ -356,6 +362,65 @@ export function createApp(opts: CreateAppOptions): Express {
     }
     launchRun(run.issue, {}, run);
     res.status(202).json({ id, status: "running" });
+  });
+
+  app.post("/api/steering/actions", (req: Request, res: Response) => {
+    const action = parseSteeringActionRequest(req.body);
+    if (!action) {
+      res.status(400).json({ error: "Invalid acme.steering.action.v1 payload" });
+      return;
+    }
+    if (action.actionKey !== "helix.recover_run" || action.resource.type !== "run") {
+      res.status(400).json(actionReceipt(action.requestId, "rejected", action.resource.expectedRevision, "Unsupported Helix steering action."));
+      return;
+    }
+    const run = ctx.store.load(action.resource.id);
+    if (!run) {
+      res.status(404).json(actionReceipt(action.requestId, "rejected", action.resource.expectedRevision, "Run not found."));
+      return;
+    }
+    const currentRevision = String(run.events.at(-1)?.ts ?? run.startedAt);
+    if (run.events.some((event) => event.details?.steeringRequestId === action.requestId)) {
+      res.json(actionReceipt(action.requestId, "already_applied", currentRevision, "This Steering recovery request was already accepted."));
+      return;
+    }
+    if (activeRuns.has(run.id)) {
+      res.json(actionReceipt(action.requestId, "already_applied", currentRevision, "The run is already active."));
+      return;
+    }
+    if (currentRevision !== action.resource.expectedRevision) {
+      res.status(409).json(actionReceipt(action.requestId, "stale", currentRevision, "The run changed before the action was applied."));
+      return;
+    }
+    if (run.status !== "paused" && run.status !== "interrupted") {
+      res.status(409).json(actionReceipt(action.requestId, "rejected", currentRevision, `Run is ${run.status}; only paused or interrupted runs can be recovered.`));
+      return;
+    }
+    const uncertain = uncertainRecoveryItems(run);
+    if (uncertain.length > 0) {
+      for (const invocation of run.checkpoint?.invocations ?? []) {
+        if (invocation.status === "uncertain") invocation.status = "pending";
+      }
+      if (run.checkpoint?.delivery?.status === "uncertain") run.checkpoint.delivery.status = "pending";
+      run.events.push({
+        ts: Date.now(), type: "run_retry_confirmed",
+        summary: `Steering administrator confirmed retry for ${uncertain.join(", ")}`,
+        details: { uncertain, steeringRequestId: action.requestId },
+      });
+    } else {
+      run.events.push({
+        ts: Date.now(), type: "run_retry_confirmed",
+        summary: "Steering administrator authorized recovery from the durable checkpoint",
+        details: { steeringRequestId: action.requestId },
+      });
+    }
+    run.runFile = ctx.store.save(run);
+    launchRun(run.issue, {}, run);
+    const acceptedRevision = String(run.events.at(-1)?.ts ?? run.startedAt);
+    res.status(202).json({
+      ...actionReceipt(action.requestId, "accepted", acceptedRevision, "Helix accepted the run recovery request."),
+      operationId: run.id,
+    });
   });
 
   app.delete("/runs/:id", (req: Request, res: Response) => {
@@ -852,6 +917,45 @@ export function createApp(opts: CreateAppOptions): Express {
   });
 
   return app;
+}
+
+const omittedSteeringEventTypes = new Set<RunEvent["type"]>([
+  "orchestrator_output_delta",
+  "specialist_activity",
+  "specialist_output_delta",
+]);
+
+function runNotification(run: Run, event: RunEvent): SteeringNotification | undefined {
+  if (omittedSteeringEventTypes.has(event.type)) return undefined;
+  const open = ["run_paused", "run_interrupted"].includes(event.type);
+  const settled = ["run_resumed", "run_retry_confirmed", "run_done"].includes(event.type);
+  const state = open ? "open" : settled ? "resolved" : undefined;
+  return {
+    schemaVersion: "acme.steering.notification.v1",
+    id: `helix:run:${run.id}:${event.type}:${event.ts}`,
+    source: { product: "helix", resourceType: "run", resourceId: run.id, revision: String(event.ts) },
+    event: { type: event.type, occurredAt: new Date(event.ts).toISOString(), summary: event.summary, detail: run.issue.title },
+    ...(state ? { steering: {
+      caseKey: `run:${run.id}:intervention`, state,
+      kind: "intervention",
+      title: `Steer Helix run: ${run.issue.title}`,
+      action: "helix.recover_run",
+      reason: event.summary,
+      proposedAction: "Resume from the last durable checkpoint, explicitly retrying uncertain work when present.",
+      recommendation: "Use the run evidence and current source state before deciding.",
+      reversible: false,
+      facts: { runStatus: run.status, eventType: event.type, evidenceComplete: event.type !== "run_error" },
+    } } : {}),
+  };
+}
+
+function actionReceipt(
+  requestId: string,
+  status: SteeringActionReceipt["status"],
+  sourceRevision: string,
+  summary: string,
+): SteeringActionReceipt {
+  return { schemaVersion: "acme.steering.action-receipt.v1", requestId, status, sourceRevision, summary };
 }
 
 async function parseRunBody(body: unknown, defaultRepo?: string): Promise<Issue> {

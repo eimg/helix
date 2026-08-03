@@ -386,6 +386,12 @@ helix run 42                          # gh issue view
 
 Needs `gh` auth and a configured `triggers.github.repo`.
 
+## Optional Steering notifications
+
+Set `ACME_STEERING_URL` in the target repository's `.helix/.env` to publish durable run lifecycle events to Acme Steering. In shared local-auth mode, set a scoped `ACME_STEERING_TOKEN` with `steering.notify.helix`. Output deltas and tool activity are intentionally excluded; lifecycle, gate, interruption, escalation, and completion events are best-effort and never block a run. Manual Helix recovery remains available and its next event reconciles Steering.
+
+Helix accepts `helix.recover_run` at `POST /api/steering/actions`. The caller needs the action-specific `helix.steering.recover` permission; Helix reloads the run, checks the last durable event revision, and resumes only a paused or interrupted run. Approval explicitly confirms uncertain retries. Merge, bootstrap, deletion, and arbitrary run mutation are not exposed.
+
 ## Development
 
 ```bash

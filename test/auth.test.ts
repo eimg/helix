@@ -70,6 +70,11 @@ test("Helix permissions separate reads, triggering, management, and history dele
   await request(operator).post("/pr-reviews").send({}).expect(501);
   await request(operator).post("/local-prs/merge").send({}).expect(400);
   await request(operator).post("/bootstrap").send({}).expect(403);
+  await request(operator).post("/api/steering/actions").send({}).expect(403);
+
+  const steering = appFor(principal(["helix.steering.recover"]));
+  await request(steering).post("/api/steering/actions").send({}).expect(400);
+  await request(steering).post("/runs").send({ title: "No broad trigger" }).expect(403);
 
   const admin = appFor(principal(["helix.admin"]));
   await request(admin).delete("/runs/missing").expect(404);
