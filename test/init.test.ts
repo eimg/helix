@@ -38,6 +38,9 @@ test("init: scaffolds implementation and PR-control specialists separately", () 
   assert.match(envExample, /OPENROUTER_API_KEY/);
   assert.match(envExample, /HELIX_MODEL=/);
   assert.match(envExample, /repo-root \.env/);
+  assert.match(envExample, /# ACME_STEERING_URL=http:\/\/127\.0\.0\.1:8323/);
+  assert.match(envExample, /# ACME_TRUSTED_STEERING_ORIGINS=http:\/\/127\.0\.0\.1:8323/);
+  assert.match(envExample, /# ACME_STEERING_TOKEN=/);
 });
 
 test("init: writes .gitignore with SQLite, legacy runs, and env files", () => {

@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 
+/** Local Acme suite reserved Steering port — same hint as helix init's .env.example. */
+const LOCAL_SUITE_STEERING_URL = "http://127.0.0.1:8323";
+
 type SteeringIntegrationStatus = {
   configured: boolean;
   url: string;
@@ -13,6 +16,10 @@ type SteeringIntegrationStatus = {
   credentialWillBeSent: boolean;
   startupConfigured: boolean;
 };
+
+function normalizeUrl(value: string): string {
+  return value.trim().replace(/\/$/, "");
+}
 
 export function ConnectionsPage({ canWrite }: { canWrite: boolean }) {
   const queryClient = useQueryClient();
@@ -57,7 +64,10 @@ export function ConnectionsPage({ canWrite }: { canWrite: boolean }) {
   });
 
   const current = connection.data;
-  const changed = current !== undefined && url.trim().replace(/\/$/, "") !== current.url.replace(/\/$/, "");
+  const changed = current !== undefined && normalizeUrl(url) !== normalizeUrl(current.url);
+  const usingLocalSuiteDefault = normalizeUrl(current?.url ?? "") === LOCAL_SUITE_STEERING_URL;
+  const showLocalSuiteDefault =
+    canWrite && current !== undefined && !usingLocalSuiteDefault;
 
   return (
     <main className="workspace config-workspace">
@@ -93,7 +103,7 @@ export function ConnectionsPage({ canWrite }: { canWrite: boolean }) {
               <input
                 value={url}
                 readOnly={!canWrite}
-                placeholder="http://127.0.0.1:8323"
+                placeholder={LOCAL_SUITE_STEERING_URL}
                 onChange={(event) => setUrl(event.target.value)}
                 autoComplete="off"
               />
@@ -102,11 +112,27 @@ export function ConnectionsPage({ canWrite }: { canWrite: boolean }) {
             {current?.source === "environment" && (
               <p className="hint">Provided by startup configuration. Saving here creates a Helix-local override.</p>
             )}
+            {!current?.configured && (
+              <p className="hint">
+                For a local Acme suite, use <code>{LOCAL_SUITE_STEERING_URL}</code>, or uncomment
+                {" "}<code>ACME_STEERING_URL</code> in <code>.helix/.env</code> after <code>helix init</code>.
+              </p>
+            )}
             {current?.credentialConfigured && !current.credentialWillBeSent && current.configured && (
               <p className="connection-warning">A service credential exists, but it will not be sent until this origin is trusted by the server configuration.</p>
             )}
             <p className="hint">Credentials remain server-side and cannot be viewed or changed here.</p>
             <div className="connection-actions">
+              {showLocalSuiteDefault && (
+                <button
+                  className="btn btn-ghost"
+                  type="button"
+                  disabled={save.isPending}
+                  onClick={() => save.mutate(LOCAL_SUITE_STEERING_URL)}
+                >
+                  Use local suite default
+                </button>
+              )}
               {canWrite && current?.source === "stored" && current.startupConfigured && (
                 <button className="btn btn-ghost" type="button" disabled={save.isPending} onClick={() => save.mutate(null)}>
                   Use startup setting

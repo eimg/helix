@@ -71,6 +71,12 @@ HELIX_MODEL=openrouter/xiaomi/mimo-v2.5-pro
 # HELIX_ISSUES_TOKEN=svc_replace_me
 # HELIX_TRUSTED_PRELUDE_ORIGINS=http://127.0.0.1:8318
 # HELIX_TRUSTED_ISSUES_ORIGINS=http://127.0.0.1:8320
+
+# Optional Acme Steering (local suite default port 8323).
+# Uncomment ACME_STEERING_URL after copy, or use Connections → Use local suite default.
+# ACME_STEERING_URL=http://127.0.0.1:8323
+# ACME_TRUSTED_STEERING_ORIGINS=http://127.0.0.1:8323
+# ACME_STEERING_TOKEN=
 `;
 
 export function listPresets(): string[] {
@@ -191,6 +197,7 @@ export function init(opts: InitOptions = {}): void {
   console.log("");
   console.log("Next steps:");
   console.log("  1. Copy .helix/.env.example → .helix/.env and set OPENROUTER_API_KEY + HELIX_MODEL");
-  console.log("  2. Edit .helix/agents/*.md to match your project's needs");
-  console.log("  3. Run:  helix run --title \"your task\"");
+  console.log("  2. Optional: uncomment ACME_STEERING_URL for local Acme Steering, or set it under Connections");
+  console.log("  3. Edit .helix/agents/*.md to match your project's needs");
+  console.log("  4. Run:  helix run --title \"your task\"");
 }
