@@ -40,7 +40,7 @@ The loops may reuse Pi-backed runtime adapters, specialist-session construction,
 | Loop | Durable work object | Primary trigger | Output / handoff | Direction |
 |---|---|---|---|---|
 | Knowledge and discovery | Opportunity or hypothesis | Scheduled scan plus knowledge changes | Brief, RFC, prototype, experiment, proposed issues | Planned |
-| Planning | Project card, milestone, or implementation plan | Team cadence, accepted proposal, or new-project request | Ready feature card, concrete issue, or Prelude bootstrap export | Partially shipped (Prelude drafting + export; Helix materialize/CLI/UI; specialist execution next) |
+| Planning | Project card, milestone, or implementation plan | Team cadence, accepted proposal, or new-project request | Ready feature card, concrete issue, or Prelude bootstrap export | Partially shipped (Prelude drafting + export; Helix materialize + architect → scaffolder → validator; durable SSE / conflict round-trip next) |
 | Implementation | Issue | Create, reopen, or command comment | Self-checked repository change delivered as a new PR | Partially shipped |
 | PR control | Pull request at a head SHA | Local review request; later PR, CI, and review events plus reconciliation | Review evidence and merge-readiness decision | Partially shipped |
 | Release readiness | Release candidate | Merged changes, milestone, or release schedule | Changelog, risk analysis, rollout and rollback plan | Planned |
@@ -115,10 +115,11 @@ call Helix today.
 
 The human accepts a specific plan/export version before bootstrap. Bootstrap is
 a one-time Helix path (not another control loop): materialize creates the
-repository foundation and Helix wiring from the accepted Prelude export;
-fixed-role specialist execution after materialize is next. If execution exposes
-a foundational conflict, it returns evidence to Prelude/planning for revision
-instead of silently redesigning the project.
+repository foundation and Helix wiring from the accepted Prelude export, then
+fixed-role specialists run (`architect` → `scaffolder` → `validator`). If
+execution exposes a foundational conflict, the intended follow-up is to return
+evidence to Prelude/planning for revision instead of silently redesigning the
+project; that conflict round-trip is not fully wired yet.
 
 ```text
 planning loop

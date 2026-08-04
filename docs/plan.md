@@ -121,7 +121,7 @@ PR lifecycle ownership is now separated for the local Acme path: implementation 
 - **First-class webhook trigger** in Helix core (today: HTTP `POST /runs` + external acme-issues)
 - **Subprocess isolation** for untrusted specialists
 - **Manage CLI** (`helix manage`) parity
-- **Inception bootstrap specialists** — durable job/SSE, run fixed-role specialists after materialize, conflict report back to Prelude, optional Issues seed. [→](./inception-bootstrap.md)
+- **Inception bootstrap follow-ups** — durable job/SSE progress, conflict report back to Prelude, optional Issues seed. Fixed-role specialists after materialize are shipped. [→](./inception-bootstrap.md)
 - **Settings UI/API** — edit wiring/secrets without hand-editing files (related to guardrail presets)
 - **pi settings** — explicit `SettingsManager.inMemory(...)` Helix defaults for isolated sessions
 - **Test harness reliability** — `node --test` spawns a worker per file and intermittently fails to deserialize its IPC results (`Unable to deserialize cloned data…`), observed on Node 24 roughly once every few full runs. The upstream workaround, `--test-isolation=none`, currently fails two cwd/git-sensitive tests that assume a private process, so making those independent is a prerequisite
