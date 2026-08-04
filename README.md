@@ -22,6 +22,7 @@ Helix is one of the related projects. They remain separate products with separat
 | **[Acme Issues](https://github.com/eimg/acme-issues)** | Local issue and PR management surface that triggers Helix and receives callbacks. |
 | **[Acme Projects](https://github.com/eimg/acme-projects)** | Feature-idea and collaboration board for existing Helix repos; can manually create non-triggering issues through Acme Issues. |
 | **[Acme Steering](https://github.com/eimg/acme-steering)** | Optional decision inbox and delegation policy; receives Helix lifecycle events and may invoke only narrow run recovery. |
+| **[Acme Intel](https://github.com/eimg/acme-intel)** | Optional think-lab; may study allowlisted Helix run and PR-review facts without mutating Helix. |
 | **[Acme Todo](https://github.com/eimg/acme-todo)** | Disposable target application used for agent implementation and verification. |
 
 Existing-repo exercise: Acme Issues triggers Helix, Helix works on Acme Todo, and Helix callbacks update Acme Issues. Acme Projects can create a thin linked issue without triggering Helix; a human normally adds the configured trigger label to start that flow. Optional Steering may request submission and triggering through the owning products' separate actions, and Issues projects accepted-run, PR, and completion state back to Projects. Acme Projects will not call Helix directly; see [`docs/vision.md`](./docs/vision.md#project-board-handoff).
